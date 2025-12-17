@@ -279,7 +279,7 @@ export function areSchemasSelected(
 }
 
 export function markAllSchemas(
-  item: FlatItem,
+  item: FlatItem | DatabaseNode,
   targetChecked: "yes" | "no",
   selection: NodeSelection,
 ): NodeSelection {
@@ -338,7 +338,7 @@ function markAllTables(
 }
 
 export function toggleDatabaseSelection(
-  item: ExpandedDatabaseItem,
+  item: ExpandedDatabaseItem | DatabaseNode,
   selection: NodeSelection,
 ): NodeSelection {
   const isSelected = isItemSelected(item, selection);
@@ -348,7 +348,7 @@ export function toggleDatabaseSelection(
 }
 
 export function toggleSchemaSelection(
-  item: ExpandedSchemaItem,
+  item: ExpandedSchemaItem | SchemaNode,
   selection: NodeSelection,
 ): NodeSelection {
   const isSelected = isItemSelected(item, selection);
