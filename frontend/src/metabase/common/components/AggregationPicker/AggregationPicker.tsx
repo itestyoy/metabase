@@ -25,11 +25,13 @@ import {
   getClauseDefinition,
 } from "metabase/querying/expressions";
 import { getMetadata } from "metabase/selectors/metadata";
-import { ActionIcon, Box, Flex, Icon, Text, Tooltip } from "metabase/ui";
+import { Box, Flex, Icon, Switch, Text } from "metabase/ui";
 import * as Lib from "metabase-lib";
+import { getQuestionVirtualTableId } from "metabase-lib/v1/metadata/utils/saved-questions";
 
+import { MiniPicker } from "../Pickers/MiniPicker";
+import type { MiniPickerPickableItem } from "../Pickers/MiniPicker/types";
 import { QueryColumnPicker } from "../QueryColumnPicker";
-import { QuestionPicker, type QuestionPickerStatePath } from "../Pickers/QuestionPicker";
 
 import {
   ColumnPickerHeaderContainer,
@@ -110,7 +112,6 @@ export function AggregationPicker({
     isPickingMetric,
     { turnOn: openMetricPicker, turnOff: closeMetricPicker },
   ] = useToggle(false);
-  const [metricPickerPath, setMetricPickerPath] = useState<QuestionPickerStatePath>();
   const [initialExpressionClause, setInitialExpressionClause] =
     useState<DefinedClauseName | null>(null);
   const [metricsViewMode, setMetricsViewMode] =
@@ -152,11 +153,20 @@ export function AggregationPicker({
     [query, stageIndex, clause, clauseIndex, onQueryChange],
   );
 
-  const toggleMetricsViewMode = useCallback(() => {
-    setMetricsViewMode((mode) =>
-      mode === "grouped" ? "hierarchical" : "grouped",
-    );
-  }, []);
+  const toggleMetricsViewMode = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      setMetricsViewMode((mode) =>
+        mode === "grouped" ? "hierarchical" : "grouped",
+      );
+      if (metricsViewMode === "hierarchical") {
+        // Close picker when switching from hierarchical to grouped
+        closeMetricPicker();
+      }
+    },
+    [metricsViewMode, closeMetricPicker],
+  );
 
   const sections = useMemo(() => {
     const sections: Section[] = [];
@@ -169,54 +179,37 @@ export function AggregationPicker({
     // Show metrics first
     if (metrics.length > 0) {
       const metricsTitle = (
-        <Flex align="center" gap="sm">
+        <Flex align="center" justify="space-between" w="100%">
           <Text>{t`Metrics`}</Text>
-          <Tooltip
-            label={
-              metricsViewMode === "grouped"
-                ? t`Switch to folder view`
-                : t`Switch to list view`
-            }
-          >
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              onClick={(e: React.MouseEvent) => {
-                e.stopPropagation();
-                toggleMetricsViewMode();
-              }}
-            >
-              <Icon
-                name={metricsViewMode === "grouped" ? "folder" : "list"}
-                size={14}
-              />
-            </ActionIcon>
-          </Tooltip>
+          <Switch
+            size="xs"
+            checked={metricsViewMode === "hierarchical"}
+            onChange={toggleMetricsViewMode}
+            onLabel={<Icon name="folder" size={10} />}
+            offLabel={<Icon name="list" size={10} />}
+            styles={{
+              track: { cursor: "pointer" },
+            }}
+          />
         </Flex>
       );
 
-      if (metricsViewMode === "grouped") {
-        // Show all metrics as items in a single section
-        const metricItems = metrics.map((metric) =>
-          getMetricListItem(query, stageIndex, metric, clauseIndex),
-        );
+      // Always create metrics section with consistent structure
+      const metricItems =
+        metricsViewMode === "grouped"
+          ? metrics.map((metric) =>
+              getMetricListItem(query, stageIndex, metric, clauseIndex),
+            )
+          : [];
 
-        sections.push({
-          key: "metrics",
-          name: metricsTitle,
-          items: metricItems,
-          icon: "metric",
-        });
-      } else {
-        // Show as action section that opens hierarchical picker
-        sections.push({
-          key: "metrics",
-          name: metricsTitle,
-          items: [],
-          icon: "metric",
-          type: "action",
-        });
-      }
+      sections.push({
+        key: "metrics",
+        name: metricsTitle,
+        items: metricItems,
+        icon: "metric",
+        // In hierarchical mode, section will be clickable to open picker
+        type: metricsViewMode === "hierarchical" ? "action" : undefined,
+      });
     }
 
     // Basic functions after metrics
@@ -374,11 +367,20 @@ export function AggregationPicker({
   );
 
   const handleMetricPickerSelect = useCallback(
-    (item: { id: number; model: string }) => {
+    (item: MiniPickerPickableItem) => {
       if (item.model === "metric") {
+        const metricId =
+          typeof item.id === "number"
+            ? getQuestionVirtualTableId(item.id)
+            : item.id;
+
         const metric = metrics.find((m: Lib.MetricMetadata) => {
           const info = Lib.displayInfo(query, stageIndex, m);
-          return info.name === item.id.toString() || m === item.id;
+          // Try to match by card ID from metadata
+          return (
+            String(info.id) === String(item.id) ||
+            info.name === String(item.id)
+          );
         });
 
         if (metric) {
@@ -390,34 +392,6 @@ export function AggregationPicker({
     },
     [metrics, query, stageIndex, onSelect, closeMetricPicker, onClose],
   );
-
-  if (isPickingMetric) {
-    return (
-      <Box
-        className={className}
-        mih="18.75rem"
-        data-testid="metric-picker"
-        c="summarize"
-      >
-        <ColumnPickerHeader onClick={closeMetricPicker}>
-          {t`Select a metric`}
-        </ColumnPickerHeader>
-        <QuestionPicker
-          models={["metric"]}
-          options={{
-            showPersonalCollections: true,
-            showRootCollection: true,
-            hasConfirmButtons: false,
-          }}
-          path={metricPickerPath}
-          shouldShowItem={() => true}
-          onInit={handleMetricPickerSelect}
-          onItemSelect={handleMetricPickerSelect}
-          onPathChange={setMetricPickerPath}
-        />
-      </Box>
-    );
-  }
 
   if (isEditingExpression) {
     return (
@@ -471,22 +445,30 @@ export function AggregationPicker({
   }
 
   return (
-    <AccordionList<Item, Section>
-      data-testid="aggregation-picker"
-      style={{ color: "var(--mb-color-summarize)" }}
-      sections={sections}
-      onChange={handleChange}
-      onChangeSection={handleSectionChange}
-      onChangeSearchText={handleChangeSearchText}
-      itemIsSelected={checkIsItemSelected}
-      renderItemName={renderItemName}
-      renderItemDescription={omitItemDescription}
-      renderItemExtra={renderItemIcon}
-      renderItemWrapper={renderItemWrapper}
-      maxHeight={Infinity}
-      itemTestId="dimension-list-item"
-      globalSearch
-    />
+    <Box className={className} pos="relative">
+      <MiniPicker
+        opened={isPickingMetric}
+        onClose={closeMetricPicker}
+        models={["metric"]}
+        onChange={handleMetricPickerSelect}
+      />
+      <AccordionList<Item, Section>
+        data-testid="aggregation-picker"
+        style={{ color: "var(--mb-color-summarize)" }}
+        sections={sections}
+        onChange={handleChange}
+        onChangeSection={handleSectionChange}
+        onChangeSearchText={handleChangeSearchText}
+        itemIsSelected={checkIsItemSelected}
+        renderItemName={renderItemName}
+        renderItemDescription={omitItemDescription}
+        renderItemExtra={renderItemIcon}
+        renderItemWrapper={renderItemWrapper}
+        maxHeight={Infinity}
+        itemTestId="dimension-list-item"
+        globalSearch
+      />
+    </Box>
   );
 }
 
