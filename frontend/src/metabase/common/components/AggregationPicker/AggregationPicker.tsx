@@ -150,19 +150,7 @@ export function AggregationPicker({
       "expression-aggregations",
     );
 
-    if (operators.length > 0) {
-      const operatorItems = operators.map((operator) =>
-        getOperatorListItem(query, stageIndex, operator),
-      );
-
-      sections.push({
-        key: "operators",
-        name: t`Basic functions`,
-        items: operatorItems,
-        icon: "table2",
-      });
-    }
-
+    // Show metrics first, grouped by collection
     if (metrics.length > 0) {
       const metricItems = metrics.map((metric) =>
         getMetricListItem(query, stageIndex, metric, clauseIndex),
@@ -205,6 +193,20 @@ export function AggregationPicker({
         });
 
       sections.push(...metricSections);
+    }
+
+    // Basic functions after metrics
+    if (operators.length > 0) {
+      const operatorItems = operators.map((operator) =>
+        getOperatorListItem(query, stageIndex, operator),
+      );
+
+      sections.push({
+        key: "operators",
+        name: t`Basic functions`,
+        items: operatorItems,
+        icon: "table2",
+      });
     }
 
     if (allowCustomExpressions && supportsCustomExpressions) {
