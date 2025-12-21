@@ -1,6 +1,5 @@
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { t } from "ttag";
-import _ from "underscore";
 
 import {
   AccordionList,
@@ -26,11 +25,11 @@ import {
   getClauseDefinition,
 } from "metabase/querying/expressions";
 import { getMetadata } from "metabase/selectors/metadata";
-import { getCollectionFromCollectionsTree } from "metabase/selectors/collection";
 import { Box, Flex, Icon, Text } from "metabase/ui";
 import * as Lib from "metabase-lib";
 
 import { QueryColumnPicker } from "../QueryColumnPicker";
+import { QuestionPicker, type QuestionPickerStatePath } from "../Pickers/QuestionPicker";
 
 import {
   ColumnPickerHeaderContainer,
@@ -87,7 +86,6 @@ export function AggregationPicker({
   readOnly,
 }: AggregationPickerProps) {
   const metadata = useSelector(getMetadata);
-  const state = useSelector((state) => state);
   const displayInfo = clause
     ? Lib.displayInfo(query, stageIndex, clause)
     : undefined;
@@ -106,6 +104,11 @@ export function AggregationPicker({
       readOnly,
     }),
   );
+  const [
+    isPickingMetric,
+    { turnOn: openMetricPicker, turnOff: closeMetricPicker },
+  ] = useToggle(false);
+  const [metricPickerPath, setMetricPickerPath] = useState<QuestionPickerStatePath>();
   const [initialExpressionClause, setInitialExpressionClause] =
     useState<DefinedClauseName | null>(null);
 
@@ -119,6 +122,11 @@ export function AggregationPicker({
   const operatorInfo = useMemo(
     () => (operator ? Lib.displayInfo(query, stageIndex, operator) : null),
     [query, stageIndex, operator],
+  );
+
+  const metrics = useMemo(
+    () => Lib.availableMetrics(query, stageIndex),
+    [query, stageIndex],
   );
 
   const onSelect = useCallback(
@@ -142,57 +150,21 @@ export function AggregationPicker({
 
   const sections = useMemo(() => {
     const sections: Section[] = [];
-
-    const metrics = Lib.availableMetrics(query, stageIndex);
     const databaseId = Lib.databaseID(query);
     const database = metadata.database(databaseId);
     const supportsCustomExpressions = database?.hasFeature(
       "expression-aggregations",
     );
 
-    // Show metrics first, grouped by collection
+    // Show metrics first - as a single action section that opens metric picker
     if (metrics.length > 0) {
-      const metricItems = metrics.map((metric) =>
-        getMetricListItem(query, stageIndex, metric, clauseIndex),
-      );
-
-      // Group metrics by collection
-      const metricsByCollection = _.groupBy(
-        metricItems,
-        (item) => item.collectionId ?? "root",
-      );
-
-      // Create a section for each collection and sort by collection name
-      const metricSections = Object.entries(metricsByCollection)
-        .map(([collectionId, items]) => {
-          const collectionIdNum =
-            collectionId === "root" ? null : Number(collectionId);
-          const collection = collectionIdNum
-            ? getCollectionFromCollectionsTree(state, collectionIdNum)
-            : null;
-
-          const collectionName = collection?.name ?? t`Our analytics`;
-
-          return {
-            key: `metrics-${collectionId}`,
-            name: collectionName,
-            items,
-            icon: "metric" as const,
-            collectionId,
-          };
-        })
-        .sort((a, b) => {
-          // Sort "Our analytics" (root) first, then alphabetically
-          if (a.collectionId === "root") {
-            return -1;
-          }
-          if (b.collectionId === "root") {
-            return 1;
-          }
-          return a.name.localeCompare(b.name);
-        });
-
-      sections.push(...metricSections);
+      sections.push({
+        key: "metrics",
+        name: t`Metrics`,
+        items: [],
+        icon: "metric",
+        type: "action",
+      });
     }
 
     // Basic functions after metrics
@@ -238,7 +210,7 @@ export function AggregationPicker({
     operators,
     allowCustomExpressions,
     isSearching,
-    state,
+    metrics,
   ]);
 
   const availableColumns = useMemo(
@@ -331,9 +303,11 @@ export function AggregationPicker({
     (section: Section) => {
       if (section.key === "custom-expression") {
         openExpressionEditor();
+      } else if (section.key === "metrics") {
+        openMetricPicker();
       }
     },
-    [openExpressionEditor],
+    [openExpressionEditor, openMetricPicker],
   );
 
   const handleClauseChange = useCallback(
@@ -344,6 +318,52 @@ export function AggregationPicker({
     },
     [onSelect, onClose],
   );
+
+  const handleMetricPickerSelect = useCallback(
+    (item: { id: number; model: string }) => {
+      if (item.model === "metric") {
+        const metric = metrics.find((m: Lib.MetricMetadata) => {
+          const info = Lib.displayInfo(query, stageIndex, m);
+          return info.name === item.id.toString() || m === item.id;
+        });
+
+        if (metric) {
+          onSelect(metric);
+          closeMetricPicker();
+          onClose?.();
+        }
+      }
+    },
+    [metrics, query, stageIndex, onSelect, closeMetricPicker, onClose],
+  );
+
+  if (isPickingMetric) {
+    return (
+      <Box
+        className={className}
+        mih="18.75rem"
+        data-testid="metric-picker"
+        c="summarize"
+      >
+        <ColumnPickerHeader onClick={closeMetricPicker}>
+          {t`Select a metric`}
+        </ColumnPickerHeader>
+        <QuestionPicker
+          models={["metric"]}
+          options={{
+            showPersonalCollections: true,
+            showRootCollection: true,
+            hasConfirmButtons: false,
+          }}
+          path={metricPickerPath}
+          shouldShowItem={() => true}
+          onInit={handleMetricPickerSelect}
+          onItemSelect={handleMetricPickerSelect}
+          onPathChange={setMetricPickerPath}
+        />
+      </Box>
+    );
+  }
 
   if (isEditingExpression) {
     return (
