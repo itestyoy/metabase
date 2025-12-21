@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { t } from "ttag";
+import _ from "underscore";
 
 import {
   AccordionList,
@@ -25,6 +26,7 @@ import {
   getClauseDefinition,
 } from "metabase/querying/expressions";
 import { getMetadata } from "metabase/selectors/metadata";
+import { getCollectionFromCollectionsTree } from "metabase/selectors/collection";
 import { Box, Flex, Icon, Text } from "metabase/ui";
 import * as Lib from "metabase-lib";
 
@@ -85,6 +87,7 @@ export function AggregationPicker({
   readOnly,
 }: AggregationPickerProps) {
   const metadata = useSelector(getMetadata);
+  const state = useSelector((state) => state);
   const displayInfo = clause
     ? Lib.displayInfo(query, stageIndex, clause)
     : undefined;
@@ -161,14 +164,47 @@ export function AggregationPicker({
     }
 
     if (metrics.length > 0) {
-      sections.push({
-        key: "metrics",
-        name: t`Metrics`,
-        items: metrics.map((metric) =>
-          getMetricListItem(query, stageIndex, metric, clauseIndex),
-        ),
-        icon: "metric",
-      });
+      const metricItems = metrics.map((metric) =>
+        getMetricListItem(query, stageIndex, metric, clauseIndex),
+      );
+
+      // Group metrics by collection
+      const metricsByCollection = _.groupBy(
+        metricItems,
+        (item) => item.collectionId ?? "root",
+      );
+
+      // Create a section for each collection and sort by collection name
+      const metricSections = Object.entries(metricsByCollection)
+        .map(([collectionId, items]) => {
+          const collectionIdNum =
+            collectionId === "root" ? null : Number(collectionId);
+          const collection = collectionIdNum
+            ? getCollectionFromCollectionsTree(state, collectionIdNum)
+            : null;
+
+          const collectionName = collection?.name ?? t`Our analytics`;
+
+          return {
+            key: `metrics-${collectionId}`,
+            name: collectionName,
+            items,
+            icon: "folder" as const,
+            collectionId,
+          };
+        })
+        .sort((a, b) => {
+          // Sort "Our analytics" (root) first, then alphabetically
+          if (a.collectionId === "root") {
+            return -1;
+          }
+          if (b.collectionId === "root") {
+            return 1;
+          }
+          return a.name.localeCompare(b.name);
+        });
+
+      sections.push(...metricSections);
     }
 
     if (allowCustomExpressions && supportsCustomExpressions) {
@@ -200,6 +236,7 @@ export function AggregationPicker({
     operators,
     allowCustomExpressions,
     isSearching,
+    state,
   ]);
 
   const availableColumns = useMemo(
