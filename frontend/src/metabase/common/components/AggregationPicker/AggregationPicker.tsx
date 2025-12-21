@@ -447,6 +447,18 @@ export function AggregationPicker({
           onClose={closeMetricPicker}
           models={["metric"]}
           onChange={handleMetricPickerSelect}
+          shouldHide={(item) => {
+            // Hide databases and schemas - metrics are only in collections
+            if (
+              typeof item === "object" &&
+              item != null &&
+              "model" in item &&
+              (item.model === "database" || item.model === "schema")
+            ) {
+              return true;
+            }
+            return false;
+          }}
         />
       </Box>
     );
