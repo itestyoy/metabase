@@ -179,18 +179,20 @@ export function AggregationPicker({
     // Show metrics first
     if (metrics.length > 0) {
       const metricsTitle = (
-        <Flex align="center" justify="space-between" w="100%">
+        <Flex align="center" style={{ width: "100%" }}>
           <Text>{t`Metrics`}</Text>
-          <Switch
-            size="xs"
-            checked={metricsViewMode === "hierarchical"}
-            onChange={toggleMetricsViewMode}
-            onLabel={<Icon name="folder" size={10} />}
-            offLabel={<Icon name="list" size={10} />}
-            styles={{
-              track: { cursor: "pointer" },
-            }}
-          />
+          <Box ml="auto">
+            <Switch
+              size="xs"
+              checked={metricsViewMode === "hierarchical"}
+              onChange={toggleMetricsViewMode}
+              onLabel={<Icon name="folder" size={10} />}
+              offLabel={<Icon name="list" size={10} />}
+              styles={{
+                track: { cursor: "pointer" },
+              }}
+            />
+          </Box>
         </Flex>
       );
 
@@ -369,18 +371,11 @@ export function AggregationPicker({
   const handleMetricPickerSelect = useCallback(
     (item: MiniPickerPickableItem) => {
       if (item.model === "metric") {
-        const metricId =
-          typeof item.id === "number"
-            ? getQuestionVirtualTableId(item.id)
-            : item.id;
-
+        // Find metric by matching the card ID
         const metric = metrics.find((m: Lib.MetricMetadata) => {
           const info = Lib.displayInfo(query, stageIndex, m);
-          // Try to match by card ID from metadata
-          return (
-            String(info.id) === String(item.id) ||
-            info.name === String(item.id)
-          );
+          // Match by card ID - info.id is the card ID for metrics
+          return info.id === item.id;
         });
 
         if (metric) {
@@ -444,31 +439,37 @@ export function AggregationPicker({
     );
   }
 
+  if (isPickingMetric) {
+    return (
+      <Box className={className} mih="18.75rem" data-testid="metric-picker">
+        <MiniPicker
+          opened={isPickingMetric}
+          onClose={closeMetricPicker}
+          models={["metric"]}
+          onChange={handleMetricPickerSelect}
+        />
+      </Box>
+    );
+  }
+
   return (
-    <Box className={className} pos="relative">
-      <MiniPicker
-        opened={isPickingMetric}
-        onClose={closeMetricPicker}
-        models={["metric"]}
-        onChange={handleMetricPickerSelect}
-      />
-      <AccordionList<Item, Section>
-        data-testid="aggregation-picker"
-        style={{ color: "var(--mb-color-summarize)" }}
-        sections={sections}
-        onChange={handleChange}
-        onChangeSection={handleSectionChange}
-        onChangeSearchText={handleChangeSearchText}
-        itemIsSelected={checkIsItemSelected}
-        renderItemName={renderItemName}
-        renderItemDescription={omitItemDescription}
-        renderItemExtra={renderItemIcon}
-        renderItemWrapper={renderItemWrapper}
-        maxHeight={Infinity}
-        itemTestId="dimension-list-item"
-        globalSearch
-      />
-    </Box>
+    <AccordionList<Item, Section>
+      data-testid="aggregation-picker"
+      style={{ color: "var(--mb-color-summarize)" }}
+      className={className}
+      sections={sections}
+      onChange={handleChange}
+      onChangeSection={handleSectionChange}
+      onChangeSearchText={handleChangeSearchText}
+      itemIsSelected={checkIsItemSelected}
+      renderItemName={renderItemName}
+      renderItemDescription={omitItemDescription}
+      renderItemExtra={renderItemIcon}
+      renderItemWrapper={renderItemWrapper}
+      maxHeight={Infinity}
+      itemTestId="dimension-list-item"
+      globalSearch
+    />
   );
 }
 
