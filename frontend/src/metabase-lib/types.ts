@@ -241,6 +241,7 @@ export type MetricDisplayInfo = {
   longDisplayName: string;
   description: string;
   aggregationPosition?: number;
+  collectionId?: number | null;
 };
 
 export type ClauseDisplayInfo = Pick<
