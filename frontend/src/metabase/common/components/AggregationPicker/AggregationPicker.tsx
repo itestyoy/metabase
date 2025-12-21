@@ -25,7 +25,7 @@ import {
   getClauseDefinition,
 } from "metabase/querying/expressions";
 import { getMetadata } from "metabase/selectors/metadata";
-import { Box, Flex, Icon, Text } from "metabase/ui";
+import { ActionIcon, Box, Flex, Icon, Text, Tooltip } from "metabase/ui";
 import * as Lib from "metabase-lib";
 
 import { QueryColumnPicker } from "../QueryColumnPicker";
@@ -72,6 +72,8 @@ type ExpressionClauseListItem = {
 type Item = OperatorListItem | MetricListItem | ExpressionClauseListItem;
 type Section = BaseSection<Item>;
 
+type MetricsViewMode = "grouped" | "hierarchical";
+
 export function AggregationPicker({
   className,
   query,
@@ -111,6 +113,8 @@ export function AggregationPicker({
   const [metricPickerPath, setMetricPickerPath] = useState<QuestionPickerStatePath>();
   const [initialExpressionClause, setInitialExpressionClause] =
     useState<DefinedClauseName | null>(null);
+  const [metricsViewMode, setMetricsViewMode] =
+    useState<MetricsViewMode>("grouped");
 
   // For really simple inline expressions like Average([Price]),
   // MLv2 can figure out that "Average" operator is used.
@@ -148,6 +152,12 @@ export function AggregationPicker({
     [query, stageIndex, clause, clauseIndex, onQueryChange],
   );
 
+  const toggleMetricsViewMode = useCallback(() => {
+    setMetricsViewMode((mode) =>
+      mode === "grouped" ? "hierarchical" : "grouped",
+    );
+  }, []);
+
   const sections = useMemo(() => {
     const sections: Section[] = [];
     const databaseId = Lib.databaseID(query);
@@ -156,15 +166,57 @@ export function AggregationPicker({
       "expression-aggregations",
     );
 
-    // Show metrics first - as a single action section that opens metric picker
+    // Show metrics first
     if (metrics.length > 0) {
-      sections.push({
-        key: "metrics",
-        name: t`Metrics`,
-        items: [],
-        icon: "metric",
-        type: "action",
-      });
+      const metricsTitle = (
+        <Flex align="center" gap="sm">
+          <Text>{t`Metrics`}</Text>
+          <Tooltip
+            label={
+              metricsViewMode === "grouped"
+                ? t`Switch to folder view`
+                : t`Switch to list view`
+            }
+          >
+            <ActionIcon
+              size="sm"
+              variant="subtle"
+              onClick={(e: React.MouseEvent) => {
+                e.stopPropagation();
+                toggleMetricsViewMode();
+              }}
+            >
+              <Icon
+                name={metricsViewMode === "grouped" ? "folder" : "list"}
+                size={14}
+              />
+            </ActionIcon>
+          </Tooltip>
+        </Flex>
+      );
+
+      if (metricsViewMode === "grouped") {
+        // Show all metrics as items in a single section
+        const metricItems = metrics.map((metric) =>
+          getMetricListItem(query, stageIndex, metric, clauseIndex),
+        );
+
+        sections.push({
+          key: "metrics",
+          name: metricsTitle,
+          items: metricItems,
+          icon: "metric",
+        });
+      } else {
+        // Show as action section that opens hierarchical picker
+        sections.push({
+          key: "metrics",
+          name: metricsTitle,
+          items: [],
+          icon: "metric",
+          type: "action",
+        });
+      }
     }
 
     // Basic functions after metrics
@@ -211,6 +263,8 @@ export function AggregationPicker({
     allowCustomExpressions,
     isSearching,
     metrics,
+    metricsViewMode,
+    toggleMetricsViewMode,
   ]);
 
   const availableColumns = useMemo(
@@ -303,11 +357,11 @@ export function AggregationPicker({
     (section: Section) => {
       if (section.key === "custom-expression") {
         openExpressionEditor();
-      } else if (section.key === "metrics") {
+      } else if (section.key === "metrics" && metricsViewMode === "hierarchical") {
         openMetricPicker();
       }
     },
-    [openExpressionEditor, openMetricPicker],
+    [openExpressionEditor, openMetricPicker, metricsViewMode],
   );
 
   const handleClauseChange = useCallback(
