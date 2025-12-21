@@ -189,7 +189,7 @@ export function AggregationPicker({
             key: `metrics-${collectionId}`,
             name: collectionName,
             items,
-            icon: "folder" as const,
+            icon: "metric" as const,
             collectionId,
           };
         })
