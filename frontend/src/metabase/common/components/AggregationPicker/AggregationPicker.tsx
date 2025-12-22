@@ -1,4 +1,10 @@
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { t } from "ttag";
 
 import {
@@ -96,6 +102,7 @@ export function AggregationPicker({
   const initialOperator = getInitialOperator(query, stageIndex, operators);
   const [searchText, setSearchText] = useState("");
   const isSearching = searchText !== "";
+  const aggregationListContainerRef = useRef<HTMLDivElement | null>(null);
   const [
     isEditingExpression,
     { turnOn: openExpressionEditor, turnOff: closeExpressionEditor },
@@ -200,24 +207,27 @@ export function AggregationPicker({
         key: "metrics",
         name: (
           <Flex align="center" justify="space-between">
-            <Flex align="center" gap="xs">
-              <Icon name="metric" size={16} />
+            <Flex align="center" gap="xs" style={{ minWidth: 0 }}>
               <Text fw="bold">{t`Metrics`}</Text>
             </Flex>
-            <Switch
-              size="xs"
-              checked={metricsViewMode === "hierarchical"}
-              onChange={toggleMetricsViewMode}
-              onLabel={<Icon name="folder" size={10} />}
-              offLabel={<Icon name="list" size={10} />}
-              styles={{
-                track: { cursor: "pointer" },
-              }}
-            />
+            <Box ml="auto">
+              <Switch
+                size="xs"
+                checked={metricsViewMode === "hierarchical"}
+                onChange={toggleMetricsViewMode}
+                onLabel={<Icon name="folder" size={10} />}
+                offLabel={<Icon name="list" size={10} />}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                styles={{
+                  track: { cursor: "pointer" },
+                }}
+              />
+            </Box>
           </Flex>
         ),
         items: metricItems,
-        icon: null,
+        icon: "metric",
         // In hierarchical mode, section will be clickable to open picker
         type: metricsViewMode === "hierarchical" ? "action" : undefined,
       });
@@ -445,34 +455,47 @@ export function AggregationPicker({
   }
 
   const aggregationList = (
-    <AccordionList<Item, Section>
-      data-testid="aggregation-picker"
-      style={{ color: "var(--mb-color-summarize)" }}
-      sections={sections}
-      onChange={handleChange}
-      onChangeSection={handleSectionChange}
-      onChangeSearchText={handleChangeSearchText}
-      itemIsSelected={checkIsItemSelected}
-      renderItemName={renderItemName}
-      renderItemDescription={omitItemDescription}
-      renderItemExtra={renderItemIcon}
-      renderItemWrapper={renderItemWrapper}
-      maxHeight={Infinity}
-      itemTestId="dimension-list-item"
-      globalSearch
-    />
+    <Box ref={aggregationListContainerRef}>
+      <AccordionList<Item, Section>
+        data-testid="aggregation-picker"
+        style={{ color: "var(--mb-color-summarize)" }}
+        sections={sections}
+        onChange={handleChange}
+        onChangeSection={handleSectionChange}
+        onChangeSearchText={handleChangeSearchText}
+        itemIsSelected={checkIsItemSelected}
+        renderItemName={renderItemName}
+        renderItemDescription={omitItemDescription}
+        renderItemExtra={renderItemIcon}
+        renderItemWrapper={renderItemWrapper}
+        maxHeight={Infinity}
+        itemTestId="dimension-list-item"
+        globalSearch
+      />
+    </Box>
   );
 
   if (isPickingMetric) {
     return (
-      <Flex className={className} align="stretch">
-        <Box style={{ flex: 1, minWidth: 0 }}>
+      <Box
+        className={className}
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 17.5rem",
+          gap: "1rem",
+        }}
+      >
+        <Box style={{ minWidth: 0 }}>
           {aggregationList}
         </Box>
         <Box
           data-testid="metric-picker"
           mih="18.75rem"
-          ml="md"
+          style={{
+            borderLeft: "1px solid var(--mb-color-border)",
+            position: "sticky",
+            top: 0,
+          }}
         >
           <MiniPicker
             opened={isPickingMetric}
@@ -493,7 +516,7 @@ export function AggregationPicker({
             }}
           />
         </Box>
-      </Flex>
+      </Box>
     );
   }
 
