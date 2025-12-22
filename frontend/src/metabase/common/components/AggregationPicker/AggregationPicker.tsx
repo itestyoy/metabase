@@ -123,6 +123,28 @@ export function AggregationPicker({
   const [metricsViewMode, setMetricsViewMode] =
     useState<MetricsViewMode>("grouped");
 
+  const metricSwitchStyles = useMemo(
+    () => {
+      const isHierarchical = metricsViewMode === "hierarchical";
+      const trackColor = isHierarchical
+        ? "var(--mb-color-summarize)"
+        : "var(--mb-color-brand)";
+      return {
+        track: {
+          cursor: "pointer",
+          backgroundColor: trackColor,
+          border: `1px solid ${trackColor}`,
+          transition: "background-color 120ms ease, border-color 120ms ease",
+        },
+        thumb: {
+          backgroundColor: "var(--mb-color-text-white)",
+          border: "1px solid transparent",
+        },
+      };
+    },
+    [metricsViewMode],
+  );
+
   // For really simple inline expressions like Average([Price]),
   // MLv2 can figure out that "Average" operator is used.
   // We don't want that though, so we don't break navigation inside the picker
@@ -173,7 +195,6 @@ export function AggregationPicker({
   const toggleMetricsViewMode = useCallback(
     (e: SyntheticEvent) => {
       e.stopPropagation();
-      e.preventDefault();
       setMetricsViewMode((mode) =>
         mode === "grouped" ? "hierarchical" : "grouped",
       );
@@ -219,9 +240,7 @@ export function AggregationPicker({
               onChange={toggleMetricsViewMode}
               onLabel={<Icon name="folder" size={10} />}
               offLabel={<Icon name="list" size={10} />}
-              styles={{
-                track: { cursor: "pointer" },
-              }}
+              styles={metricSwitchStyles}
             />
           </span>
         </span>
@@ -484,7 +503,7 @@ export function AggregationPicker({
       </Box>
 
       {isPickingMetric && (
-        <Box data-testid="metric-picker" ml="md">
+        <Box data-testid="metric-picker">
           <MiniPicker
             opened={isPickingMetric}
             onClose={closeMetricPicker}
