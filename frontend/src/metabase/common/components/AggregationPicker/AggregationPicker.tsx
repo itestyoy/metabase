@@ -176,27 +176,8 @@ export function AggregationPicker({
       "expression-aggregations",
     );
 
-    // Show metrics first
+    // Show metrics first - simple section name without toggle
     if (metrics.length > 0) {
-      const metricsTitle = (
-        <Flex align="center" style={{ width: "100%" }}>
-          <Text>{t`Metrics`}</Text>
-          <Box ml="auto">
-            <Switch
-              size="xs"
-              checked={metricsViewMode === "hierarchical"}
-              onChange={toggleMetricsViewMode}
-              onLabel={<Icon name="folder" size={10} />}
-              offLabel={<Icon name="list" size={10} />}
-              styles={{
-                track: { cursor: "pointer" },
-              }}
-            />
-          </Box>
-        </Flex>
-      );
-
-      // Always create metrics section with consistent structure
       const metricItems =
         metricsViewMode === "grouped"
           ? metrics.map((metric) =>
@@ -206,7 +187,7 @@ export function AggregationPicker({
 
       sections.push({
         key: "metrics",
-        name: metricsTitle,
+        name: t`Metrics`,
         items: metricItems,
         icon: "metric",
         // In hierarchical mode, section will be clickable to open picker
@@ -374,8 +355,12 @@ export function AggregationPicker({
         // Find metric by matching the card ID
         const metric = metrics.find((m: Lib.MetricMetadata) => {
           const info = Lib.displayInfo(query, stageIndex, m);
-          // Match by card ID - info.id is the card ID for metrics
-          return info.id === item.id;
+          // Match by card ID - try both string and number comparison
+          return (
+            info.id === item.id ||
+            String(info.id) === String(item.id) ||
+            Number(info.id) === Number(item.id)
+          );
         });
 
         if (metric) {
@@ -439,49 +424,81 @@ export function AggregationPicker({
     );
   }
 
+  const metricsToggle = metrics.length > 0 && (
+    <Flex
+      px="md"
+      py="sm"
+      align="center"
+      justify="space-between"
+      style={{
+        borderBottom: "1px solid var(--mb-color-border)",
+      }}
+    >
+      <Flex align="center" gap="xs">
+        <Icon name="metric" size={16} />
+        <Text fw="bold">{t`Metrics`}</Text>
+      </Flex>
+      <Switch
+        size="xs"
+        checked={metricsViewMode === "hierarchical"}
+        onChange={toggleMetricsViewMode}
+        onLabel={<Icon name="folder" size={10} />}
+        offLabel={<Icon name="list" size={10} />}
+        styles={{
+          track: { cursor: "pointer" },
+        }}
+      />
+    </Flex>
+  );
+
   if (isPickingMetric) {
     return (
-      <Box className={className} mih="18.75rem" data-testid="metric-picker">
-        <MiniPicker
-          opened={isPickingMetric}
-          onClose={closeMetricPicker}
-          models={["metric"]}
-          onChange={handleMetricPickerSelect}
-          shouldHide={(item) => {
-            // Hide databases and schemas - metrics are only in collections
-            if (
-              typeof item === "object" &&
-              item != null &&
-              "model" in item &&
-              (item.model === "database" || item.model === "schema")
-            ) {
-              return true;
-            }
-            return false;
-          }}
-        />
+      <Box className={className} data-testid="metric-picker">
+        {metricsToggle}
+        <Box mih="18.75rem">
+          <MiniPicker
+            opened={isPickingMetric}
+            onClose={closeMetricPicker}
+            models={["metric"]}
+            onChange={handleMetricPickerSelect}
+            shouldHide={(item) => {
+              // Hide databases and schemas - metrics are only in collections
+              if (
+                typeof item === "object" &&
+                item != null &&
+                "model" in item &&
+                (item.model === "database" || item.model === "schema")
+              ) {
+                return true;
+              }
+              return false;
+            }}
+          />
+        </Box>
       </Box>
     );
   }
 
   return (
-    <AccordionList<Item, Section>
-      data-testid="aggregation-picker"
-      style={{ color: "var(--mb-color-summarize)" }}
-      className={className}
-      sections={sections}
-      onChange={handleChange}
-      onChangeSection={handleSectionChange}
-      onChangeSearchText={handleChangeSearchText}
-      itemIsSelected={checkIsItemSelected}
-      renderItemName={renderItemName}
-      renderItemDescription={omitItemDescription}
-      renderItemExtra={renderItemIcon}
-      renderItemWrapper={renderItemWrapper}
-      maxHeight={Infinity}
-      itemTestId="dimension-list-item"
-      globalSearch
-    />
+    <Box className={className}>
+      {metricsToggle}
+      <AccordionList<Item, Section>
+        data-testid="aggregation-picker"
+        style={{ color: "var(--mb-color-summarize)" }}
+        sections={sections}
+        onChange={handleChange}
+        onChangeSection={handleSectionChange}
+        onChangeSearchText={handleChangeSearchText}
+        itemIsSelected={checkIsItemSelected}
+        renderItemName={renderItemName}
+        renderItemDescription={omitItemDescription}
+        renderItemExtra={renderItemIcon}
+        renderItemWrapper={renderItemWrapper}
+        maxHeight={Infinity}
+        itemTestId="dimension-list-item"
+        globalSearch
+      />
+    </Box>
   );
 }
 
