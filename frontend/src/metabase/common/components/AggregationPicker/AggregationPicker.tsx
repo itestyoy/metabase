@@ -198,9 +198,26 @@ export function AggregationPicker({
 
       sections.push({
         key: "metrics",
-        name: t`Metrics`,
+        name: (
+          <Flex align="center" justify="space-between">
+            <Flex align="center" gap="xs">
+              <Icon name="metric" size={16} />
+              <Text fw="bold">{t`Metrics`}</Text>
+            </Flex>
+            <Switch
+              size="xs"
+              checked={metricsViewMode === "hierarchical"}
+              onChange={toggleMetricsViewMode}
+              onLabel={<Icon name="folder" size={10} />}
+              offLabel={<Icon name="list" size={10} />}
+              styles={{
+                track: { cursor: "pointer" },
+              }}
+            />
+          </Flex>
+        ),
         items: metricItems,
-        icon: "metric",
+        icon: null,
         // In hierarchical mode, section will be clickable to open picker
         type: metricsViewMode === "hierarchical" ? "action" : undefined,
       });
@@ -427,33 +444,6 @@ export function AggregationPicker({
     );
   }
 
-  const metricsToggle = metrics.length > 0 && (
-    <Flex
-      px="md"
-      py="sm"
-      align="center"
-      justify="space-between"
-      style={{
-        borderBottom: "1px solid var(--mb-color-border)",
-      }}
-    >
-      <Flex align="center" gap="xs">
-        <Icon name="metric" size={16} />
-        <Text fw="bold">{t`Metrics`}</Text>
-      </Flex>
-      <Switch
-        size="xs"
-        checked={metricsViewMode === "hierarchical"}
-        onChange={toggleMetricsViewMode}
-        onLabel={<Icon name="folder" size={10} />}
-        offLabel={<Icon name="list" size={10} />}
-        styles={{
-          track: { cursor: "pointer" },
-        }}
-      />
-    </Flex>
-  );
-
   const aggregationList = (
     <AccordionList<Item, Section>
       data-testid="aggregation-picker"
@@ -477,7 +467,6 @@ export function AggregationPicker({
     return (
       <Flex className={className} align="stretch">
         <Box style={{ flex: 1, minWidth: 0 }}>
-          {metricsToggle}
           {aggregationList}
         </Box>
         <Box
@@ -510,7 +499,6 @@ export function AggregationPicker({
 
   return (
     <Box className={className}>
-      {metricsToggle}
       {aggregationList}
     </Box>
   );
