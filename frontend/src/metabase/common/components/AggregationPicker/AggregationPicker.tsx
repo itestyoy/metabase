@@ -232,7 +232,7 @@ export function AggregationPicker({
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: "0.5rem",
+            gap: "7.8rem",
             width: "100%",
           }}
         >
