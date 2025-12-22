@@ -134,6 +134,17 @@ export function AggregationPicker({
     [query, stageIndex],
   );
 
+  const metricsById = useMemo(() => {
+    const metricMap = new Map<string, Lib.MetricMetadata>();
+    metrics.forEach((metric) => {
+      const metricId = getMetricId(metric);
+      if (metricId != null) {
+        metricMap.set(String(metricId), metric);
+      }
+    });
+    return metricMap;
+  }, [metrics]);
+
   const onSelect = useCallback(
     function (aggregation: Lib.Aggregable) {
       const isUpdate = clause != null && clauseIndex != null;
@@ -352,16 +363,7 @@ export function AggregationPicker({
   const handleMetricPickerSelect = useCallback(
     (item: MiniPickerPickableItem) => {
       if (item.model === "metric") {
-        // Find metric by matching the card ID
-        const metric = metrics.find((m: Lib.MetricMetadata) => {
-          const info = Lib.displayInfo(query, stageIndex, m);
-          // Match by card ID - try both string and number comparison
-          return (
-            info.id === item.id ||
-            String(info.id) === String(item.id) ||
-            Number(info.id) === Number(item.id)
-          );
-        });
+        const metric = metricsById.get(String(item.id));
 
         if (metric) {
           onSelect(metric);
@@ -370,7 +372,7 @@ export function AggregationPicker({
         }
       }
     },
-    [metrics, query, stageIndex, onSelect, closeMetricPicker, onClose],
+    [metricsById, onSelect, closeMetricPicker, onClose],
   );
 
   if (isEditingExpression) {
@@ -451,11 +453,38 @@ export function AggregationPicker({
     </Flex>
   );
 
+  const aggregationList = (
+    <AccordionList<Item, Section>
+      data-testid="aggregation-picker"
+      style={{ color: "var(--mb-color-summarize)" }}
+      sections={sections}
+      onChange={handleChange}
+      onChangeSection={handleSectionChange}
+      onChangeSearchText={handleChangeSearchText}
+      itemIsSelected={checkIsItemSelected}
+      renderItemName={renderItemName}
+      renderItemDescription={omitItemDescription}
+      renderItemExtra={renderItemIcon}
+      renderItemWrapper={renderItemWrapper}
+      maxHeight={Infinity}
+      itemTestId="dimension-list-item"
+      globalSearch
+    />
+  );
+
   if (isPickingMetric) {
     return (
-      <Box className={className} data-testid="metric-picker">
-        {metricsToggle}
-        <Box mih="18.75rem">
+      <Flex className={className} align="stretch">
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          {metricsToggle}
+          {aggregationList}
+        </Box>
+        <Box
+          data-testid="metric-picker"
+          mih="18.75rem"
+          ml="md"
+          style={{ minWidth: "17.5rem", borderLeft: "1px solid var(--mb-color-border)" }}
+        >
           <MiniPicker
             opened={isPickingMetric}
             onClose={closeMetricPicker}
@@ -475,29 +504,14 @@ export function AggregationPicker({
             }}
           />
         </Box>
-      </Box>
+      </Flex>
     );
   }
 
   return (
     <Box className={className}>
       {metricsToggle}
-      <AccordionList<Item, Section>
-        data-testid="aggregation-picker"
-        style={{ color: "var(--mb-color-summarize)" }}
-        sections={sections}
-        onChange={handleChange}
-        onChangeSection={handleSectionChange}
-        onChangeSearchText={handleChangeSearchText}
-        itemIsSelected={checkIsItemSelected}
-        renderItemName={renderItemName}
-        renderItemDescription={omitItemDescription}
-        renderItemExtra={renderItemIcon}
-        renderItemWrapper={renderItemWrapper}
-        maxHeight={Infinity}
-        itemTestId="dimension-list-item"
-        globalSearch
-      />
+      {aggregationList}
     </Box>
   );
 }
@@ -642,6 +656,15 @@ function getExpressionClauseListItem(
     clause,
     displayName: clause.displayName,
   };
+}
+
+function getMetricId(
+  metric: Lib.MetricMetadata,
+): number | string | undefined {
+  if (metric && typeof metric === "object" && "id" in metric) {
+    return (metric as { id?: number | string }).id;
+  }
+  return undefined;
 }
 
 function checkIsColumnSelected(columnInfo: Lib.ColumnDisplayInfo) {
