@@ -139,6 +139,7 @@ export function AggregationPicker({
         thumb: {
           backgroundColor: "var(--mb-color-text-white)",
           border: "1px solid transparent",
+          color: "var(--mb-color-text-white)",
         },
       };
     },
