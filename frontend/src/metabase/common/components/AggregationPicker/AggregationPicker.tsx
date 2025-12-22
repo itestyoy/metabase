@@ -141,6 +141,9 @@ export function AggregationPicker({
           border: "1px solid transparent",
           color: "var(--mb-color-text-white)",
         },
+        trackLabel: {
+          color: "var(--mb-color-text-white)",
+        },
       };
     },
     [metricsViewMode],
