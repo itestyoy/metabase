@@ -473,17 +473,15 @@ export function AggregationPicker({
     />
   );
 
-    return (
-      <Flex className={className} align="stretch">
-        <Box style={{ flex: 1, minWidth: 0 }}>
-          {metricsToggle}
-          {aggregationList}
-        </Box>
-        isPickingMetric && (
-        <Box
-          data-testid="metric-picker"
-          ml="md"
-        >
+  return (
+    <Flex className={className} align="stretch">
+      <Box style={{ flex: 1, minWidth: 0 }}>
+        {metricsToggle}
+        {aggregationList}
+      </Box>
+
+      {isPickingMetric && (
+        <Box data-testid="metric-picker" ml="md">
           <MiniPicker
             opened={isPickingMetric}
             onClose={closeMetricPicker}
@@ -502,9 +500,10 @@ export function AggregationPicker({
               return false;
             }}
           />
-        </Box>)
-      </Flex>
-    );
+        </Box>
+      )}
+    </Flex>
+  );
 }
 
 function ColumnPickerHeader({
