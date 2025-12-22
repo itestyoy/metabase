@@ -362,11 +362,12 @@ export function AggregationPicker({
 
   const handleMetricPickerSelect = useCallback(
     (item: MiniPickerPickableItem) => {
-      if (item.model === "metric") {
+      if (isMetricItem(item)) {
         const metric = metricsById.get(String(item.id));
+        const metricAggregable = metric ?? createMetricClauseFromItem(item);
 
-        if (metric) {
-          onSelect(metric);
+        if (metricAggregable) {
+          onSelect(metricAggregable);
           closeMetricPicker();
           onClose?.();
         }
@@ -483,7 +484,6 @@ export function AggregationPicker({
           data-testid="metric-picker"
           mih="18.75rem"
           ml="md"
-          style={{ minWidth: "17.5rem", borderLeft: "1px solid var(--mb-color-border)" }}
         >
           <MiniPicker
             opened={isPickingMetric}
@@ -664,9 +664,48 @@ function getMetricId(
   if (metric && typeof metric === "object" && "id" in metric) {
     return (metric as { id?: number | string }).id;
   }
+  if (
+    metric &&
+    typeof metric === "object" &&
+    "metric_id" in metric &&
+    (metric as { metric_id?: number | string }).metric_id != null
+  ) {
+    return (metric as { metric_id?: number | string }).metric_id;
+  }
   return undefined;
 }
 
 function checkIsColumnSelected(columnInfo: Lib.ColumnDisplayInfo) {
   return !!columnInfo.selected;
+}
+
+function createMetricClauseFromItem(
+  item: MiniPickerPickableItem,
+): Lib.AggregationClause | null {
+  if (!isMetricItem(item) || item.id == null) {
+    return null;
+  }
+
+  const name = item.name;
+  const options =
+    name != null
+      ? {
+          name,
+          "display-name": name,
+          "long-display-name": name,
+        }
+      : {};
+
+  return ["metric", options, item.id] as unknown as Lib.AggregationClause;
+}
+
+function isMetricItem(item: MiniPickerPickableItem) {
+  return (
+    item.model === "metric" ||
+    (item.model === "card" &&
+      typeof item === "object" &&
+      item != null &&
+      "type" in item &&
+      (item as { type?: string }).type === "metric")
+  );
 }
