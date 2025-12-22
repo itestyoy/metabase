@@ -154,12 +154,17 @@
                                         [:model    (into [:enum] recent-views/rv-models)]
                                         [:model_id ms/PositiveInt]
                                         [:context  [:enum :selection]]]]
-  (let [model-id model_id
-        model-type (recent-views/rv-model->model model)]
-    (when-not (t2/exists? model-type :id model-id)
-      (throw (ex-info "Model not found" {:model model :model_id model-id})))
-    (api/read-check (t2/select-one model-type :id model-id))
-    (recent-views/update-users-recent-views! *current-user-id* model-type model-id context)))
+  (let [metric? (= (keyword model) :metric)
+        model-id model_id
+        model-type (when-not metric? (recent-views/rv-model->model model))]
+    (if metric?
+      ;; Metric recent logging is not supported yet; skip instead of throwing.
+      api/generic-204-no-content
+      (do
+        (when-not (t2/exists? model-type :id model-id)
+          (throw (ex-info "Model not found" {:model model :model_id model-id})))
+        (api/read-check (t2/select-one model-type :id model-id))
+        (recent-views/update-users-recent-views! *current-user-id* model-type model-id context)))))
 
 ;; TODO (Cam 10/28/25) -- fix this endpoint route to use kebab-case for consistency with the rest of our REST API
 ;;

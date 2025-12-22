@@ -1,4 +1,10 @@
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  type SyntheticEvent,
+  useCallback,
+  useMemo,
+  useState,
+} from "react";
 import { t } from "ttag";
 
 import {
@@ -165,7 +171,7 @@ export function AggregationPicker({
   );
 
   const toggleMetricsViewMode = useCallback(
-    (e: React.MouseEvent) => {
+    (e: SyntheticEvent) => {
       e.stopPropagation();
       e.preventDefault();
       setMetricsViewMode((mode) =>
@@ -196,13 +202,38 @@ export function AggregationPicker({
             )
           : [];
 
+      const metricsSectionName = (
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            width: "100%",
+          }}
+        >
+          <span>{t`Metrics`}</span>
+          <span style={{ marginLeft: "auto" }}>
+            <Switch
+              size="xs"
+              checked={metricsViewMode === "hierarchical"}
+              onChange={toggleMetricsViewMode}
+              onLabel={<Icon name="folder" size={10} />}
+              offLabel={<Icon name="list" size={10} />}
+              styles={{
+                track: { cursor: "pointer" },
+              }}
+            />
+          </span>
+        </span>
+      );
+
       sections.push({
         key: "metrics",
-        name: t`Metrics`,
+        name: metricsSectionName,
         items: metricItems,
         icon: "metric",
         // In hierarchical mode, section will be clickable to open picker
-        type: metricsViewMode === "hierarchical" ? "action" : undefined,
+        type: metricsViewMode === "hierarchical" ? "action" : "header",
       });
     }
 
@@ -427,33 +458,6 @@ export function AggregationPicker({
     );
   }
 
-  const metricsToggle = metrics.length > 0 && (
-    <Flex
-      px="md"
-      py="sm"
-      align="center"
-      justify="space-between"
-      style={{
-        borderBottom: "1px solid var(--mb-color-border)",
-      }}
-    >
-      <Flex align="center" gap="xs">
-        <Icon name="metric" size={16} />
-        <Text fw="bold">{t`Metrics`}</Text>
-      </Flex>
-      <Switch
-        size="xs"
-        checked={metricsViewMode === "hierarchical"}
-        onChange={toggleMetricsViewMode}
-        onLabel={<Icon name="folder" size={10} />}
-        offLabel={<Icon name="list" size={10} />}
-        styles={{
-          track: { cursor: "pointer" },
-        }}
-      />
-    </Flex>
-  );
-
   const aggregationList = (
     <AccordionList<Item, Section>
       data-testid="aggregation-picker"
@@ -476,7 +480,6 @@ export function AggregationPicker({
   return (
     <Flex className={className} align="stretch">
       <Box style={{ flex: 1, minWidth: 0 }}>
-        {metricsToggle}
         {aggregationList}
       </Box>
 
