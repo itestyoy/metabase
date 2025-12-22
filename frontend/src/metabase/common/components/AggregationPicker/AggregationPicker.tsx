@@ -242,8 +242,20 @@ export function AggregationPicker({
               size="xs"
               checked={metricsViewMode === "hierarchical"}
               onChange={toggleMetricsViewMode}
-              onLabel={<Icon name="folder" size={10} />}
-              offLabel={<Icon name="list" size={10} />}
+              onLabel={
+                <Icon
+                  name="folder"
+                  size={10}
+                  color="var(--mb-color-text-white)"
+                />
+              }
+              offLabel={
+                <Icon
+                  name="list"
+                  size={10}
+                  color="var(--mb-color-text-white)"
+                />
+              }
               styles={metricSwitchStyles}
             />
           </span>
