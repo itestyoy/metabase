@@ -674,3 +674,5 @@ export type FieldItem = {
 };
 
 export type DependentItem = DatabaseItem | SchemaItem | TableItem | FieldItem;
+
+export type ValidationError = { message: string };
