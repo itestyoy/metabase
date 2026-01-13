@@ -235,7 +235,7 @@ function sortAndFilterSections<
   TItem extends Item,
   TSection extends Section<TItem>,
 >(sections: TSection[], scores: ItemScores<TItem>) {
-  return sections
+  const mappedSections = sections
     .map((section, sectionIndex) => {
       const sectionScores = (section.items ?? []).map(scores.score);
       const sectionScore = Math.min(1, ...sectionScores);
@@ -252,19 +252,25 @@ function sortAndFilterSections<
     .filter(
       ({ sectionScore, section }) =>
         section.type || sectionScore < scores.threshold,
-    )
-    .sort((a, b) => {
-      if (a.section.alwaysSortLast && b.section.alwaysSortLast) {
-        return 0;
-      }
-      if (a.section.alwaysSortLast) {
-        return 1;
-      }
-      if (b.section.alwaysSortLast) {
-        return -1;
-      }
-      return a.sectionScore - b.sectionScore;
-    });
+    );
+
+  // Preserve the original order when there's no active search
+  if (scores.threshold === Infinity) {
+    return mappedSections;
+  }
+
+  return mappedSections.sort((a, b) => {
+    if (a.section.alwaysSortLast && b.section.alwaysSortLast) {
+      return 0;
+    }
+    if (a.section.alwaysSortLast) {
+      return 1;
+    }
+    if (b.section.alwaysSortLast) {
+      return -1;
+    }
+    return a.sectionScore - b.sectionScore;
+  });
 }
 
 function sortAndFilterItems<TItem extends Item>(

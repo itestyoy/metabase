@@ -1,4 +1,10 @@
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  type SyntheticEvent,
+  useCallback,
+  useMemo,
+  useState,
+} from "react";
 import { t } from "ttag";
 
 import {
@@ -25,9 +31,12 @@ import {
   getClauseDefinition,
 } from "metabase/querying/expressions";
 import { getMetadata } from "metabase/selectors/metadata";
-import { Box, Flex, Icon, Text } from "metabase/ui";
+import { Box, Flex, Icon, Switch, Text } from "metabase/ui";
 import * as Lib from "metabase-lib";
+import { getQuestionVirtualTableId } from "metabase-lib/v1/metadata/utils/saved-questions";
 
+import { MiniPicker } from "../Pickers/MiniPicker";
+import type { MiniPickerPickableItem } from "../Pickers/MiniPicker/types";
 import { QueryColumnPicker } from "../QueryColumnPicker";
 
 import {
@@ -71,6 +80,8 @@ type ExpressionClauseListItem = {
 type Item = OperatorListItem | MetricListItem | ExpressionClauseListItem;
 type Section = BaseSection<Item>;
 
+type MetricsViewMode = "grouped" | "hierarchical";
+
 export function AggregationPicker({
   className,
   query,
@@ -103,8 +114,40 @@ export function AggregationPicker({
       readOnly,
     }),
   );
+  const [
+    isPickingMetric,
+    { turnOn: openMetricPicker, turnOff: closeMetricPicker },
+  ] = useToggle(false);
   const [initialExpressionClause, setInitialExpressionClause] =
     useState<DefinedClauseName | null>(null);
+  const [metricsViewMode, setMetricsViewMode] =
+    useState<MetricsViewMode>("grouped");
+
+  const metricSwitchStyles = useMemo(
+    () => {
+      const isHierarchical = metricsViewMode === "hierarchical";
+      const trackColor = isHierarchical
+        ? "var(--mb-color-summarize)"
+        : "var(--mb-color-brand)";
+      return {
+        track: {
+          cursor: "pointer",
+          backgroundColor: trackColor,
+          border: `1px solid ${trackColor}`,
+          transition: "background-color 120ms ease, border-color 120ms ease",
+        },
+        thumb: {
+          backgroundColor: "var(--mb-color-text-white)",
+          border: "1px solid transparent",
+          color: "var(--mb-color-text-white)",
+        },
+        trackLabel: {
+          color: "var(--mb-color-text-white)",
+        },
+      };
+    },
+    [metricsViewMode],
+  );
 
   // For really simple inline expressions like Average([Price]),
   // MLv2 can figure out that "Average" operator is used.
@@ -117,6 +160,22 @@ export function AggregationPicker({
     () => (operator ? Lib.displayInfo(query, stageIndex, operator) : null),
     [query, stageIndex, operator],
   );
+
+  const metrics = useMemo(
+    () => Lib.availableMetrics(query, stageIndex),
+    [query, stageIndex],
+  );
+
+  const metricsById = useMemo(() => {
+    const metricMap = new Map<string, Lib.MetricMetadata>();
+    metrics.forEach((metric) => {
+      const metricId = getMetricId(metric);
+      if (metricId != null) {
+        metricMap.set(String(metricId), metric);
+      }
+    });
+    return metricMap;
+  }, [metrics]);
 
   const onSelect = useCallback(
     function (aggregation: Lib.Aggregable) {
@@ -137,16 +196,83 @@ export function AggregationPicker({
     [query, stageIndex, clause, clauseIndex, onQueryChange],
   );
 
+  const toggleMetricsViewMode = useCallback(
+    (e: SyntheticEvent) => {
+      e.stopPropagation();
+      setMetricsViewMode((mode) =>
+        mode === "grouped" ? "hierarchical" : "grouped",
+      );
+      if (metricsViewMode === "hierarchical") {
+        // Close picker when switching from hierarchical to grouped
+        closeMetricPicker();
+      }
+    },
+    [metricsViewMode, closeMetricPicker],
+  );
+
   const sections = useMemo(() => {
     const sections: Section[] = [];
-
-    const metrics = Lib.availableMetrics(query, stageIndex);
     const databaseId = Lib.databaseID(query);
     const database = metadata.database(databaseId);
     const supportsCustomExpressions = database?.hasFeature(
       "expression-aggregations",
     );
 
+    // Show metrics first - simple section name without toggle
+    if (metrics.length > 0) {
+      const metricItems =
+        metricsViewMode === "grouped"
+          ? metrics.map((metric) =>
+              getMetricListItem(query, stageIndex, metric, clauseIndex),
+            )
+          : [];
+
+      const metricsSectionName = (
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "7.8rem",
+            width: "100%",
+          }}
+        >
+          <span>{t`Metrics`}</span>
+          <span style={{ marginLeft: "auto" }}>
+            <Switch
+              size="xs"
+              checked={metricsViewMode === "hierarchical"}
+              onChange={toggleMetricsViewMode}
+              onLabel={
+                <Icon
+                  name="folder"
+                  size={10}
+                  color="var(--mb-color-text-white)"
+                />
+              }
+              offLabel={
+                <Icon
+                  name="list"
+                  size={10}
+                  color="var(--mb-color-text-white)"
+                />
+              }
+              styles={metricSwitchStyles}
+            />
+          </span>
+        </span>
+      );
+
+      sections.push({
+        key: "metrics",
+        name: metricsSectionName,
+        items: metricItems,
+        icon: "metric",
+        // In hierarchical mode, section will be clickable to open picker
+        type: metricsViewMode === "hierarchical" ? "action" : "header",
+      });
+    }
+
+    // Basic functions after metrics
     if (operators.length > 0) {
       const operatorItems = operators.map((operator) =>
         getOperatorListItem(query, stageIndex, operator),
@@ -157,17 +283,6 @@ export function AggregationPicker({
         name: t`Basic functions`,
         items: operatorItems,
         icon: "table2",
-      });
-    }
-
-    if (metrics.length > 0) {
-      sections.push({
-        key: "metrics",
-        name: t`Metrics`,
-        items: metrics.map((metric) =>
-          getMetricListItem(query, stageIndex, metric, clauseIndex),
-        ),
-        icon: "metric",
       });
     }
 
@@ -200,6 +315,9 @@ export function AggregationPicker({
     operators,
     allowCustomExpressions,
     isSearching,
+    metrics,
+    metricsViewMode,
+    toggleMetricsViewMode,
   ]);
 
   const availableColumns = useMemo(
@@ -292,9 +410,11 @@ export function AggregationPicker({
     (section: Section) => {
       if (section.key === "custom-expression") {
         openExpressionEditor();
+      } else if (section.key === "metrics" && metricsViewMode === "hierarchical") {
+        openMetricPicker();
       }
     },
-    [openExpressionEditor],
+    [openExpressionEditor, openMetricPicker, metricsViewMode],
   );
 
   const handleClauseChange = useCallback(
@@ -304,6 +424,22 @@ export function AggregationPicker({
       onClose?.();
     },
     [onSelect, onClose],
+  );
+
+  const handleMetricPickerSelect = useCallback(
+    (item: MiniPickerPickableItem) => {
+      if (isMetricItem(item)) {
+        const metric = metricsById.get(String(item.id));
+        const metricAggregable = metric ?? createMetricClauseFromItem(item);
+
+        if (metricAggregable) {
+          onSelect(metricAggregable);
+          closeMetricPicker();
+          onClose?.();
+        }
+      }
+    },
+    [metricsById, onSelect, closeMetricPicker, onClose],
   );
 
   if (isEditingExpression) {
@@ -357,7 +493,7 @@ export function AggregationPicker({
     );
   }
 
-  return (
+  const aggregationList = (
     <AccordionList<Item, Section>
       data-testid="aggregation-picker"
       style={{ color: "var(--mb-color-summarize)" }}
@@ -374,6 +510,37 @@ export function AggregationPicker({
       itemTestId="dimension-list-item"
       globalSearch
     />
+  );
+
+  return (
+    <Flex className={className} align="stretch">
+      <Box style={{ flex: 1, minWidth: 0 }}>
+        {aggregationList}
+      </Box>
+
+      {isPickingMetric && (
+        <Box data-testid="metric-picker">
+          <MiniPicker
+            opened={isPickingMetric}
+            onClose={closeMetricPicker}
+            models={["metric"]}
+            onChange={handleMetricPickerSelect}
+            shouldHide={(item) => {
+              // Hide databases and schemas - metrics are only in collections
+              if (
+                typeof item === "object" &&
+                item != null &&
+                "model" in item &&
+                (item.model === "database" || item.model === "schema")
+              ) {
+                return true;
+              }
+              return false;
+            }}
+          />
+        </Box>
+      )}
+    </Flex>
   );
 }
 
@@ -519,6 +686,54 @@ function getExpressionClauseListItem(
   };
 }
 
+function getMetricId(
+  metric: Lib.MetricMetadata,
+): number | string | undefined {
+  if (metric && typeof metric === "object" && "id" in metric) {
+    return (metric as { id?: number | string }).id;
+  }
+  if (
+    metric &&
+    typeof metric === "object" &&
+    "metric_id" in metric &&
+    (metric as { metric_id?: number | string }).metric_id != null
+  ) {
+    return (metric as { metric_id?: number | string }).metric_id;
+  }
+  return undefined;
+}
+
 function checkIsColumnSelected(columnInfo: Lib.ColumnDisplayInfo) {
   return !!columnInfo.selected;
+}
+
+function createMetricClauseFromItem(
+  item: MiniPickerPickableItem,
+): Lib.AggregationClause | null {
+  if (!isMetricItem(item) || item.id == null) {
+    return null;
+  }
+
+  const name = item.name;
+  const options =
+    name != null
+      ? {
+          name,
+          "display-name": name,
+          "long-display-name": name,
+        }
+      : {};
+
+  return ["metric", options, item.id] as unknown as Lib.AggregationClause;
+}
+
+function isMetricItem(item: MiniPickerPickableItem) {
+  return (
+    item.model === "metric" ||
+    (item.model === "card" &&
+      typeof item === "object" &&
+      item != null &&
+      "type" in item &&
+      (item as { type?: string }).type === "metric")
+  );
 }
