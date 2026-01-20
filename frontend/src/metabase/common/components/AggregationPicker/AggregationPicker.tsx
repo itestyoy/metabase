@@ -31,7 +31,7 @@ import {
   getClauseDefinition,
 } from "metabase/querying/expressions";
 import { getMetadata } from "metabase/selectors/metadata";
-import { Box, Flex, Icon, Switch, Text } from "metabase/ui";
+import { Box, Flex, Icon, Text, Tooltip } from "metabase/ui";
 import * as Lib from "metabase-lib";
 import { getQuestionVirtualTableId } from "metabase-lib/v1/metadata/utils/saved-questions";
 
@@ -123,31 +123,6 @@ export function AggregationPicker({
   const [metricsViewMode, setMetricsViewMode] =
     useState<MetricsViewMode>("grouped");
 
-  const metricSwitchStyles = useMemo(
-    () => {
-      const isHierarchical = metricsViewMode === "hierarchical";
-      const trackColor = isHierarchical
-        ? "var(--mb-color-summarize)"
-        : "var(--mb-color-brand)";
-      return {
-        track: {
-          cursor: "pointer",
-          backgroundColor: trackColor,
-          border: `1px solid ${trackColor}`,
-          transition: "background-color 120ms ease, border-color 120ms ease",
-        },
-        thumb: {
-          backgroundColor: "var(--mb-color-text-white)",
-          border: "1px solid transparent",
-          color: "var(--mb-color-text-white)",
-        },
-        trackLabel: {
-          color: "var(--mb-color-text-white)",
-        },
-      };
-    },
-    [metricsViewMode],
-  );
 
   // For really simple inline expressions like Average([Price]),
   // MLv2 can figure out that "Average" operator is used.
@@ -227,6 +202,9 @@ export function AggregationPicker({
             )
           : [];
 
+      const isGroupedMode = metricsViewMode === "grouped";
+      const isHierarchicalMode = metricsViewMode === "hierarchical";
+
       const metricsSectionName = (
         <span
           style={{
@@ -237,27 +215,54 @@ export function AggregationPicker({
           }}
         >
           <span>{t`Metrics`}</span>
-          <span style={{ marginLeft: "auto" }}>
-            <Switch
-              size="xs"
-              checked={metricsViewMode === "hierarchical"}
-              onChange={toggleMetricsViewMode}
-              onLabel={
-                <Icon
-                  name="folder"
-                  size={10}
-                  color="var(--mb-color-text-white)"
-                />
-              }
-              offLabel={
+          <span
+            style={{
+              marginLeft: "auto",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+            }}
+          >
+            <Tooltip label={t`Show as list`} position="top" withArrow>
+              <span
+                style={{
+                  cursor: isGroupedMode ? "default" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+                onClick={isGroupedMode ? undefined : toggleMetricsViewMode}
+              >
                 <Icon
                   name="list"
-                  size={10}
-                  color="var(--mb-color-text-white)"
+                  size={14}
+                  color={
+                    isGroupedMode
+                      ? "var(--mb-color-brand)"
+                      : "var(--mb-color-text-light)"
+                  }
                 />
-              }
-              styles={metricSwitchStyles}
-            />
+              </span>
+            </Tooltip>
+            <Tooltip label={t`Show in folders`} position="top" withArrow>
+              <span
+                style={{
+                  cursor: isHierarchicalMode ? "default" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+                onClick={isHierarchicalMode ? undefined : toggleMetricsViewMode}
+              >
+                <Icon
+                  name="folder"
+                  size={14}
+                  color={
+                    isHierarchicalMode
+                      ? "var(--mb-color-summarize)"
+                      : "var(--mb-color-text-light)"
+                  }
+                />
+              </span>
+            </Tooltip>
           </span>
         </span>
       );
