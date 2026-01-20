@@ -222,46 +222,37 @@ export function AggregationPicker({
               alignItems: "center",
               gap: "0.5rem",
             }}
+            onMouseEnter={(e) => e.stopPropagation()}
+            onMouseLeave={(e) => e.stopPropagation()}
+            onMouseOver={(e) => e.stopPropagation()}
           >
             <Tooltip label={t`Show as list`} position="top" withArrow>
-              <span
+              <Box
+                component="span"
                 style={{
                   cursor: isGroupedMode ? "default" : "pointer",
                   display: "inline-flex",
                   alignItems: "center",
                 }}
+                c={isGroupedMode ? "brand" : "text-light"}
                 onClick={isGroupedMode ? undefined : toggleMetricsViewMode}
               >
-                <Icon
-                  name="list"
-                  size={14}
-                  color={
-                    isGroupedMode
-                      ? "var(--mb-color-brand)"
-                      : "var(--mb-color-text-light)"
-                  }
-                />
-              </span>
+                <Icon name="list" size={14} />
+              </Box>
             </Tooltip>
             <Tooltip label={t`Show in folders`} position="top" withArrow>
-              <span
+              <Box
+                component="span"
                 style={{
                   cursor: isHierarchicalMode ? "default" : "pointer",
                   display: "inline-flex",
                   alignItems: "center",
                 }}
+                c={isHierarchicalMode ? "summarize" : "text-light"}
                 onClick={isHierarchicalMode ? undefined : toggleMetricsViewMode}
               >
-                <Icon
-                  name="folder"
-                  size={14}
-                  color={
-                    isHierarchicalMode
-                      ? "var(--mb-color-summarize)"
-                      : "var(--mb-color-text-light)"
-                  }
-                />
-              </span>
+                <Icon name="folder" size={14} />
+              </Box>
             </Tooltip>
           </span>
         </span>
