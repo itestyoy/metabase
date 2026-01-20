@@ -365,7 +365,8 @@
 
   collections-rest
   {:team "UX West"
-   :api  #{metabase.collections-rest.api}
+   :api  #{metabase.collections-rest.api
+           metabase.collections-rest.init}
    :uses #{api
            app-db
            collections
@@ -380,6 +381,7 @@
            queries
            request
            revisions
+           settings
            upload
            util}}
 
@@ -1007,6 +1009,7 @@
            collections
            config
            driver
+           embedding
            events
            lib
            models
@@ -1632,7 +1635,6 @@
            upload
            util
            warehouse-schema
-           warehouses-rest
            xrays}}
 
   warehouses

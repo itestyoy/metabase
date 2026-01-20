@@ -149,6 +149,8 @@
                                          remote-sync-branch "main"]
         (t2/insert! :model/RemoteSyncObject {:model_type "Card"
                                              :model_id 1
+                                             :model_name "Test Card"
+                                             :model_collection_id 1
                                              :status "updated"
                                              :status_changed_at (java.time.OffsetDateTime/now)})
         (with-redefs [source/source-from-settings (constantly mock-main)]
@@ -382,6 +384,8 @@
                                        :name "Test Card"}
                      :model/RemoteSyncObject _ {:model_type "Card"
                                                 :model_id (:id card)
+                                                :model_name "Test Card"
+                                                :model_collection_id (:id remote-col)
                                                 :status "pending"
                                                 :status_changed_at (java.time.OffsetDateTime/now)}]
         (is (= {:is_dirty true}
@@ -421,16 +425,22 @@
                                         :name "Card 2"}
                      :model/Dashboard dashboard {:collection_id (:id remote-col1)
                                                  :name "Dashboard 1"}
-                     :model/RemoteSyncObject _ {:model_type "Card"
+                     :model/RemoteSyncObject _ {:model_type "card"
                                                 :model_id (:id card1)
+                                                :model_name "Card 1"
+                                                :model_collection_id (:id remote-col1)
                                                 :status "pending"
                                                 :status_changed_at (java.time.OffsetDateTime/now)}
-                     :model/RemoteSyncObject _ {:model_type "Card"
+                     :model/RemoteSyncObject _ {:model_type "card"
                                                 :model_id (:id card2)
+                                                :model_name "Card 2"
+                                                :model_collection_id (:id remote-col2)
                                                 :status "pending"
                                                 :status_changed_at (java.time.OffsetDateTime/now)}
-                     :model/RemoteSyncObject _ {:model_type "Dashboard"
+                     :model/RemoteSyncObject _ {:model_type "dashboard"
                                                 :model_id (:id dashboard)
+                                                :model_name "Dashboard 1"
+                                                :model_collection_id (:id remote-col1)
                                                 :status "pending"
                                                 :status_changed_at (java.time.OffsetDateTime/now)}]
         (let [response (mt/user-http-request :crowberto :get 200 "ee/remote-sync/dirty")
@@ -453,7 +463,9 @@
                                                    :location (str "/" (:id remote-col) "/")}
                      :model/Card nested-card {:collection_id (:id nested-col)
                                               :name "Nested Card"}
-                     :model/RemoteSyncObject _ {:model_type "Card"
+                     :model/RemoteSyncObject _ {:model_type "card"
+                                                :model_name "Nested Card"
+                                                :model_collection_id (:id nested-col)
                                                 :model_id (:id nested-card)
                                                 :status "pending"
                                                 :status_changed_at (java.time.OffsetDateTime/now)}]
@@ -473,6 +485,8 @@
                                        :name "Test Card"}
                      :model/RemoteSyncObject _ {:model_type "Card"
                                                 :model_id (:id card)
+                                                :model_name "Test Card"
+                                                :model_collection_id (:id remote-col)
                                                 :status "pending"
                                                 :status_changed_at (java.time.OffsetDateTime/now)}]
         (let [response (mt/user-http-request :crowberto :get 200 "ee/remote-sync/dirty")
@@ -529,7 +543,7 @@
       (is (= "Invalid Repository URL format" (:error response))))))
 
 (deftest settings-cannot-change-with-dirty-data
-  (testing "PUT /api/ee/remote-sync/settings doesn't allow loosing dirty data"
+  (testing "PUT /api/ee/remote-sync/settings doesn't allow losing dirty data"
     (with-redefs [remote-sync.object/dirty-global? (constantly true)
                   settings/check-and-update-remote-settings! #(throw (Exception. "Should not be called"))]
       (mt/with-temporary-setting-values [remote-sync-url "https://github.com/test/repo.git"
@@ -751,6 +765,8 @@
                                        remote-sync-type :read-write]
       (mt/with-temp [:model/RemoteSyncObject remote-sync {:model_type "Card"
                                                           :model_id 1
+                                                          :model_name "Test Card"
+                                                          :model_collection_id 1
                                                           :status "updated"
                                                           :status_changed_at (java.time.OffsetDateTime/now)}]
         (with-redefs [source/source-from-settings (constantly mock-source)
@@ -763,3 +779,55 @@
           (is (= #{["main" "main-ref"] ["develop" "develop-ref"] ["feature-branch" "feature-branch-ref"]}
                  (set (source.p/branches mock-source))))
           (is (= 1 @export-calls)))))))
+
+;;; ------------------------------------------- Token Preservation Tests -------------------------------------------
+
+(deftest settings-preserves-token-when-switching-to-read-only-test
+  (testing "PUT /api/ee/remote-sync/settings preserves token when switching from read-write to read-only"
+    (let [mock-source (test-helpers/create-mock-source)]
+      (with-redefs [settings/check-git-settings! (constantly nil)
+                    source/source-from-settings (constantly mock-source)]
+        (mt/with-temporary-setting-values [remote-sync-url "https://github.com/test/repo.git"
+                                           remote-sync-token "secret-token-value"
+                                           remote-sync-branch "main"
+                                           remote-sync-type :read-write]
+          (let [{:keys [task_id] :as resp} (mt/user-http-request :crowberto :put 200 "ee/remote-sync/settings"
+                                                                 {:remote-sync-type :read-only})]
+            (wait-for-task-completion task_id)
+            (is (= {:success true :task_id task_id} resp))
+            (is (= :read-only (settings/remote-sync-type)))
+            (is (= "secret-token-value" (settings/remote-sync-token))
+                "Token should be preserved when not included in request")))))))
+
+(deftest settings-preserves-token-when-changing-branch-test
+  (testing "PUT /api/ee/remote-sync/settings preserves token when changing branch"
+    (let [mock-source (test-helpers/create-mock-source)]
+      (with-redefs [settings/check-git-settings! (constantly nil)
+                    source/source-from-settings (constantly mock-source)]
+        (mt/with-temporary-setting-values [remote-sync-url "https://github.com/test/repo.git"
+                                           remote-sync-token "secret-token-value"
+                                           remote-sync-branch "main"
+                                           remote-sync-type :read-write]
+          (let [{:as resp :keys [task_id]} (mt/user-http-request :crowberto :put 200 "ee/remote-sync/settings"
+                                                                 {:remote-sync-branch "develop"})]
+            (wait-for-task-completion task_id)
+            (is (=? {:success true} resp))
+            (is (= "develop" (settings/remote-sync-branch)))
+            (is (= "secret-token-value" (settings/remote-sync-token))
+                "Token should be preserved when not included in request")))))))
+
+(deftest settings-clears-token-when-explicitly-nil-test
+  (testing "PUT /api/ee/remote-sync/settings clears token when explicitly set to nil"
+    (let [mock-source (test-helpers/create-mock-source)]
+      (with-redefs [settings/check-git-settings! (constantly nil)
+                    source/source-from-settings (constantly mock-source)]
+        (mt/with-temporary-setting-values [remote-sync-url "https://github.com/test/repo.git"
+                                           remote-sync-token "secret-token-value"
+                                           remote-sync-branch "main"
+                                           remote-sync-type :read-write]
+          (let [{:as resp :keys [task_id]} (mt/user-http-request :crowberto :put 200 "ee/remote-sync/settings"
+                                                                 {:remote-sync-token nil})]
+            (wait-for-task-completion task_id)
+            (is (=? {:success true} resp))
+            (is (nil? (settings/remote-sync-token))
+                "Token should be cleared when explicitly set to nil")))))))

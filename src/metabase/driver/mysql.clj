@@ -95,6 +95,8 @@
                               :metadata/table-existence-check         true
                               :transforms/python                      true
                               :transforms/table                       true
+                              ;; currently disabled as :describe-indexes is not supported
+                              :transforms/index-ddl                   false
                               :describe-default-expr                  true
                               :describe-is-nullable                   true
                               :describe-is-generated                  true}]
@@ -103,7 +105,8 @@
 ;; This is a bit of a lie since the JSON type was introduced for MySQL since 5.7.8.
 ;; And MariaDB doesn't have the JSON type at all, though `JSON` was introduced as an alias for LONGTEXT in 10.2.7.
 ;; But since JSON unfolding will only apply columns with JSON types, this won't cause any problems during sync.
-(defmethod driver/database-supports? [:mysql :nested-field-columns] [_driver _feat db]
+(defmethod driver/database-supports? [:mysql :nested-field-columns]
+  [_driver _feat db]
   (driver.common/json-unfolding-default db))
 
 (doseq [feature [:actions :actions/custom :actions/data-editing]]
@@ -149,6 +152,11 @@
               (catch Exception e
                 (log/warn e "Failed to check table writable")
                 false)))))
+
+(defmethod driver/database-supports? [:mysql :regex/lookaheads-and-lookbehinds]
+  [driver _feat db]
+  (and (= driver :mysql)
+       (not (mariadb? db))))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                             metabase.driver impls                                              |
@@ -1152,6 +1160,10 @@
 (defmethod sql-jdbc/impl-query-canceled? :mysql [_ ^SQLException e]
   ;; ok to hardcode driver name here because this function only supports app DB types
   (driver-api/query-canceled-exception? :mysql e))
+
+(defmethod sql-jdbc/drop-index-sql :mysql [_ _schema table-name index-name]
+  (let [{quote-identifier :quote} (sql/get-dialect :mysql)]
+    (format "DROP INDEX %s ON %s" (quote-identifier (name index-name)) (quote-identifier (name table-name)))))
 
 ;;; ------------------------------------------------- User Impersonation --------------------------------------------------
 

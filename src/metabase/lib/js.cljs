@@ -56,6 +56,7 @@
    :exclude
    [filter])
   (:require
+   [clojure.set :as set]
    [clojure.string :as str]
    [goog.object :as gobject]
    [medley.core :as m]
@@ -74,6 +75,7 @@
    [metabase.lib.metadata.calculation :as lib.metadata.calculation]
    [metabase.lib.metadata.column :as lib.metadata.column]
    [metabase.lib.metadata.protocols :as lib.metadata.protocols]
+   [metabase.lib.native :as lib.native]
    [metabase.lib.normalize :as lib.normalize]
    [metabase.lib.order-by :as lib.order-by]
    [metabase.lib.query :as lib.query]
@@ -928,15 +930,23 @@
 
   The columns have extra information attached, giving the filter operators that can be used with that column.
 
+  `options` is an optional JS object that can include:
+    - `includeSensitiveFields`: if true, includes fields with visibility_type :sensitive (default false)
+
   Cached on the query.
 
   > **Code health:** Healthy"
-  [a-query stage-number]
-  ;; Attaches the cached columns directly to this query, in case it gets called again.
-  (lib.cache/side-channel-cache
-   (keyword "filterable-columns" (str "stage-" stage-number)) a-query
-   (fn [_]
-     (to-array (lib.core/filterable-columns a-query stage-number)))))
+  ([a-query stage-number]
+   (filterable-columns a-query stage-number nil))
+  ([a-query stage-number options]
+   ;; Attaches the cached columns directly to this query, in case it gets called again.
+   (let [opts (-> (js-obj->cljs-map options)
+                  (set/rename-keys {:include-sensitive-fields :include-sensitive-fields?}))
+         include-sensitive? (:include-sensitive-fields? opts)]
+     (lib.cache/side-channel-cache
+      (keyword "filterable-columns" (str "stage-" stage-number (when include-sensitive? "-include-sensitive"))) a-query
+      (fn [_]
+        (to-array (lib.core/filterable-columns a-query stage-number opts)))))))
 
 (defn ^:export filterable-column-operators
   "Returns the filter operators which can be used in a filter for `filterable-column`.
@@ -2706,3 +2716,11 @@
     (or (.get cache js-query)
         (u/prog1 (from-js-query* mp js-query)
           (.set cache js-query <>)))))
+
+(defn ^:export validate-template-tags
+  "Validates if the template tags in `query` are all valid and well-formed."
+  [js-query]
+  (-> js-query
+      js->clj
+      lib.native/validate-template-tags
+      clj->js))

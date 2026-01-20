@@ -80,7 +80,7 @@ describe("Tenants - management OSS", { tags: "@OSS" }, () => {
   });
 
   it("should not show the popup to enable multi tenancy", () => {
-    cy.visit("/admin/tenants");
+    cy.visit("/admin/people/tenants");
     cy.location("pathname").should("eq", "/admin/people");
 
     cy.findByRole("link", { name: /gear/ }).should("not.exist");
@@ -99,7 +99,7 @@ describe("Tenants - management", () => {
   it("should disable the feature if the token feature is not enabled", () => {
     H.deleteToken();
 
-    cy.visit("/admin/tenants");
+    cy.visit("/admin/people/tenants");
     cy.location("pathname").should("eq", "/admin/people");
 
     cy.findByRole("link", { name: /gear/ }).should("not.exist");
@@ -107,10 +107,10 @@ describe("Tenants - management", () => {
 
   it("should allow users to enable multi tenancy, and create / manage tenants and tenant users", () => {
     // We expect this to redirect to /admin/people
-    cy.visit("/admin/tenants");
+    cy.visit("/admin/people/tenants");
 
     cy.location("pathname").should("eq", "/admin/people");
-    cy.visit("/admin/tenants");
+    cy.visit("/admin/people/tenants");
 
     cy.findByRole("navigation", { name: "people-nav" })
       .findByRole("link", { name: /Groups/ })
@@ -322,7 +322,7 @@ describe("Tenants - management", () => {
       .click();
 
     cy.findByTestId("admin-content-table").within(() => {
-      cy.findByRole("link", { name: /All Internal Users/ }).should(
+      cy.findByRole("link", { name: /All internal users/ }).should(
         "be.visible",
       );
       cy.findByRole("link", { name: /All tenant users/ }).should("not.exist");
@@ -333,7 +333,7 @@ describe("Tenants - management", () => {
       .click();
 
     cy.findByTestId("admin-content-table").within(() => {
-      cy.findByRole("link", { name: /All Internal Users/ }).should("not.exist");
+      cy.findByRole("link", { name: /All internal users/ }).should("not.exist");
       cy.findByRole("row", {
         name: `group-${ALL_EXTERNAL_USERS_GROUP_ID}-row`,
       }).within(() => {
@@ -416,7 +416,7 @@ describe("Tenants - management", () => {
     hasGlobeIcon(EXTERNAL_USER_GROUP_NAME);
     hasGlobeIcon(TENANT_GROUP_NAME);
     lacksGlobeIcon("Administrators");
-    lacksGlobeIcon("All Internal Users");
+    lacksGlobeIcon("All internal users");
   });
 
   it("should show 'All tenant users' in permission warning tooltip for tenant groups (UXW-2474)", () => {
@@ -453,12 +453,123 @@ describe("Tenants - management", () => {
         .findByLabelText("warning icon")
         .realHover();
 
-      // Tooltip must reference "All tenant users" not "All Internal Users"
+      // Tooltip must reference "All tenant users" not "All internal users"
       H.tooltip().should(
         "contain",
         'The "All tenant users" group has a higher level of access',
       );
-      H.tooltip().should("not.contain", "All Internal Users");
+      H.tooltip().should("not.contain", "All internal users");
+    });
+  });
+
+  it("should show 'All tenant users' in permission warning tooltip and modal for tenant groups on data permissions (UXW-2624)", () => {
+    cy.request("PUT", "/api/setting", { "use-tenants": true });
+
+    cy.request("POST", "/api/permissions/group", {
+      name: "Test Tenant Group",
+      is_tenant_group: true,
+    });
+
+    cy.visit("/admin/permissions/data/database/1");
+
+    cy.log("all tenant users should have 'Can view' access");
+    cy.findAllByRole("row")
+      .contains("tr", "All tenant users")
+      .should("contain", "Can view");
+
+    cy.log(
+      "tenant group should have 'Blocked' access (new group default) with warning icon",
+    );
+    cy.findAllByRole("row")
+      .contains("tr", "Test Tenant Group")
+      .should("contain", "Blocked")
+      .findAllByLabelText("warning icon")
+      .first()
+      .realHover();
+
+    cy.log("tooltip should reference 'All tenant users'");
+    H.tooltip().should(
+      "contain",
+      'The "All tenant users" group has a higher level of access',
+    );
+
+    cy.log("click to change to 'Can view' and back to trigger modal");
+    cy.findAllByRole("row")
+      .contains("tr", "Test Tenant Group")
+      .findByText("Blocked")
+      .click();
+
+    H.popover().findByText("Can view").click();
+
+    cy.findAllByRole("row")
+      .contains("tr", "Test Tenant Group")
+      .findByText("Can view")
+      .click();
+
+    H.popover().findByText("Blocked").click();
+
+    H.modal().within(() => {
+      cy.log("title should mention tenant users group");
+      cy.findByText(/Revoke access even though "All tenant users"/).should(
+        "be.visible",
+      );
+
+      cy.log("description should mention tenant users group");
+      cy.findByText(
+        /The "All tenant users" group has a higher level of access/,
+      ).should("be.visible");
+
+      cy.log("should not mention internal users");
+      cy.contains("internal users").should("not.exist");
+    });
+  });
+
+  it("should show 'All internal users' in permission warning modal for internal groups on tenant collections (EMB-1143)", () => {
+    cy.request("PUT", "/api/setting", { "use-tenants": true });
+
+    cy.request("POST", "/api/permissions/group", {
+      name: "Test Internal Group",
+      is_tenant_group: false,
+    });
+
+    cy.visit("/admin/permissions/tenant-collections/root");
+
+    cy.log("all internal users should have 'View' access");
+    cy.findAllByRole("row")
+      .contains("tr", "All internal users")
+      .findByText("View")
+      .should("be.visible");
+
+    cy.log("internal group should have no access");
+    cy.findAllByRole("row")
+      .contains("tr", "Test Internal Group")
+      .findByText("No access")
+      .click();
+
+    cy.log("change internal group to view-only");
+    H.popover().findByText("View").click();
+
+    cy.findAllByRole("row")
+      .contains("tr", "Test Internal Group")
+      .findByText("View")
+      .click();
+
+    cy.log("change internal group back to no access");
+    H.popover().findByText("No access").click();
+
+    H.modal().within(() => {
+      cy.log("title should mention internal users group");
+      cy.findByText(/Revoke access even though "All internal users"/).should(
+        "be.visible",
+      );
+
+      cy.log("description should mention internal users group");
+      cy.findByText(
+        /The "All internal users" group has a higher level of access/,
+      ).should("be.visible");
+
+      cy.log("should not mention tenant users");
+      cy.contains("Tenant users").should("not.exist");
     });
   });
 
@@ -470,7 +581,7 @@ describe("Tenants - management", () => {
 
     createTenants();
 
-    cy.visit("admin/tenants/people");
+    cy.visit("admin/people/tenants/people");
 
     cy.findByRole("link", { name: /Tenant users/ }).click();
     cy.button("Create tenant user").click();
@@ -558,7 +669,7 @@ describe("Tenants - management", () => {
 
     cy.log("check that tenant attributes propagate to users");
 
-    cy.visit("/admin/tenants/people");
+    cy.visit("/admin/people/tenants/people");
     cy.findByTestId("nav-item-external-users").findByText("Tenant users", 1000);
     cy.findByTestId("admin-people-list-table").within(() => {
       cy.findByText(`${GIZMO_USER.first_name} ${GIZMO_USER.last_name}`).should(
@@ -650,7 +761,7 @@ describe("tenant users", () => {
   });
 
   it("should disable users on a tenant when disabling the tenant", () => {
-    cy.visit("/admin/tenants/people");
+    cy.visit("/admin/people/tenants/people");
 
     cy.findAllByRole("row")
       .contains("tr", "donthickey user")
@@ -934,7 +1045,7 @@ const createTenants = () => {
 
 const createTenantGroupFromUI = (groupName: string) => {
   cy.intercept("POST", "/api/permissions/group").as("createGroup");
-  cy.visit("/admin/tenants/groups");
+  cy.visit("/admin/people/tenants/groups");
 
   // FIXME shouldn't be necessary - caused by slow route guard
   cy.findByTestId("admin-layout-sidebar")
