@@ -232,6 +232,9 @@ export function AggregationPicker({
                   cursor: isGroupedMode ? "default" : "pointer",
                   display: "inline-flex",
                   alignItems: "center",
+                  color: isGroupedMode
+                    ? "var(--mb-color-brand)"
+                    : "var(--mb-color-text-light)",
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -243,11 +246,11 @@ export function AggregationPicker({
                 <Icon
                   name="list"
                   size={14}
-                  color={
-                    isGroupedMode
+                  style={{
+                    color: isGroupedMode
                       ? "var(--mb-color-brand)"
-                      : "var(--mb-color-text-light)"
-                  }
+                      : "var(--mb-color-text-light)",
+                  }}
                 />
               </span>
             </Tooltip>
@@ -257,6 +260,9 @@ export function AggregationPicker({
                   cursor: isHierarchicalMode ? "default" : "pointer",
                   display: "inline-flex",
                   alignItems: "center",
+                  color: isHierarchicalMode
+                    ? "var(--mb-color-summarize)"
+                    : "var(--mb-color-text-light)",
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -268,11 +274,11 @@ export function AggregationPicker({
                 <Icon
                   name="folder"
                   size={14}
-                  color={
-                    isHierarchicalMode
+                  style={{
+                    color: isHierarchicalMode
                       ? "var(--mb-color-summarize)"
-                      : "var(--mb-color-text-light)"
-                  }
+                      : "var(--mb-color-text-light)",
+                  }}
                 />
               </span>
             </Tooltip>
