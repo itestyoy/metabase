@@ -227,32 +227,54 @@ export function AggregationPicker({
             onMouseOver={(e) => e.stopPropagation()}
           >
             <Tooltip label={t`Show as list`} position="top" withArrow>
-              <Box
-                component="span"
+              <span
                 style={{
                   cursor: isGroupedMode ? "default" : "pointer",
                   display: "inline-flex",
                   alignItems: "center",
                 }}
-                c={isGroupedMode ? "brand" : "text-light"}
-                onClick={isGroupedMode ? undefined : toggleMetricsViewMode}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!isGroupedMode) {
+                    toggleMetricsViewMode(e);
+                  }
+                }}
               >
-                <Icon name="list" size={14} />
-              </Box>
+                <Icon
+                  name="list"
+                  size={14}
+                  color={
+                    isGroupedMode
+                      ? "var(--mb-color-brand)"
+                      : "var(--mb-color-text-light)"
+                  }
+                />
+              </span>
             </Tooltip>
             <Tooltip label={t`Show in folders`} position="top" withArrow>
-              <Box
-                component="span"
+              <span
                 style={{
                   cursor: isHierarchicalMode ? "default" : "pointer",
                   display: "inline-flex",
                   alignItems: "center",
                 }}
-                c={isHierarchicalMode ? "summarize" : "text-light"}
-                onClick={isHierarchicalMode ? undefined : toggleMetricsViewMode}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!isHierarchicalMode) {
+                    toggleMetricsViewMode(e);
+                  }
+                }}
               >
-                <Icon name="folder" size={14} />
-              </Box>
+                <Icon
+                  name="folder"
+                  size={14}
+                  color={
+                    isHierarchicalMode
+                      ? "var(--mb-color-summarize)"
+                      : "var(--mb-color-text-light)"
+                  }
+                />
+              </span>
             </Tooltip>
           </span>
         </span>
