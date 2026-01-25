@@ -1,9 +1,17 @@
-import { type ChangeEvent, useCallback, useMemo, useState } from "react";
+import {
+  type ChangeEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { t } from "ttag";
 
+import { collectionApi } from "metabase/api";
 import Input from "metabase/common/components/Input";
 import { MiniPicker } from "metabase/common/components/Pickers/MiniPicker";
 import type { MiniPickerPickableItem } from "metabase/common/components/Pickers/MiniPicker/types";
+import { useDispatch } from "metabase/lib/redux";
 import type { UpdateQueryHookProps } from "metabase/query_builder/hooks/types";
 import { Box, Space, Stack, type StackProps, Title } from "metabase/ui";
 import * as Lib from "metabase-lib";
@@ -25,9 +33,11 @@ export const SummarizeMetricsPicker = ({
     [query, stageIndex],
   );
 
-  const { metricsById, validCollectionIds } = useMemo(() => {
+  const dispatch = useDispatch();
+
+  const { metricsById, metricCollectionIds } = useMemo(() => {
     const metricMap = new Map<string, Lib.MetricMetadata>();
-    const collectionIds = new Set<string>();
+    const collectionIds = new Set<number>();
     metrics.forEach((metric) => {
       const displayInfo = Lib.displayInfo(query, stageIndex, metric);
       const info = displayInfo as unknown as {
@@ -37,12 +47,63 @@ export const SummarizeMetricsPicker = ({
       if (info.id != null) {
         metricMap.set(String(info.id), metric);
         if (info.collectionId != null) {
-          collectionIds.add(String(info.collectionId));
+          collectionIds.add(info.collectionId);
         }
       }
     });
-    return { metricsById: metricMap, validCollectionIds: collectionIds };
+    return { metricsById: metricMap, metricCollectionIds: collectionIds };
   }, [metrics, query, stageIndex]);
+
+  // Fetch collections to get full hierarchy (location paths)
+  const [validCollectionIds, setValidCollectionIds] = useState<Set<string>>(
+    new Set(),
+  );
+
+  useEffect(() => {
+    if (metricCollectionIds.size === 0) {
+      setValidCollectionIds(new Set());
+      return;
+    }
+
+    const fetchCollectionHierarchy = async () => {
+      const allCollectionIds = new Set<string>();
+
+      // Fetch each collection to get its location
+      const collectionPromises = Array.from(metricCollectionIds).map(
+        async (collectionId) => {
+          try {
+            const collection = await dispatch(
+              collectionApi.endpoints.getCollection.initiate({
+                id: collectionId,
+              }),
+            ).unwrap();
+
+            // Add the collection itself
+            allCollectionIds.add(String(collectionId));
+
+            // Parse location to get ancestor collection IDs
+            // Location format: "/1/5/10/" means ancestors are 1, 5, 10
+            const location =
+              collection.effective_location || collection.location;
+            if (location) {
+              const ancestorIds = location
+                .split("/")
+                .filter((id: string) => id && id !== "");
+              ancestorIds.forEach((id: string) => allCollectionIds.add(id));
+            }
+          } catch {
+            // If fetch fails, just add the collection ID
+            allCollectionIds.add(String(collectionId));
+          }
+        },
+      );
+
+      await Promise.all(collectionPromises);
+      setValidCollectionIds(allCollectionIds);
+    };
+
+    fetchCollectionHierarchy();
+  }, [metricCollectionIds, dispatch]);
 
   const handleMetricSelect = useCallback(
     (item: MiniPickerPickableItem) => {
