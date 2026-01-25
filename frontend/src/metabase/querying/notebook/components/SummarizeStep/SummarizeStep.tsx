@@ -38,7 +38,7 @@ export function SummarizeStep({
       </Box>
       <MetricsPickerStep
         step={step}
-        color="warning"
+        color="text-tertiary"
         isLastOpened={false}
         readOnly={readOnly}
         {...props}
