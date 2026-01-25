@@ -236,6 +236,7 @@ export type AggregationOperatorDisplayInfo = {
 };
 
 export type MetricDisplayInfo = {
+  id: number;
   name: string;
   displayName: string;
   longDisplayName: string;

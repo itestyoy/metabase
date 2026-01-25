@@ -29,13 +29,14 @@ export function MetricsPickerStep({
   const metricsById = useMemo(() => {
     const metricMap = new Map<string, Lib.MetricMetadata>();
     metrics.forEach((metric) => {
-      const metricId = getMetricId(metric);
+      const displayInfo = Lib.displayInfo(query, stageIndex, metric);
+      const metricId = (displayInfo as unknown as { id?: number }).id;
       if (metricId != null) {
         metricMap.set(String(metricId), metric);
       }
     });
     return metricMap;
-  }, [metrics]);
+  }, [metrics, query, stageIndex]);
 
   const handleMetricSelect = useCallback(
     (item: MiniPickerPickableItem) => {
@@ -112,23 +113,6 @@ export function MetricsPickerStep({
       </>
     </NotebookCell>
   );
-}
-
-function getMetricId(
-  metric: Lib.MetricMetadata,
-): number | string | undefined {
-  if (metric && typeof metric === "object" && "id" in metric) {
-    return (metric as { id?: number | string }).id;
-  }
-  if (
-    metric &&
-    typeof metric === "object" &&
-    "metric_id" in metric &&
-    (metric as { metric_id?: number | string }).metric_id != null
-  ) {
-    return (metric as { metric_id?: number | string }).metric_id;
-  }
-  return undefined;
 }
 
 function createMetricClauseFromItem(
