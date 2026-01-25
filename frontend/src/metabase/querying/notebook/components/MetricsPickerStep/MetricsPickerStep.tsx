@@ -28,13 +28,17 @@ export function MetricsPickerStep({
 
   const metricsById = useMemo(() => {
     const metricMap = new Map<string, Lib.MetricMetadata>();
+    console.log("[MetricsPickerStep] metrics count:", metrics.length);
     metrics.forEach((metric) => {
       const displayInfo = Lib.displayInfo(query, stageIndex, metric);
+      console.log("[MetricsPickerStep] displayInfo:", displayInfo);
       const metricId = (displayInfo as unknown as { id?: number }).id;
+      console.log("[MetricsPickerStep] metricId:", metricId);
       if (metricId != null) {
         metricMap.set(String(metricId), metric);
       }
     });
+    console.log("[MetricsPickerStep] metricsById keys:", [...metricMap.keys()]);
     return metricMap;
   }, [metrics, query, stageIndex]);
 
@@ -80,7 +84,9 @@ export function MetricsPickerStep({
               "model" in item
             ) {
               const modelItem = item as { model: string; id?: number | string };
-              return !metricsById.has(String(modelItem.id));
+              const shouldHide = !metricsById.has(String(modelItem.id));
+              console.log("[MetricsPickerStep] shouldHide item:", modelItem.id, modelItem.model, "hide:", shouldHide);
+              return shouldHide;
             }
             return false;
           }}
