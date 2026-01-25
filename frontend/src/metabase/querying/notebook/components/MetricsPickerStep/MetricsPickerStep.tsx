@@ -26,16 +26,23 @@ export function MetricsPickerStep({
     [query, stageIndex],
   );
 
-  const metricsById = useMemo(() => {
+  const { metricsById, validCollectionIds } = useMemo(() => {
     const metricMap = new Map<string, Lib.MetricMetadata>();
+    const collectionIds = new Set<string>();
     metrics.forEach((metric) => {
       const displayInfo = Lib.displayInfo(query, stageIndex, metric);
-      const metricId = (displayInfo as unknown as { id?: number }).id;
-      if (metricId != null) {
-        metricMap.set(String(metricId), metric);
+      const info = displayInfo as unknown as {
+        id?: number;
+        collectionId?: number | null;
+      };
+      if (info.id != null) {
+        metricMap.set(String(info.id), metric);
+        if (info.collectionId != null) {
+          collectionIds.add(String(info.collectionId));
+        }
       }
     });
-    return metricMap;
+    return { metricsById: metricMap, validCollectionIds: collectionIds };
   }, [metrics, query, stageIndex]);
 
   const handleMetricSelect = useCallback(
@@ -80,10 +87,17 @@ export function MetricsPickerStep({
               "model" in item
             ) {
               const modelItem = item as { model: string; id?: number | string };
-              // Only filter metrics, not folders/collections
+
+              // Only show metrics and collections
               if (modelItem.model === "metric") {
                 return !metricsById.has(String(modelItem.id));
               }
+              if (modelItem.model === "collection") {
+                // Hide collections that don't contain valid metrics
+                return !validCollectionIds.has(String(modelItem.id));
+              }
+              // Hide all other entity types
+              return true;
             }
             return false;
           }}
