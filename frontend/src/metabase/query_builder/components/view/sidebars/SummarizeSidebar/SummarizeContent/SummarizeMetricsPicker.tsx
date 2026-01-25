@@ -1,13 +1,14 @@
-import { useCallback, useMemo, useState } from "react";
+import { type ChangeEvent, useCallback, useMemo, useState } from "react";
 import { t } from "ttag";
 
+import Input from "metabase/common/components/Input";
 import { MiniPicker } from "metabase/common/components/Pickers/MiniPicker";
 import type { MiniPickerPickableItem } from "metabase/common/components/Pickers/MiniPicker/types";
 import type { UpdateQueryHookProps } from "metabase/query_builder/hooks/types";
-import { Box, type BoxProps, Icon, Text, TextInput } from "metabase/ui";
+import { Box, Space, Stack, type StackProps, Title } from "metabase/ui";
 import * as Lib from "metabase-lib";
 
-type SummarizeMetricsPickerProps = UpdateQueryHookProps & BoxProps;
+type SummarizeMetricsPickerProps = UpdateQueryHookProps & StackProps;
 
 export const SummarizeMetricsPicker = ({
   query,
@@ -56,16 +57,42 @@ export const SummarizeMetricsPicker = ({
     setIsOpened(false);
   }, []);
 
+  const handleChangeSearchQuery = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      setSearchQuery(event.target.value);
+      setIsOpened(true);
+      setFocusPicker(false);
+    },
+    [],
+  );
+
+  const handleResetSearch = useCallback(() => setSearchQuery(""), []);
+
+  const handleInputKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "ArrowDown" || e.key === "Tab") {
+        e.preventDefault();
+        e.stopPropagation();
+        setFocusPicker(true);
+      }
+    },
+    [],
+  );
+
+  const handleInputFocus = useCallback(() => {
+    setIsOpened(true);
+    setFocusPicker(false);
+  }, []);
+
   if (metrics.length === 0) {
     return null;
   }
 
   return (
-    <Box {...containerProps}>
-      <Text fw="bold" mb="sm" c="text-medium">
-        {t`Pick a metric`}
-      </Text>
-      <Box pos="relative">
+    <Stack gap="0" {...containerProps}>
+      <Title order={5} fw={900}>{t`Pick a metric`}</Title>
+      <Space my="sm" />
+      <Box mb="md">
         <MiniPicker
           opened={isOpened}
           onClose={handleClose}
@@ -85,26 +112,19 @@ export const SummarizeMetricsPicker = ({
             return false;
           }}
         />
-        <TextInput
-          placeholder={t`Search for metrics...`}
+        <Input
+          fullWidth
+          placeholder={t`Find...`}
           value={searchQuery}
-          leftSection={<Icon name="search" />}
-          onChange={(e) => setSearchQuery(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowDown" || e.key === "Tab") {
-              e.preventDefault();
-              e.stopPropagation();
-              setFocusPicker(true);
-            }
-          }}
-          onFocus={() => {
-            setIsOpened(true);
-            setFocusPicker(false);
-          }}
+          leftIcon="search"
+          onResetClick={handleResetSearch}
+          onChange={handleChangeSearchQuery}
+          onKeyDown={handleInputKeyDown}
+          onFocus={handleInputFocus}
           data-testid="metrics-picker-search"
         />
       </Box>
-    </Box>
+    </Stack>
   );
 };
 
