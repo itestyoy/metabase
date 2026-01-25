@@ -88,9 +88,9 @@ export function MetricsPickerStep({
         value={searchQuery}
         variant="unstyled"
         styles={{
-          input: { background: "transparent", border: "none", padding: 0 },
+          input: { background: "transparent", border: "none", p: 0 },
         }}
-        leftSection={<Icon name="search" />}
+        leftSection={<Icon name="search" c="text-light" />}
         onChange={(e) => setSearchQuery(e.currentTarget.value)}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" || e.key === "Tab") {
