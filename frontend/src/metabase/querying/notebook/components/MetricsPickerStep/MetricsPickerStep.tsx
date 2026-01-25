@@ -68,7 +68,7 @@ export function MetricsPickerStep({
         <MiniPicker
           opened={isOpened}
           onClose={handleClose}
-          models={["metric", "card"]}
+          models={["metric"]}
           searchQuery={searchQuery}
           trapFocus={focusPicker}
           onChange={handleMetricSelect}
@@ -79,18 +79,7 @@ export function MetricsPickerStep({
               "model" in item
             ) {
               const modelItem = item as { model: string; id?: number | string };
-              // Hide databases and schemas
-              if (modelItem.model === "database" || modelItem.model === "schema") {
-                return true;
-              }
-              // Hide cards that are not metrics
-              if (modelItem.model === "card" && !isMetricItem(item as MiniPickerPickableItem)) {
-                return true;
-              }
-              // Hide metrics that are not available for the current data source
-              if (isMetricItem(item as MiniPickerPickableItem) && modelItem.id != null) {
-                return !metricsById.has(String(modelItem.id));
-              }
+              return !metricsById.has(String(modelItem.id));
             }
             return false;
           }}
