@@ -108,7 +108,10 @@ export const SummarizeMetricsPicker = ({
               "model" in item
             ) {
               const modelItem = item as { model: string; id?: number | string };
-              return !metricsById.has(String(modelItem.id));
+              // Only filter metrics, not folders/collections
+              if (modelItem.model === "metric") {
+                return !metricsById.has(String(modelItem.id));
+              }
             }
             return false;
           }}
