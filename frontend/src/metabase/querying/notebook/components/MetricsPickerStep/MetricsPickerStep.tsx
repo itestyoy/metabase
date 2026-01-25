@@ -85,7 +85,7 @@ export function MetricsPickerStep({
           }}
         />
         <TextInput
-          placeholder={t`Pick a metric`}
+          placeholder={t`Pick a metric...`}
           value={searchQuery}
           variant="unstyled"
           styles={{
