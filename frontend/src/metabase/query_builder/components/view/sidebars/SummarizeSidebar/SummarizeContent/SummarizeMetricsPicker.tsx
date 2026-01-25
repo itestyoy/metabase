@@ -104,10 +104,17 @@ export const SummarizeMetricsPicker = ({
             if (
               typeof item === "object" &&
               item != null &&
-              "model" in item &&
-              (item.model === "database" || item.model === "schema")
+              "model" in item
             ) {
-              return true;
+              const modelItem = item as { model: string; id?: number | string };
+              // Hide databases and schemas
+              if (modelItem.model === "database" || modelItem.model === "schema") {
+                return true;
+              }
+              // Hide metrics that are not available for the current data source
+              if (isMetricItem(item as MiniPickerPickableItem) && modelItem.id != null) {
+                return !metricsById.has(String(modelItem.id));
+              }
             }
             return false;
           }}
