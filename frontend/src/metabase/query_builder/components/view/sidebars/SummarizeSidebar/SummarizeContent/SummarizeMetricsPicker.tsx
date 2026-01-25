@@ -4,7 +4,7 @@ import { t } from "ttag";
 import { MiniPicker } from "metabase/common/components/Pickers/MiniPicker";
 import type { MiniPickerPickableItem } from "metabase/common/components/Pickers/MiniPicker/types";
 import type { UpdateQueryHookProps } from "metabase/query_builder/hooks/types";
-import { Box, Button, type BoxProps, Text } from "metabase/ui";
+import { Box, type BoxProps, Icon, Text, TextInput } from "metabase/ui";
 import * as Lib from "metabase-lib";
 
 type SummarizeMetricsPickerProps = UpdateQueryHookProps & BoxProps;
@@ -16,6 +16,8 @@ export const SummarizeMetricsPicker = ({
   ...containerProps
 }: SummarizeMetricsPickerProps) => {
   const [isOpened, setIsOpened] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [focusPicker, setFocusPicker] = useState(false);
 
   const metrics = useMemo(
     () => Lib.availableMetrics(query, stageIndex),
@@ -43,6 +45,7 @@ export const SummarizeMetricsPicker = ({
           const nextQuery = Lib.aggregate(query, stageIndex, metricAggregable);
           onQueryChange(nextQuery);
           setIsOpened(false);
+          setSearchQuery("");
         }
       }
     },
@@ -62,33 +65,45 @@ export const SummarizeMetricsPicker = ({
       <Text fw="bold" mb="sm" c="text-medium">
         {t`Pick a metric`}
       </Text>
-      <Button
-        variant="subtle"
-        leftSection={<Box component="span" c="brand">+</Box>}
-        onClick={() => setIsOpened(true)}
-        c="brand"
-        p={0}
-        style={{ fontWeight: "normal" }}
-      >
-        {t`Browse metrics`}
-      </Button>
-      <MiniPicker
-        opened={isOpened}
-        onClose={handleClose}
-        models={["metric"]}
-        onChange={handleMetricSelect}
-        shouldHide={(item) => {
-          if (
-            typeof item === "object" &&
-            item != null &&
-            "model" in item &&
-            (item.model === "database" || item.model === "schema")
-          ) {
-            return true;
-          }
-          return false;
-        }}
-      />
+      <Box pos="relative">
+        <MiniPicker
+          opened={isOpened}
+          onClose={handleClose}
+          models={["metric"]}
+          searchQuery={searchQuery}
+          trapFocus={focusPicker}
+          onChange={handleMetricSelect}
+          shouldHide={(item) => {
+            if (
+              typeof item === "object" &&
+              item != null &&
+              "model" in item &&
+              (item.model === "database" || item.model === "schema")
+            ) {
+              return true;
+            }
+            return false;
+          }}
+        />
+        <TextInput
+          placeholder={t`Search for metrics...`}
+          value={searchQuery}
+          leftSection={<Icon name="search" />}
+          onChange={(e) => setSearchQuery(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown" || e.key === "Tab") {
+              e.preventDefault();
+              e.stopPropagation();
+              setFocusPicker(true);
+            }
+          }}
+          onFocus={() => {
+            setIsOpened(true);
+            setFocusPicker(false);
+          }}
+          data-testid="metrics-picker-search"
+        />
+      </Box>
     </Box>
   );
 };

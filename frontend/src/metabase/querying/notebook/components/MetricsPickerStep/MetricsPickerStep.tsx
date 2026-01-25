@@ -3,11 +3,11 @@ import { t } from "ttag";
 
 import { MiniPicker } from "metabase/common/components/Pickers/MiniPicker";
 import type { MiniPickerPickableItem } from "metabase/common/components/Pickers/MiniPicker/types";
-import { Box, Text } from "metabase/ui";
+import { Icon, TextInput } from "metabase/ui";
 import * as Lib from "metabase-lib";
 
 import type { NotebookStepProps } from "../../types";
-import { NotebookCell, NotebookCellAdd } from "../NotebookCell";
+import { NotebookCell } from "../NotebookCell";
 
 export function MetricsPickerStep({
   query,
@@ -18,6 +18,8 @@ export function MetricsPickerStep({
 }: NotebookStepProps) {
   const { stageIndex } = step;
   const [isOpened, setIsOpened] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [focusPicker, setFocusPicker] = useState(false);
 
   const metrics = useMemo(
     () => Lib.availableMetrics(query, stageIndex),
@@ -45,6 +47,7 @@ export function MetricsPickerStep({
           const nextQuery = Lib.aggregate(query, stageIndex, metricAggregable);
           updateQuery(nextQuery);
           setIsOpened(false);
+          setSearchQuery("");
         }
       }
     },
@@ -60,36 +63,52 @@ export function MetricsPickerStep({
   }
 
   return (
-    <Box>
-      <Text size="sm" fw="bold" c={color} mb="xs">
-        {t`Pick a metric`}
-      </Text>
-      <NotebookCell color={color}>
-        <NotebookCellAdd
-          color={color}
-          initialAddText={t`Browse metrics`}
-          onClick={() => setIsOpened(true)}
-          data-testid="metrics-picker-step"
-        />
-        <MiniPicker
-          opened={isOpened}
-          onClose={handleClose}
-          models={["metric"]}
-          onChange={handleMetricSelect}
-          shouldHide={(item) => {
-            if (
-              typeof item === "object" &&
-              item != null &&
-              "model" in item &&
-              (item.model === "database" || item.model === "schema")
-            ) {
-              return true;
-            }
-            return false;
-          }}
-        />
-      </NotebookCell>
-    </Box>
+    <NotebookCell color={color}>
+      <MiniPicker
+        opened={isOpened}
+        onClose={handleClose}
+        models={["metric"]}
+        searchQuery={searchQuery}
+        trapFocus={focusPicker}
+        onChange={handleMetricSelect}
+        shouldHide={(item) => {
+          if (
+            typeof item === "object" &&
+            item != null &&
+            "model" in item &&
+            (item.model === "database" || item.model === "schema")
+          ) {
+            return true;
+          }
+          return false;
+        }}
+      />
+      <TextInput
+        placeholder={t`Pick a metric`}
+        value={searchQuery}
+        variant="unstyled"
+        styles={{
+          input: { background: "transparent", border: "none", padding: 0 },
+        }}
+        leftSection={<Icon name="search" />}
+        onChange={(e) => setSearchQuery(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" || e.key === "Tab") {
+            e.preventDefault();
+            e.stopPropagation();
+            setFocusPicker(true);
+          }
+        }}
+        onClickCapture={(e) => {
+          e.stopPropagation();
+          setIsOpened(true);
+          setFocusPicker(false);
+        }}
+        miw="12rem"
+        autoFocus={isOpened}
+        data-testid="metrics-picker-step"
+      />
+    </NotebookCell>
   );
 }
 

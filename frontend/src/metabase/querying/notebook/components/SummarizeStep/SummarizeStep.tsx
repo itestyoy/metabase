@@ -21,47 +21,46 @@ export function SummarizeStep({
   const showBreakouts = !readOnly || hasBreakouts;
 
   return (
-    <Flex direction="column" gap="md">
-      <Flex
-        align={{ md: "center" }}
-        direction={{ base: "column", md: "row" }}
-        gap={{ base: "sm", md: isMetric ? "md" : "sm" }}
-      >
-        <Box w={{ base: "100%", md: "50%" }} flex="1 1 auto">
-          <AggregateStep
-            step={step}
-            color={color}
-            isLastOpened={isLastOpened}
-            readOnly={readOnly}
-            {...props}
-          />
-        </Box>
-        {isMetric ? (
-          <Box display={{ md: "none" }} c={color} fw="bold">
-            {t`Default time dimension`}
-          </Box>
-        ) : (
-          showBreakouts && <Box c={color} fw="bold">{t`by`}</Box>
-        )}
-        {showBreakouts && (
-          <Box w={{ base: "100%", md: "50%" }}>
-            <BreakoutStep
-              step={step}
-              color={color}
-              isLastOpened={false}
-              readOnly={readOnly}
-              {...props}
-            />
-          </Box>
-        )}
-      </Flex>
+    <Flex
+      align={{ md: "center" }}
+      direction={{ base: "column", md: "row" }}
+      gap={{ base: "sm", md: isMetric ? "md" : "sm" }}
+      wrap="wrap"
+    >
+      <Box flex="1 1 auto">
+        <AggregateStep
+          step={step}
+          color={color}
+          isLastOpened={isLastOpened}
+          readOnly={readOnly}
+          {...props}
+        />
+      </Box>
       <MetricsPickerStep
         step={step}
-        color={color}
+        color="warning"
         isLastOpened={false}
         readOnly={readOnly}
         {...props}
       />
+      {isMetric ? (
+        <Box display={{ md: "none" }} c={color} fw="bold">
+          {t`Default time dimension`}
+        </Box>
+      ) : (
+        showBreakouts && <Box c={color} fw="bold">{t`by`}</Box>
+      )}
+      {showBreakouts && (
+        <Box flex="1 1 auto">
+          <BreakoutStep
+            step={step}
+            color={color}
+            isLastOpened={false}
+            readOnly={readOnly}
+            {...props}
+          />
+        </Box>
+      )}
     </Flex>
   );
 }
