@@ -64,50 +64,52 @@ export function MetricsPickerStep({
 
   return (
     <NotebookCell color={color}>
-      <MiniPicker
-        opened={isOpened}
-        onClose={handleClose}
-        models={["metric"]}
-        searchQuery={searchQuery}
-        trapFocus={focusPicker}
-        onChange={handleMetricSelect}
-        shouldHide={(item) => {
-          if (
-            typeof item === "object" &&
-            item != null &&
-            "model" in item &&
-            (item.model === "database" || item.model === "schema")
-          ) {
-            return true;
-          }
-          return false;
-        }}
-      />
-      <TextInput
-        placeholder={t`Pick a metric`}
-        value={searchQuery}
-        variant="unstyled"
-        styles={{
-          input: { background: "transparent", border: "none", p: 0 },
-        }}
-        leftSection={<Icon name="search" c="text-light" />}
-        onChange={(e) => setSearchQuery(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown" || e.key === "Tab") {
-            e.preventDefault();
+      <>
+        <MiniPicker
+          opened={isOpened}
+          onClose={handleClose}
+          models={["metric"]}
+          searchQuery={searchQuery}
+          trapFocus={focusPicker}
+          onChange={handleMetricSelect}
+          shouldHide={(item) => {
+            if (
+              typeof item === "object" &&
+              item != null &&
+              "model" in item &&
+              (item.model === "database" || item.model === "schema")
+            ) {
+              return true;
+            }
+            return false;
+          }}
+        />
+        <TextInput
+          placeholder={t`Pick a metric`}
+          value={searchQuery}
+          variant="unstyled"
+          styles={{
+            input: { background: "transparent", border: "none", p: 0 },
+          }}
+          leftSection={<Icon name="search" />}
+          onChange={(e) => setSearchQuery(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown" || e.key === "Tab") {
+              e.preventDefault();
+              e.stopPropagation();
+              setFocusPicker(true);
+            }
+          }}
+          onClickCapture={(e) => {
             e.stopPropagation();
-            setFocusPicker(true);
-          }
-        }}
-        onClickCapture={(e) => {
-          e.stopPropagation();
-          setIsOpened(true);
-          setFocusPicker(false);
-        }}
-        miw="12rem"
-        autoFocus={isOpened}
-        data-testid="metrics-picker-step"
-      />
+            setIsOpened(true);
+            setFocusPicker(false);
+          }}
+          miw="12rem"
+          autoFocus={isOpened}
+          data-testid="metrics-picker-step"
+        />
+      </>
     </NotebookCell>
   );
 }
