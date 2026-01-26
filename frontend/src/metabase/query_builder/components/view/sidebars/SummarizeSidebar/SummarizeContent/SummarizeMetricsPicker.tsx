@@ -175,10 +175,21 @@ export const SummarizeMetricsPicker = ({
               item != null &&
               "model" in item
             ) {
-              const modelItem = item as { model: string; id?: number | string };
+              const modelItem = item as {
+                model: string;
+                id?: number | string;
+                type?: string;
+                card_type?: string;
+              };
 
-              // Only show metrics and collections
-              if (modelItem.model === "metric") {
+              // Check if this is a metric (can be model "metric" or "card" with type/card_type "metric")
+              const isMetric =
+                modelItem.model === "metric" ||
+                (modelItem.model === "card" &&
+                  (modelItem.type === "metric" ||
+                    modelItem.card_type === "metric"));
+
+              if (isMetric) {
                 return !metricsById.has(String(modelItem.id));
               }
               if (modelItem.model === "collection") {
