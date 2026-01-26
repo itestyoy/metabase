@@ -148,6 +148,10 @@ export function MetricsPickerStep({
                 return !metricsById.has(String(modelItem.id));
               }
               if (modelItem.model === "collection") {
+                // Always show root collection if we have any valid metrics
+                if (modelItem.id === "root" && metricsById.size > 0) {
+                  return false;
+                }
                 // Hide collections that don't contain valid metrics
                 return !validCollectionIds.has(String(modelItem.id));
               }
