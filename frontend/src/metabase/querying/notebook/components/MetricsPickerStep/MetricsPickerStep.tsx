@@ -1,10 +1,13 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { t } from "ttag";
 
 import { MiniPicker } from "metabase/common/components/Pickers/MiniPicker";
 import type { MiniPickerPickableItem } from "metabase/common/components/Pickers/MiniPicker/types";
 import { Icon, TextInput } from "metabase/ui";
 import * as Lib from "metabase-lib";
+import { collectionApi } from "metabase/api";
+import { useDispatch } from "metabase/lib/redux";
+import type { Collection, CollectionId } from "metabase-types/api";
 
 import type { NotebookStepProps } from "../../types";
 import { NotebookCell } from "../NotebookCell";
@@ -20,25 +23,113 @@ export function MetricsPickerStep({
   const [isOpened, setIsOpened] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [focusPicker, setFocusPicker] = useState(false);
+  const dispatch = useDispatch();
 
   const metrics = useMemo(
     () => Lib.availableMetrics(query, stageIndex),
     [query, stageIndex],
   );
 
-  const metricsById = useMemo(() => {
+  const { metricsById, metricCollectionIds } = useMemo(() => {
     const metricMap = new Map<string, Lib.MetricMetadata>();
+    const collectionIdSet = new Set<CollectionId>();
+
     metrics.forEach((metric) => {
       const displayInfo = Lib.displayInfo(query, stageIndex, metric);
       const info = displayInfo as unknown as {
-        id?: number;
+        id?: number | string;
+        "collection-id"?: CollectionId;
+        collection_id?: CollectionId;
       };
       if (info.id != null) {
         metricMap.set(String(info.id), metric);
       }
+      const collectionId = info["collection-id"] ?? info.collection_id;
+      if (collectionId != null) {
+        collectionIdSet.add(collectionId);
+      }
     });
-    return metricMap;
+
+    return {
+      metricsById: metricMap,
+      metricCollectionIds: Array.from(collectionIdSet),
+    };
   }, [metrics, query, stageIndex]);
+
+  const [allowedCollectionIds, setAllowedCollectionIds] = useState<
+    CollectionId[]
+  >([]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (metricCollectionIds.length === 0) {
+      setAllowedCollectionIds([]);
+      return;
+    }
+
+    // root + explicit metric collections are allowed even if ancestor fetch fails
+    const baseIds = new Set<CollectionId>([
+      "root" as CollectionId,
+      ...metricCollectionIds,
+    ]);
+    setAllowedCollectionIds(Array.from(baseIds));
+
+    const fetchCollections = async () => {
+      const subscriptions = metricCollectionIds.map((id) =>
+        dispatch(
+          collectionApi.endpoints.getCollection.initiate(
+            { id, ignore_error: true },
+            { subscribe: false },
+          ),
+        ),
+      );
+
+      const collections = await Promise.all(
+        subscriptions.map((subscription) =>
+          subscription.unwrap().catch(() => null),
+        ),
+      );
+
+      subscriptions.forEach((subscription) => {
+        subscription?.unsubscribe?.();
+      });
+
+      if (isCancelled) {
+        return;
+      }
+
+      const ancestorIds = new Set<CollectionId>(baseIds);
+
+      collections.forEach((collection) => {
+        if (!collection) {
+          return;
+        }
+        addAncestorIds(collection, ancestorIds);
+      });
+
+      setAllowedCollectionIds(Array.from(ancestorIds));
+    };
+
+    fetchCollections();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [dispatch, metricCollectionIds]);
+
+  const allowedCollectionIdSet = useMemo(
+    () => new Set<CollectionId>(allowedCollectionIds),
+    [allowedCollectionIds],
+  );
+
+  useEffect(() => {
+    console.debug("[MetricsPickerStep] collections filter", {
+      metricsCount: metrics.length,
+      metricCollectionIds,
+      allowedCollectionIds,
+    });
+  }, [allowedCollectionIds, metricCollectionIds, metrics.length]);
 
   const handleMetricSelect = useCallback(
     (item: MiniPickerPickableItem) => {
@@ -86,7 +177,16 @@ export function MetricsPickerStep({
                 id?: number | string;
                 type?: string;
                 card_type?: string;
+                collection_id?: CollectionId | null;
+                collection?: { id?: CollectionId | null };
               };
+
+              if (
+                allowedCollectionIdSet.size &&
+                !isItemInAllowedCollection(modelItem, allowedCollectionIdSet)
+              ) {
+                return true;
+              }
 
               // Check if this is a metric (can be model "metric" or "card" with type/card_type "metric")
               const isMetric =
@@ -168,4 +268,60 @@ function isMetricItem(item: MiniPickerPickableItem) {
       ((item as { type?: string }).type === "metric" ||
         (item as { card_type?: string }).card_type === "metric"))
   );
+}
+
+function addAncestorIds(
+  collection: Collection,
+  target: Set<CollectionId>,
+) {
+  const location = collection.effective_location ?? collection.location;
+
+  (collection.effective_ancestors ?? []).forEach((ancestor) => {
+    if (ancestor.id != null) {
+      target.add(ancestor.id as CollectionId);
+    }
+  });
+
+  if (location) {
+    location
+      .split("/")
+      .filter(Boolean)
+      .forEach((part) => {
+        const parsed = Number(part);
+        if (!Number.isNaN(parsed)) {
+          target.add(parsed as CollectionId);
+        } else {
+          target.add(part as CollectionId);
+        }
+      });
+  }
+}
+
+function isItemInAllowedCollection(
+  item: {
+    model: string;
+    id?: number | string | null;
+    collection_id?: CollectionId | null;
+    collection?: { id?: CollectionId | null };
+  },
+  allowedCollectionIds: Set<CollectionId>,
+) {
+  if (!allowedCollectionIds.size) {
+    return true;
+  }
+
+  if (item.model === "collection") {
+    return (
+      item.id != null &&
+      allowedCollectionIds.has(item.id as CollectionId)
+    );
+  }
+
+  const collectionId = item.collection_id ?? item.collection?.id ?? null;
+
+  if (collectionId == null) {
+    return false;
+  }
+
+  return allowedCollectionIds.has(collectionId);
 }
