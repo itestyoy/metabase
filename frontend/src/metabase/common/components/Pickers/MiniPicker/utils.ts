@@ -318,6 +318,10 @@ export function useVisibleCollections(
       return;
     }
 
+    console.debug("[MiniPicker] resolving visible collections", {
+      requestedCollectionIds: uniqueCollectionIds,
+    });
+
     const fetchCollectionsByIds = async (ids: CollectionId[]) => {
       const subscriptions = ids.map((id) =>
         dispatch(
@@ -409,6 +413,12 @@ export function useVisibleCollections(
       );
       setResolvedVisibleCollectionIds(resolvedIds);
       setIsLoading(false);
+
+      console.debug("[MiniPicker] visible collections resolved", {
+        requestedCollectionIds: uniqueCollectionIds,
+        resolvedIds,
+        resolvedNames: allCollections.map((collection) => collection.name),
+      });
     })();
 
     return () => {

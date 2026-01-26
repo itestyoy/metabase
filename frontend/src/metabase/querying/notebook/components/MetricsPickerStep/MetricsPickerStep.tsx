@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { t } from "ttag";
 
 import { MiniPicker } from "metabase/common/components/Pickers/MiniPicker";
@@ -58,6 +58,13 @@ export function MetricsPickerStep({
   const visibleCollectionIds = metricCollectionIds.length
     ? metricCollectionIds
     : undefined;
+
+  useEffect(() => {
+    console.debug("[MetricsPickerStep] metrics loaded", {
+      metricsCount: metrics.length,
+      visibleCollectionIds,
+    });
+  }, [metrics.length, visibleCollectionIds]);
 
   const handleMetricSelect = useCallback(
     (item: MiniPickerPickableItem) => {

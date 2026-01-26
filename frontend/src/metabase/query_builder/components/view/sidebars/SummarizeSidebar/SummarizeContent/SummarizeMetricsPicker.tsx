@@ -1,4 +1,10 @@
-import { type ChangeEvent, useCallback, useMemo, useState } from "react";
+import {
+  type ChangeEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { t } from "ttag";
 
 import Input from "metabase/common/components/Input";
@@ -55,6 +61,13 @@ export const SummarizeMetricsPicker = ({
   const visibleCollectionIds = metricCollectionIds.length
     ? metricCollectionIds
     : undefined;
+
+  useEffect(() => {
+    console.debug("[SummarizeMetricsPicker] metrics loaded", {
+      metricsCount: metrics.length,
+      visibleCollectionIds,
+    });
+  }, [metrics.length, visibleCollectionIds]);
 
   const handleMetricSelect = useCallback(
     (item: MiniPickerPickableItem) => {
