@@ -499,7 +499,7 @@
 (defn- card->metric-card
   [card]
   (-> card
-      (select-keys [:id :table-id :name :description :archived :dataset-query :source-card-id :type])
+      (select-keys [:id :table-id :name :description :archived :dataset-query :source-card-id :type :collection-id])
       (assoc :lib/type :metadata/metric)))
 
 (defn- metric-cards

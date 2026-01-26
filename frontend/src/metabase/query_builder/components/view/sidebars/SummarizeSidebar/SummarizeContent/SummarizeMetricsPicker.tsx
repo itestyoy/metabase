@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { t } from "ttag";
@@ -10,11 +11,11 @@ import { t } from "ttag";
 import Input from "metabase/common/components/Input";
 import { MiniPicker } from "metabase/common/components/Pickers/MiniPicker";
 import type { MiniPickerPickableItem } from "metabase/common/components/Pickers/MiniPicker/types";
-import { collectionApi } from "metabase/api";
-import { useDispatch } from "metabase/lib/redux";
 import type { UpdateQueryHookProps } from "metabase/query_builder/hooks/types";
 import { Box, Space, Stack, type StackProps, Title } from "metabase/ui";
 import * as Lib from "metabase-lib";
+import { collectionApi } from "metabase/api/collection";
+import { useDispatch, useSelector } from "metabase/lib/redux";
 import type { Collection, CollectionId } from "metabase-types/api";
 
 type SummarizeMetricsPickerProps = UpdateQueryHookProps & StackProps;
@@ -43,13 +44,12 @@ export const SummarizeMetricsPicker = ({
       const displayInfo = Lib.displayInfo(query, stageIndex, metric);
       const info = displayInfo as unknown as {
         id?: number | string;
-        "collection-id"?: CollectionId;
-        collection_id?: CollectionId;
+        collectionId?: CollectionId;
       };
       if (info.id != null) {
         metricMap.set(String(info.id), metric);
       }
-      const collectionId = info["collection-id"] ?? info.collection_id;
+      const collectionId = info.collectionId;
       if (collectionId != null) {
         collectionIdSet.add(collectionId);
       }
@@ -61,79 +61,59 @@ export const SummarizeMetricsPicker = ({
     };
   }, [metrics, query, stageIndex]);
 
-  const [allowedCollectionIds, setAllowedCollectionIds] = useState<
-    CollectionId[]
-  >([]);
+  const collections = useSelector((state) =>
+    metricCollectionIds.map(
+      (id) =>
+        collectionApi.endpoints.getCollection.select({ id })(state)?.data ??
+        null,
+    ),
+  );
+
+  const missingCollectionIds = useMemo(
+    () =>
+      metricCollectionIds.filter((id, index) => collections[index] == null),
+    [collections, metricCollectionIds],
+  );
+
+  const missingCollectionsKey = useMemo(
+    () => missingCollectionIds.join("|"),
+    [missingCollectionIds],
+  );
+
+  const allowedCollectionIdSet = useMemo(() => {
+    const allowedIds = new Set<CollectionId>(["root" as CollectionId]);
+
+    metricCollectionIds.forEach((id) => allowedIds.add(id));
+    collections.forEach((collection) => {
+      if (collection) {
+        addAncestorIds(collection, allowedIds);
+      }
+    });
+
+    return allowedIds;
+  }, [collections, metricCollectionIds]);
+
+  const lastMissingKeyRef = useRef<string>();
 
   useEffect(() => {
-    let isCancelled = false;
+    if (missingCollectionsKey === lastMissingKeyRef.current) {
+      return;
+    }
+    lastMissingKeyRef.current = missingCollectionsKey;
 
-    if (metricCollectionIds.length === 0) {
-      setAllowedCollectionIds([]);
+    if (!missingCollectionIds.length) {
       return;
     }
 
-    const baseIds = new Set<CollectionId>([
-      "root" as CollectionId,
-      ...metricCollectionIds,
-    ]);
-    setAllowedCollectionIds(Array.from(baseIds));
-
-    const fetchCollections = async () => {
-      const subscriptions = metricCollectionIds.map((id) =>
-        dispatch(
-          collectionApi.endpoints.getCollection.initiate(
-            { id, ignore_error: true },
-            { subscribe: false },
-          ),
+    missingCollectionIds.forEach((id) => {
+      dispatch(
+        collectionApi.endpoints.getCollection.initiate(
+          { id },
+          { subscribe: false },
         ),
       );
-
-      const collections = await Promise.all(
-        subscriptions.map((subscription) =>
-          subscription.unwrap().catch(() => null),
-        ),
-      );
-
-      subscriptions.forEach((subscription) => {
-        subscription?.unsubscribe?.();
-      });
-
-      if (isCancelled) {
-        return;
-      }
-
-      const ancestorIds = new Set<CollectionId>(baseIds);
-
-      collections.forEach((collection) => {
-        if (!collection) {
-          return;
-        }
-        addAncestorIds(collection, ancestorIds);
-      });
-
-      setAllowedCollectionIds(Array.from(ancestorIds));
-    };
-
-    fetchCollections();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [dispatch, metricCollectionIds]);
-
-  const allowedCollectionIdSet = useMemo(
-    () => new Set<CollectionId>(allowedCollectionIds),
-    [allowedCollectionIds],
-  );
-
-  useEffect(() => {
-    console.debug("[SummarizeMetricsPicker] collections filter", {
-      metricsCount: metrics.length,
-      metricCollectionIds,
-      allowedCollectionIds,
     });
-  }, [allowedCollectionIds, metricCollectionIds, metrics.length]);
+  }, [dispatch, missingCollectionIds, missingCollectionsKey]);
 
   const handleMetricSelect = useCallback(
     (item: MiniPickerPickableItem) => {
@@ -338,8 +318,9 @@ function isItemInAllowedCollection(
 
   const collectionId = item.collection_id ?? item.collection?.id ?? null;
 
+  // null collection_id means root collection
   if (collectionId == null) {
-    return false;
+    return allowedCollectionIds.has("root" as CollectionId);
   }
 
   return allowedCollectionIds.has(collectionId);
