@@ -1,11 +1,16 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useDeepCompareEffect } from "react-use";
 import { t } from "ttag";
 
 import { cardApi, collectionApi, databaseApi, tableApi } from "metabase/api";
 import type { DispatchFn } from "metabase/lib/redux";
 import { useDispatch } from "metabase/lib/redux";
-import type { SchemaName } from "metabase-types/api";
+import type {
+  Collection,
+  CollectionId,
+  CollectionType,
+  SchemaName,
+} from "metabase-types/api";
 
 import type { DataPickerValue } from "../DataPicker";
 import type { TablePickerValue } from "../TablePicker";
@@ -30,10 +35,12 @@ export function useGetPathFromValue({
   value,
   opened,
   libraryCollection,
+  visibleCollectionIds,
 }: {
   value?: DataPickerValue;
   opened: boolean;
   libraryCollection?: MiniPickerCollectionItem;
+  visibleCollectionIds?: CollectionId[];
 }) {
   const [path, setPath] = useState<MiniPickerFolderItem[]>([]);
   const [isLoadingPath, setIsLoadingPath] = useState(false);
@@ -45,11 +52,16 @@ export function useGetPathFromValue({
     }
     setIsLoadingPath(true);
 
-    getPathFromValue(value, dispatch, libraryCollection).then((newPath) => {
+    getPathFromValue(
+      value,
+      dispatch,
+      libraryCollection,
+      visibleCollectionIds,
+    ).then((newPath) => {
       setPath(newPath);
       setIsLoadingPath(false);
     });
-  }, [value, opened, dispatch, libraryCollection]);
+  }, [value, opened, dispatch, libraryCollection, visibleCollectionIds]);
 
   return [path, setPath, { isLoadingPath }] as const;
 }
@@ -58,9 +70,15 @@ async function getPathFromValue(
   value: DataPickerValue,
   dispatch: DispatchFn,
   libraryCollection?: MiniPickerCollectionItem,
+  visibleCollectionIds?: CollectionId[],
 ): Promise<MiniPickerFolderItem[]> {
   if (value.model !== "table") {
-    return getCollectionPathFromValue(value, dispatch, libraryCollection);
+    return getCollectionPathFromValue(
+      value,
+      dispatch,
+      libraryCollection,
+      visibleCollectionIds,
+    );
   }
 
   const table = await dispatch(
@@ -103,6 +121,7 @@ async function getCollectionPathFromValue(
   value: DataPickerValue,
   dispatch: DispatchFn,
   libraryCollection?: MiniPickerCollectionItem,
+  visibleCollectionIds?: CollectionId[],
 ): Promise<MiniPickerFolderItem[]> {
   const table =
     value.model === "table"
@@ -172,15 +191,47 @@ async function getCollectionPathFromValue(
     });
   }
 
-  return locationPath;
+  return filterPathByVisibleCollections(locationPath, visibleCollectionIds);
 }
 
 // not a factory
 export function getFolderAndHiddenFunctions(
   models: MiniPickerPickableItem["model"][],
   shouldHide?: (item: MiniPickerItem | unknown) => boolean,
+  visibleCollectionIds?: CollectionId[],
+  requestedCollectionIds?: CollectionId[],
 ) {
   const modelSet = new Set(models);
+  const visibleCollectionIdSet = new Set(visibleCollectionIds ?? []);
+  const requestedCollectionIdSet = new Set(
+    requestedCollectionIds ?? visibleCollectionIds ?? [],
+  );
+
+  const isCollectionVisible = (item: MiniPickerItem | unknown) => {
+    if (!visibleCollectionIds?.length) {
+      return true;
+    }
+
+    if (!item || typeof item !== "object") {
+      return false;
+    }
+
+    const collectionId = getCollectionId(item);
+
+    if (collectionId == null) {
+      return false;
+    }
+
+    if (
+      "model" in item &&
+      item.model === MiniPickerFolderModel.Collection &&
+      visibleCollectionIdSet.has(collectionId)
+    ) {
+      return true;
+    }
+
+    return requestedCollectionIdSet.has(collectionId);
+  };
   const isFolder = (
     item: MiniPickerItem | unknown,
   ): item is MiniPickerFolderItem => {
@@ -200,6 +251,10 @@ export function getFolderAndHiddenFunctions(
     }
 
     if (!("here" in item) && !("below" in item)) {
+      return false;
+    }
+
+    if (!isCollectionVisible(item)) {
       return false;
     }
 
@@ -224,6 +279,10 @@ export function getFolderAndHiddenFunctions(
       return true;
     }
 
+    if (!isCollectionVisible(item)) {
+      return true;
+    }
+
     return (
       !modelSet.has(item.model as MiniPickerPickableItem["model"]) &&
       !isFolder(item)
@@ -231,6 +290,204 @@ export function getFolderAndHiddenFunctions(
   };
   return { isFolder, isHidden };
 }
+
+export function useVisibleCollections(
+  collectionIds: CollectionId[] | undefined,
+  models: MiniPickerPickableItem["model"][],
+) {
+  const dispatch = useDispatch();
+  const [collections, setCollections] = useState<MiniPickerCollectionItem[]>(
+    [],
+  );
+  const [resolvedVisibleCollectionIds, setResolvedVisibleCollectionIds] =
+    useState<CollectionId[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const uniqueCollectionIds = useMemo(
+    () => Array.from(new Set(collectionIds ?? [])),
+    [collectionIds],
+  );
+
+  useDeepCompareEffect(() => {
+    let isCancelled = false;
+
+    if (!uniqueCollectionIds.length) {
+      setCollections([]);
+      setResolvedVisibleCollectionIds([]);
+      setIsLoading(false);
+      return;
+    }
+
+    const fetchCollectionsByIds = async (ids: CollectionId[]) => {
+      const subscriptions = ids.map((id) =>
+        dispatch(
+          collectionApi.endpoints.getCollection.initiate(
+            { id, ignore_error: true },
+            { subscribe: false },
+          ),
+        ),
+      );
+
+      const responses = await Promise.all(
+        subscriptions.map((subscription) => subscription.unwrap().catch(() => null)),
+      );
+
+      subscriptions.forEach((subscription) => {
+        subscription?.unsubscribe?.();
+      });
+
+      return responses.filter(
+        (collection): collection is Collection => Boolean(collection),
+      );
+    };
+
+    const collectAncestors = (collection: Collection) => {
+      const location = collection.effective_location ?? collection.location;
+      const locationIds = (location ?? "")
+        .split("/")
+        .map((part) => normalizeCollectionId(part))
+        .filter(Boolean) as CollectionId[];
+      const ancestorIds =
+        collection.effective_ancestors?.map((ancestor) => ancestor.id) ?? [];
+
+      const combinedIds = new Set<CollectionId>([
+        "root",
+        ...locationIds,
+        ...ancestorIds,
+      ]);
+
+      combinedIds.delete(collection.id as CollectionId);
+
+      return Array.from(combinedIds).filter(
+        (id): id is CollectionId => Boolean(id),
+      );
+    };
+
+    setIsLoading(true);
+
+    (async () => {
+      const primaryCollections = await fetchCollectionsByIds(
+        uniqueCollectionIds,
+      );
+
+      const ancestorIds = Array.from(
+        new Set(
+          primaryCollections.flatMap((collection) => collectAncestors(collection)),
+        ),
+      );
+
+      const missingAncestorIds = ancestorIds.filter(
+        (id) => !uniqueCollectionIds.includes(id),
+      );
+
+      const ancestorCollections = missingAncestorIds.length
+        ? await fetchCollectionsByIds(missingAncestorIds)
+        : [];
+
+      if (isCancelled) {
+        return;
+      }
+
+      const allCollections = [...primaryCollections, ...ancestorCollections];
+      const resolvedIds = Array.from(
+        new Set([
+          ...uniqueCollectionIds,
+          ...ancestorIds,
+          ...allCollections.map((collection) => collection.id as CollectionId),
+        ]),
+      );
+
+      setCollections(
+        allCollections.map((collection) => ({
+          id: collection.id,
+          name: collection.name,
+          model: "collection",
+          here: collection.here ?? models,
+          below: collection.below,
+          type: collection.type as CollectionType,
+        })),
+      );
+      setResolvedVisibleCollectionIds(resolvedIds);
+      setIsLoading(false);
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [dispatch, models, uniqueCollectionIds]);
+
+  return { collections, resolvedVisibleCollectionIds, isLoading };
+}
+
+const getCollectionId = (
+  item: MiniPickerItem | unknown,
+): CollectionId | null => {
+  if (!item || typeof item !== "object" || !("model" in item)) {
+    return null;
+  }
+
+  if ((item as { model: string }).model === MiniPickerFolderModel.Collection) {
+    return (item as MiniPickerItem).id as CollectionId;
+  }
+
+  return (
+    (item as { collection_id?: CollectionId })?.collection_id ??
+    (item as { collection?: { id?: CollectionId } })?.collection?.id ??
+    null
+  );
+};
+
+const filterPathByVisibleCollections = (
+  path: MiniPickerFolderItem[],
+  visibleCollectionIds?: CollectionId[],
+) => {
+  if (!visibleCollectionIds?.length) {
+    return path;
+  }
+
+  const allowedCollectionIds = new Set(visibleCollectionIds ?? []);
+  const hasAnyCollection = path.some(
+    (item) => item.model === MiniPickerFolderModel.Collection,
+  );
+
+  if (!hasAnyCollection) {
+    return path;
+  }
+
+  const filteredPath = path.filter(
+    (item) =>
+      item.model !== MiniPickerFolderModel.Collection ||
+      allowedCollectionIds.has(item.id),
+  );
+
+  const hasAllowedCollection = filteredPath.some(
+    (item) =>
+      item.model === MiniPickerFolderModel.Collection &&
+      allowedCollectionIds.has(item.id),
+  );
+
+  return hasAllowedCollection ? filteredPath : [];
+};
+
+const normalizeCollectionId = (
+  value: string | number | null | undefined,
+): CollectionId | null => {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  if (typeof value === "number") {
+    return value as CollectionId;
+  }
+
+  const numericValue = Number(value);
+
+  if (!Number.isNaN(numericValue)) {
+    return numericValue as CollectionId;
+  }
+
+  return value as CollectionId;
+};
 
 export const focusFirstMiniPickerItem = () => {
   // any time the path changes, focus the first item

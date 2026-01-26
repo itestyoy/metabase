@@ -7,6 +7,7 @@ import type { MiniPickerPickableItem } from "metabase/common/components/Pickers/
 import type { UpdateQueryHookProps } from "metabase/query_builder/hooks/types";
 import { Box, Space, Stack, type StackProps, Title } from "metabase/ui";
 import * as Lib from "metabase-lib";
+import type { CollectionId } from "metabase-types/api";
 
 type SummarizeMetricsPickerProps = UpdateQueryHookProps & StackProps;
 
@@ -25,19 +26,35 @@ export const SummarizeMetricsPicker = ({
     [query, stageIndex],
   );
 
-  const metricsById = useMemo(() => {
+  const { metricsById, metricCollectionIds } = useMemo(() => {
     const metricMap = new Map<string, Lib.MetricMetadata>();
+    const collectionIdSet = new Set<CollectionId>();
+
     metrics.forEach((metric) => {
       const displayInfo = Lib.displayInfo(query, stageIndex, metric);
       const info = displayInfo as unknown as {
-        id?: number;
+        id?: number | string;
+        "collection-id"?: CollectionId;
+        collection_id?: CollectionId;
       };
       if (info.id != null) {
         metricMap.set(String(info.id), metric);
       }
+      const collectionId = info["collection-id"] ?? info.collection_id;
+      if (collectionId != null) {
+        collectionIdSet.add(collectionId);
+      }
     });
-    return metricMap;
+
+    return {
+      metricsById: metricMap,
+      metricCollectionIds: Array.from(collectionIdSet),
+    };
   }, [metrics, query, stageIndex]);
+
+  const visibleCollectionIds = metricCollectionIds.length
+    ? metricCollectionIds
+    : undefined;
 
   const handleMetricSelect = useCallback(
     (item: MiniPickerPickableItem) => {
@@ -103,6 +120,7 @@ export const SummarizeMetricsPicker = ({
           searchQuery={searchQuery}
           trapFocus={focusPicker}
           onChange={handleMetricSelect}
+          visibleCollectionIds={visibleCollectionIds}
           shouldHide={(item) => {
             if (
               typeof item === "object" &&

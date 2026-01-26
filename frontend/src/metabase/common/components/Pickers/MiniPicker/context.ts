@@ -5,12 +5,15 @@ import {
   useContext,
 } from "react";
 
+import type { CollectionId } from "metabase-types/api";
+
 import type {
   MiniPickerCollectionItem,
   MiniPickerFolderItem,
   MiniPickerItem,
   MiniPickerPickableItem,
 } from "./types";
+import type { CollectionId } from "metabase-types/api";
 
 export interface MiniPickerContextValue {
   path: MiniPickerFolderItem[];
@@ -25,6 +28,9 @@ export interface MiniPickerContextValue {
   onBrowseAll?: () => void;
   libraryCollection?: MiniPickerCollectionItem;
   shouldShowLibrary?: boolean;
+  visibleCollectionIds?: CollectionId[];
+  visibleCollections?: MiniPickerCollectionItem[];
+  isLoadingVisibleCollections?: boolean;
 }
 
 export const MiniPickerContext = createContext<

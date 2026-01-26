@@ -10,10 +10,12 @@ import type { MiniPickerItem, MiniPickerPickableItem } from "../../types";
 import {
   focusFirstMiniPickerItem,
   getFolderAndHiddenFunctions,
+  useVisibleCollections,
   useGetPathFromValue,
 } from "../../utils";
 import { MiniPickerListLoader } from "../MiniPickerItemList";
 import { MiniPickerPane } from "../MiniPickerPane";
+import type { CollectionId } from "metabase-types/api";
 
 export type MiniPickerProps = {
   searchQuery?: string;
@@ -26,6 +28,7 @@ export type MiniPickerProps = {
   onBrowseAll?: () => void;
   shouldHide?: (item: MiniPickerItem | unknown) => boolean;
   shouldShowLibrary?: boolean;
+  visibleCollectionIds?: CollectionId[];
 };
 
 export function MiniPicker({
@@ -39,19 +42,31 @@ export function MiniPicker({
   trapFocus = false,
   shouldHide,
   shouldShowLibrary = true,
+  visibleCollectionIds,
 }: MiniPickerProps) {
   const { data: libraryCollection } =
     PLUGIN_DATA_STUDIO.useGetLibraryCollection();
+  const {
+    collections: resolvedVisibleCollections,
+    resolvedVisibleCollectionIds,
+    isLoading: isLoadingVisibleCollections,
+  } = useVisibleCollections(visibleCollectionIds, models);
 
   const [path, setPath, { isLoadingPath }] = useGetPathFromValue({
     value,
     opened,
     libraryCollection,
+    visibleCollectionIds: resolvedVisibleCollectionIds,
   });
 
   const { isFolder, isHidden } = useMemo(() => {
-    return getFolderAndHiddenFunctions(models, shouldHide);
-  }, [models, shouldHide]);
+    return getFolderAndHiddenFunctions(
+      models,
+      shouldHide,
+      resolvedVisibleCollectionIds,
+      visibleCollectionIds,
+    );
+  }, [models, shouldHide, resolvedVisibleCollectionIds, visibleCollectionIds]);
 
   useEffect(() => {
     if (trapFocus && path) {
@@ -84,6 +99,9 @@ export function MiniPicker({
         canBrowse: !!onBrowseAll,
         libraryCollection,
         shouldShowLibrary,
+        visibleCollectionIds: resolvedVisibleCollectionIds,
+        visibleCollections: resolvedVisibleCollections,
+        isLoadingVisibleCollections,
       }}
     >
       <Menu

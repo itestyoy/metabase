@@ -19,7 +19,10 @@ import { useSetting } from "metabase/common/hooks";
 import { getIcon } from "metabase/lib/icon";
 import { PLUGIN_DATA_STUDIO } from "metabase/plugins";
 import { Box, Flex, Icon, Text } from "metabase/ui";
-import type { SchemaName, SearchModel } from "metabase-types/api";
+import type {
+  SchemaName,
+  SearchModel,
+} from "metabase-types/api";
 
 import { useMiniPickerContext } from "../context";
 import type {
@@ -58,15 +61,53 @@ export function MiniPickerItemList() {
 
 function RootItemList() {
   const { data: databases } = useListDatabasesQuery();
-  const { setPath, isHidden, models, shouldShowLibrary } =
-    useMiniPickerContext();
+  const {
+    setPath,
+    isHidden,
+    models,
+    shouldShowLibrary,
+    visibleCollectionIds,
+    visibleCollections,
+    isLoadingVisibleCollections,
+  } = useMiniPickerContext();
   const { isLoading: isLoadingRootCollection, error: rootCollectionError } =
     useGetCollectionQuery({ id: "root" });
-  const { data: libraryCollection, isLoading } =
+  const { data: libraryCollection, isLoading: isLoadingLibrary } =
     PLUGIN_DATA_STUDIO.useGetResolvedLibraryCollection();
   const enableNestedQueries = useSetting("enable-nested-queries");
 
-  if (isLoading || isLoadingRootCollection) {
+  if (visibleCollectionIds?.length) {
+    if (isLoadingVisibleCollections) {
+      return <MiniPickerListLoader />;
+    }
+
+    return (
+      <ItemList>
+        {(visibleCollections ?? []).map((collection) => (
+          <MiniPickerItem
+            key={collection.id}
+            name={collection.name}
+            model="collection"
+            isFolder
+            isHidden={isHidden(collection)}
+            onClick={() => {
+              setPath([
+                {
+                  model: "collection",
+                  id: collection.id,
+                  name: collection.name,
+                  here: collection.here,
+                  below: collection.below,
+                },
+              ]);
+            }}
+          />
+        ))}
+      </ItemList>
+    );
+  }
+
+  if (isLoadingLibrary || isLoadingRootCollection) {
     return <MiniPickerListLoader />;
   }
 

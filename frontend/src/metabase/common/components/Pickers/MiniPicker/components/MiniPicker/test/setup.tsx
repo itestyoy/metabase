@@ -121,13 +121,19 @@ export const setup = async (
     name: "Our analytics",
   });
 
+  const MORE_THINGS_COLLECTION = createMockCollection({
+    id: 101,
+    name: "more things",
+    here: collectionItemModels,
+  });
+
   setupCollectionByIdEndpoint({
-    collections: [ROOT_COLLECTION],
+    collections: [ROOT_COLLECTION, MORE_THINGS_COLLECTION],
     error: hasAccessToRoot ? undefined : "You can't do that Ryan",
   });
 
   setupCollectionItemsEndpoint({
-    collection: createMockCollection({ id: "root", name: "Our analytics" }),
+    collection: ROOT_COLLECTION,
     collectionItems: [
       createMockCollectionItem({
         id: 101,
@@ -170,11 +176,7 @@ export const setup = async (
   });
 
   setupCollectionItemsEndpoint({
-    collection: createMockCollection({
-      id: 101,
-      name: "more things",
-      here: collectionItemModels,
-    }),
+    collection: MORE_THINGS_COLLECTION,
     collectionItems: [
       createMockCollectionItem({
         id: 201,

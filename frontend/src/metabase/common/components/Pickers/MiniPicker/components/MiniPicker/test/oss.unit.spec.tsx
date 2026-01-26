@@ -203,6 +203,19 @@ describe("MiniPicker", () => {
       expect(await screen.findByText("Meryton")).toBeInTheDocument(); // sibling
       expect(screen.queryByText(/Our analytics/)).not.toBeInTheDocument(); // document sibling
     });
+
+    it("only shows provided collections when visibleCollectionIds is set", async () => {
+      await setup({ visibleCollectionIds: [101] });
+
+      expect(await screen.findByText("Our analytics")).toBeInTheDocument();
+      expect(await screen.findByText("more things")).toBeInTheDocument();
+      expect(screen.queryByText("Mini Db")).not.toBeInTheDocument();
+
+      await userEvent.click(await screen.findByText("Our analytics"));
+      expect(screen.queryByText("Brighton")).not.toBeInTheDocument();
+      await userEvent.click(await screen.findByText("more things"));
+      expect(await screen.findByText("Meryton")).toBeInTheDocument();
+    });
   });
 
   describe("search", () => {
@@ -244,6 +257,12 @@ describe("MiniPicker", () => {
       await setup({ searchQuery: "a" });
       expect(await screen.findByText("Lucas")).toBeInTheDocument();
       expect(screen.queryByText("Wickham")).not.toBeInTheDocument();
+    });
+
+    it("respects visibleCollectionIds in search results", async () => {
+      await setup({ searchQuery: "bing", visibleCollectionIds: [101] });
+      expect(await screen.findByText("No search results")).toBeInTheDocument();
+      expect(screen.queryByText("Bingley")).not.toBeInTheDocument();
     });
 
     it("can pick a search result", async () => {
