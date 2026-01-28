@@ -591,8 +591,8 @@ const PivotTableInner = forwardRef<HTMLDivElement, VisualizationProps>(
                           >
                             <Tooltip
                               label={t`Show column`}
-                              withinPortal={false}
-                              position="right"
+                              withinPortal
+                              position="top"
                             >
                               <HiddenColumnButton
                                 aria-label={t`Show column`}
