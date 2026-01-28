@@ -247,9 +247,9 @@ export const HiddenColumnButton = styled.button`
   width: 24px;
   height: 24px;
   border-radius: 999px;
-  border: 1px solid ${color("brand")};
-  background-color: var(--mb-color-brand);
-  color: var(--mb-color-text-white);
+  border: 1px solid ${color("border")};
+  background-color: var(--mb-color-bg-white);
+  color: var(--mb-color-text-primary);
   cursor: pointer;
   opacity: 0;
   transform: scale(0.95);
@@ -268,6 +268,6 @@ export const HiddenColumnButton = styled.button`
   }
 
   &:hover {
-    background-color: ${adjustBrightness(color("brand"), 0.15, 0)};
+    background-color: ${alpha("border", 0.08)};
   }
 `;
