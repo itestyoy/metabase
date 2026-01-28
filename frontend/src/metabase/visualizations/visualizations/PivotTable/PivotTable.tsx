@@ -588,9 +588,12 @@ const PivotTableInner = forwardRef<HTMLDivElement, VisualizationProps>(
                           <HiddenColumnHotspot
                             key={`hidden-column-${start}`}
                             style={{ left: hotspotLeft }}
-                            title={t`Show column`}
                           >
-                            <Tooltip label={t`Show column`} withinPortal={false}>
+                            <Tooltip
+                              label={t`Show column`}
+                              withinPortal={false}
+                              position="right"
+                            >
                               <HiddenColumnButton
                                 aria-label={t`Show column`}
                                 onClick={() => handleRestoreColumn(start)}
