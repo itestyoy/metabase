@@ -233,7 +233,7 @@ export const HiddenColumnHotspot = styled.div`
   top: 0;
   bottom: 0;
   width: ${HIDDEN_COLUMN_TOGGLE_HOTSPOT}px;
-  transform: translateX(-50%);
+  transform: translateX(0%);
   display: flex;
   align-items: center;
   justify-content: center;
