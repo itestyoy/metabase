@@ -225,7 +225,7 @@ export const HiddenColumnsLayer = styled.div`
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 110;
+  z-index: 300;
 `;
 
 export const HiddenColumnHotspot = styled.div`
@@ -238,6 +238,7 @@ export const HiddenColumnHotspot = styled.div`
   align-items: center;
   justify-content: center;
   pointer-events: auto;
+  z-index: 310;
 `;
 
 export const HiddenColumnButton = styled.button`
@@ -259,6 +260,7 @@ export const HiddenColumnButton = styled.button`
     background-color 120ms ease,
     box-shadow 120ms ease;
   box-shadow: 0 2px 6px ${alpha("border", 0.4)};
+  z-index: 320;
 
   ${HiddenColumnHotspot}:hover &,
   &:focus-visible {

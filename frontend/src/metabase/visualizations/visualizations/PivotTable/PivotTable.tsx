@@ -428,6 +428,19 @@ const PivotTableInner = forwardRef<HTMLDivElement, VisualizationProps>(
       topHeaderWidth,
     );
 
+    const getHiddenColumnLabel = useCallback(
+      (offset: number) => {
+        const leafHeader = topHeaderItems.find(
+          (item) => item.offset === offset && item.maxDepthBelow === 0,
+        );
+        if (leafHeader) {
+          return tc(leafHeader.value);
+        }
+        return tc(t`Column`);
+      },
+      [topHeaderItems, tc],
+    );
+
     function getCellClickHandler(clicked: PivotTableClicked) {
       if (!clicked) {
         return undefined;
@@ -580,17 +593,14 @@ const PivotTableInner = forwardRef<HTMLDivElement, VisualizationProps>(
                         }}
                       >
                         {hiddenColumnRuns.map(({ start, left }) => {
-                          const hotspotLeft = Math.max(
-                            left,
-                            HIDDEN_COLUMN_TOGGLE_HOTSPOT / 2,
-                          );
+                          const hotspotLeft = left;
                           return (
                           <HiddenColumnHotspot
                             key={`hidden-column-${start}`}
                             style={{ left: hotspotLeft }}
                           >
                             <Tooltip
-                              label={t`Show column`}
+                              label={`${t`Show column`}: ${getHiddenColumnLabel(start)}`}
                               withinPortal
                               position="top"
                             >
