@@ -54,6 +54,7 @@ import {
   CELL_HEIGHT,
   DEFAULT_CELL_WIDTH,
   HIDDEN_COLUMN_RESTORE_WIDTH,
+  HIDDEN_COLUMN_TOGGLE_HOTSPOT,
   LEFT_HEADER_LEFT_SPACING,
   MIN_HEADER_CELL_WIDTH,
   MIN_VALUE_COLUMN_WIDTH,
@@ -578,16 +579,15 @@ const PivotTableInner = forwardRef<HTMLDivElement, VisualizationProps>(
                           transform: `translateX(-${scrollLeft}px)`,
                         }}
                       >
-                        {hiddenColumnRuns.map(({ start, left }) => (
+                        {hiddenColumnRuns.map(({ start, left }) => {
+                          const hotspotLeft = Math.max(
+                            left,
+                            HIDDEN_COLUMN_TOGGLE_HOTSPOT / 2,
+                          );
+                          return (
                           <HiddenColumnHotspot
                             key={`hidden-column-${start}`}
-                            style={{
-                              left,
-                              transform:
-                                left === 0 ? "translateX(0)" : undefined,
-                              justifyContent:
-                                left === 0 ? "flex-start" : undefined,
-                            }}
+                            style={{ left: hotspotLeft }}
                             title={t`Show column`}
                           >
                             <HiddenColumnButton
@@ -598,7 +598,8 @@ const PivotTableInner = forwardRef<HTMLDivElement, VisualizationProps>(
                               <Icon name="eye" size={12} />
                             </HiddenColumnButton>
                           </HiddenColumnHotspot>
-                        ))}
+                          );
+                        })}
                       </HiddenColumnsLayer>
                     )}
                   </div>
