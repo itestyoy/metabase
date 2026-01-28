@@ -156,7 +156,7 @@ export const settings = {
       return t`Show row totals`;
     },
     widget: "toggle",
-    default: true,
+    default: false,
     inline: true,
   },
   "pivot.show_column_totals": {
@@ -167,7 +167,7 @@ export const settings = {
       return t`Show column totals`;
     },
     widget: "toggle",
-    default: true,
+    default: false,
     inline: true,
   },
   "pivot.condense_duplicate_totals": {
@@ -181,7 +181,7 @@ export const settings = {
       return t`Hide additional total elements if the totals are the same`;
     },
     widget: "toggle",
-    default: true,
+    default: false,
     inline: true,
     getHidden: (
       _series: RawSeries,

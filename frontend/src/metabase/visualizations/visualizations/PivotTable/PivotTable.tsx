@@ -547,7 +547,8 @@ const PivotTableInner = forwardRef<HTMLDivElement, VisualizationProps>(
                       position: "relative",
                       minWidth: `${topHeaderWidth}px`,
                       height: topHeaderHeight,
-                      overflow: "hidden",
+                      overflow: "visible",
+                      zIndex: 200,
                     }}
                   >
                     <Collection
@@ -587,9 +588,12 @@ const PivotTableInner = forwardRef<HTMLDivElement, VisualizationProps>(
                     {hiddenColumnRuns.length > 0 && (
                       <HiddenColumnsLayer
                         style={{
-                          width: hiddenColumnsOverlayWidth,
+                          width:
+                            hiddenColumnsOverlayWidth +
+                            HIDDEN_COLUMN_TOGGLE_HOTSPOT,
                           height: topHeaderHeight,
                           transform: `translateX(-${scrollLeft}px)`,
+                          left: -HIDDEN_COLUMN_TOGGLE_HOTSPOT / 2,
                         }}
                       >
                         {hiddenColumnRuns.map(({ start, left }) => {

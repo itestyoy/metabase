@@ -259,17 +259,17 @@ export const HiddenColumnButton = styled.button`
     transform 120ms ease,
     background-color 120ms ease,
     box-shadow 120ms ease;
-  box-shadow: 0 2px 6px ${alpha("border", 0.4)};
+  box-shadow: none;
   z-index: 320;
 
   ${HiddenColumnHotspot}:hover &,
   &:focus-visible {
     opacity: 1;
     transform: scale(1);
-    box-shadow: 0 3px 8px ${alpha("border", 0.5)};
+    box-shadow: none;
   }
 
   &:hover {
-    background-color: ${alpha("border", 0.08)};
+    background-color: var(--mb-color-bg-white);
   }
 `;
