@@ -28,7 +28,7 @@ import {
 import { getScrollBarSize } from "metabase/lib/dom";
 import { connect } from "metabase/lib/redux";
 import { getSetting } from "metabase/selectors/settings";
-import { Icon, useMantineTheme } from "metabase/ui";
+import { Icon, Tooltip, useMantineTheme } from "metabase/ui";
 import {
   getDefaultSize,
   getMinSize,
@@ -590,13 +590,15 @@ const PivotTableInner = forwardRef<HTMLDivElement, VisualizationProps>(
                             style={{ left: hotspotLeft }}
                             title={t`Show column`}
                           >
-                            <HiddenColumnButton
-                              aria-label={t`Show column`}
-                              onClick={() => handleRestoreColumn(start)}
-                              type="button"
-                            >
-                              <Icon name="eye" size={12} />
-                            </HiddenColumnButton>
+                            <Tooltip label={t`Show column`} withinPortal={false}>
+                              <HiddenColumnButton
+                                aria-label={t`Show column`}
+                                onClick={() => handleRestoreColumn(start)}
+                                type="button"
+                              >
+                                <Icon name="eye" size={12} />
+                              </HiddenColumnButton>
+                            </Tooltip>
                           </HiddenColumnHotspot>
                           );
                         })}
