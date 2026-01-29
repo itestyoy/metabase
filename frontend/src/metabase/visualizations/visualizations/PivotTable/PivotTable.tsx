@@ -428,18 +428,17 @@ const PivotTableInner = forwardRef<HTMLDivElement, VisualizationProps>(
       topHeaderWidth,
     );
 
-    const getHiddenColumnLabel = useCallback(
-      (offset: number) => {
-        const leafHeader = topHeaderItems.find(
-          (item) => item.offset === offset && item.maxDepthBelow === 0,
-        );
-        if (leafHeader) {
-          return tc(leafHeader.value);
-        }
-        return tc(t`Column`);
-      },
-      [topHeaderItems, tc],
-    );
+    const getHiddenColumnLabel = (offset: number) => {
+      const leafHeader = topHeaderItems.find(
+        item => item.offset === offset && item.maxDepthBelow === 0,
+      );
+
+      if (leafHeader) {
+        return tc(leafHeader.value);
+      }
+
+      return tc(t`Column`);
+    };
 
     function getCellClickHandler(clicked: PivotTableClicked) {
       if (!clicked) {
