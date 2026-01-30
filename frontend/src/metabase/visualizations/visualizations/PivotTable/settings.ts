@@ -157,6 +157,7 @@ export const settings = {
     },
     widget: "toggle",
     default: false,
+    persistDefault: true,
     inline: true,
   },
   "pivot.show_column_totals": {
@@ -168,6 +169,7 @@ export const settings = {
     },
     widget: "toggle",
     default: false,
+    persistDefault: true,
     inline: true,
   },
   "pivot.condense_duplicate_totals": {
