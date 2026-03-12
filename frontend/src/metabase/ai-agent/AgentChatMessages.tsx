@@ -1,8 +1,19 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { t } from "ttag";
 
 import Markdown from "metabase/common/components/Markdown";
-import { Icon, Loader, ScrollArea, Text } from "metabase/ui";
+import {
+  Code,
+  Flex,
+  Group,
+  Icon,
+  Loader,
+  Paper,
+  ScrollArea,
+  Stack,
+  Text,
+  UnstyledButton,
+} from "metabase/ui";
 
 import S from "./AgentModal.module.css";
 import type { ChatMessage } from "./types";
@@ -15,6 +26,7 @@ const EXAMPLE_PROMPTS = [
 ];
 
 function ToolCallMessage({ message }: { message: ChatMessage }) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const isError = message.toolStatus === "error";
   const toolLabel =
     message.toolName
@@ -22,25 +34,43 @@ function ToolCallMessage({ message }: { message: ChatMessage }) {
       .replace(/\b\w/g, c => c.toUpperCase()) ?? "Tool";
 
   return (
-    <div className={S.toolMessage}>
-      <div className={S.toolHeader}>
+    <Paper
+      className={S.toolMessage}
+      withBorder
+      radius="sm"
+      p={0}
+    >
+      <Group
+        className={S.toolHeader}
+        gap={6}
+        px={10}
+        pt={6}
+        pb={message.toolResult ? 2 : 6}
+        style={message.toolResult ? { cursor: "pointer" } : undefined}
+        onClick={message.toolResult ? () => setIsExpanded((v: boolean) => !v) : undefined}
+      >
         <Icon
           name={isError ? "warning" : "check"}
           size={12}
           color={isError ? "var(--mb-color-error)" : "var(--mb-color-success)"}
         />
-        <Text size="xs" c="text-medium" fs="italic">
+        <Text size="xs" c="text-medium" fs="italic" style={{ flex: 1 }}>
           {toolLabel}
         </Text>
-      </div>
-      {message.toolResult && (
-        <div className={S.toolResult}>
-          {message.toolResult.length > 200
-            ? message.toolResult.slice(0, 200) + "…"
-            : message.toolResult}
-        </div>
+        {message.toolResult && (
+          <Icon
+            name={isExpanded ? "chevronup" : "chevrondown"}
+            size={10}
+            color="var(--mb-color-text-light)"
+          />
+        )}
+      </Group>
+      {message.toolResult && isExpanded && (
+        <Code className={S.toolResult} block>
+          {message.toolResult}
+        </Code>
       )}
-    </div>
+    </Paper>
   );
 }
 
@@ -49,20 +79,30 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     return <ToolCallMessage message={message} />;
   }
 
+  // Skip the optimistic placeholder added while waiting for the server response
+  if (message.content === null) {
+    return null;
+  }
+
   const isUser = message.role === "user";
 
   return (
-    <div
-      className={`${S.messageBubbleRow} ${isUser ? S.messageBubbleRowUser : S.messageBubbleRowAssistant}`}
+    <Flex
+      className={S.messageBubbleRow}
+      justify={isUser ? "flex-end" : "flex-start"}
     >
       {isUser ? (
-        <div className={S.userBubble}>{message.content}</div>
+        <Paper className={S.userBubble} radius="xl">
+          <Text size="sm" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+            {message.content}
+          </Text>
+        </Paper>
       ) : (
-        <div className={S.assistantBubble}>
+        <Paper className={S.assistantBubble} radius="xl">
           <Markdown>{message.content ?? ""}</Markdown>
-        </div>
+        </Paper>
       )}
-    </div>
+    </Flex>
   );
 }
 
@@ -90,26 +130,25 @@ export function AgentChatMessages({
 
   if (messages.length === 0) {
     return (
-      <div className={S.emptyState}>
+      <Stack className={S.emptyState} align="center" justify="center" gap="sm">
         <Icon name="ai" size={32} color="var(--mb-color-brand)" />
         <Text size="sm" c="text-medium" ta="center" fw={500}>
           {t`What would you like to explore?`}
         </Text>
         {onSelectPrompt && (
-          <div className={S.promptChips}>
+          <Stack className={S.promptChips} gap={6} w="100%">
             {EXAMPLE_PROMPTS.map(p => (
-              <button
+              <UnstyledButton
                 key={p}
                 className={S.promptChip}
                 onClick={() => onSelectPrompt(p)}
-                type="button"
               >
                 {p}
-              </button>
+              </UnstyledButton>
             ))}
-          </div>
+          </Stack>
         )}
-      </div>
+      </Stack>
     );
   }
 
@@ -119,20 +158,18 @@ export function AgentChatMessages({
       viewportRef={viewportRef}
       scrollbarSize={6}
     >
-      <div className={S.messagesInner}>
+      <Stack className={S.messagesInner} gap={4} p="12px 16px">
         {messages.map(msg => (
           <MessageBubble key={msg.id} message={msg} />
         ))}
         {isLoading && (
-          <div
-            className={`${S.messageBubbleRow} ${S.messageBubbleRowAssistant}`}
-          >
-            <div className={S.loadingBubble}>
+          <Flex justify="flex-start" className={S.messageBubbleRow}>
+            <Paper className={S.loadingBubble} radius="xl">
               <Loader size="xs" />
-            </div>
-          </div>
+            </Paper>
+          </Flex>
         )}
-      </div>
+      </Stack>
     </ScrollArea>
   );
 }

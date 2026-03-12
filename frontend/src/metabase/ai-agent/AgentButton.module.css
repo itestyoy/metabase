@@ -1,0 +1,19 @@
+/* AI Agent button — icon color shimmer */
+
+@keyframes ai-color-cycle {
+  0%   { color: var(--mb-color-brand); }
+  25%  { color: var(--mb-color-success); }
+  50%  { color: #a855f7; }
+  75%  { color: #ec4899; }
+  100% { color: var(--mb-color-brand); }
+}
+
+.aiButton {
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.2s;
+}
+
+.aiIcon {
+  animation: ai-color-cycle 4s linear infinite;
+}

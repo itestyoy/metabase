@@ -1,16 +1,14 @@
-/* Floating agent modal - fixed bottom-right, draggable */
+/* Floating agent modal - fixed bottom-right, draggable.
+   position/size set exclusively via inline styles in AgentModal.tsx — no CSS defaults
+   to avoid any layout race between CSS class and inline style on first paint. */
 .floatingModal {
   position: fixed;
-  bottom: 80px;
-  right: 24px;
-  width: 420px;
-  height: 560px;
   display: flex;
   flex-direction: column;
   background: var(--mb-color-background);
   border: 1px solid var(--mb-color-border);
   border-radius: var(--default-border-radius, 8px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+  box-shadow: none;
   /* z-index below Mantine's default tooltip/popover z-index (300)
      so tooltips inside the modal are never covered by the modal itself */
   z-index: 200;
@@ -60,32 +58,6 @@
   border-radius: 0 0 3px 3px;
 }
 
-/* Top-left corner — diagonal resize */
-.resizeHandleTopLeft {
-  top: 0;
-  left: 0;
-  width: 14px;
-  height: 14px;
-  cursor: nwse-resize;
-}
-
-.resizeHandleTopLeft::after {
-  content: "";
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 8px;
-  height: 8px;
-  border-top: 2px solid var(--mb-color-border);
-  border-left: 2px solid var(--mb-color-border);
-  border-radius: 2px 0 0 0;
-  transition: border-color 0.12s;
-}
-
-.resizeHandleTopLeft:hover::after {
-  border-color: var(--mb-color-brand);
-}
-
 /* Bottom-right corner — resize in both axes (keeps top-left fixed) */
 .resizeHandleBottomRight {
   bottom: 0;
@@ -111,10 +83,11 @@
       transparent 1.2px
     );
   background-size: 5px 5px;
+  /* Anchored from bottom-right so dots always sit in the corner */
   background-position:
-    10px 10px,
-    6px 10px,
-    10px 6px;
+    right 3px bottom 3px,
+    right 8px bottom 3px,
+    right 3px bottom 8px;
   background-repeat: no-repeat;
   transition: background-image 0.12s;
 }
@@ -159,7 +132,7 @@
 }
 
 .modalHeaderTitle svg {
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--mb-color-text-white);
 }
 
 .modalHeaderActions {
@@ -207,7 +180,7 @@
   font-size: 12px;
   line-height: 1.4;
   color: var(--mb-color-text-medium);
-  background: var(--mb-color-background-secondary, #f5f5f5);
+  background: var(--mb-color-background-secondary);
   border: 1px solid var(--mb-color-border);
   border-radius: 6px;
   cursor: pointer;
@@ -215,7 +188,7 @@
 }
 
 .promptChip:hover {
-  background: var(--mb-color-brand-light, #e8f0fe);
+  background: var(--mb-color-brand-lighter);
   border-color: var(--mb-color-brand);
   color: var(--mb-color-brand);
 }
@@ -223,7 +196,7 @@
 /* ── Not configured — env var box ───────────────── */
 .envVarBox {
   padding: 6px 12px;
-  background: var(--mb-color-background-secondary, #f5f5f5);
+  background: var(--mb-color-background-secondary);
   border: 1px solid var(--mb-color-border);
   border-radius: 6px;
   font-size: 11px;
@@ -232,51 +205,43 @@
   word-break: break-all;
 }
 
-/* ── Input hint text ─────────────────────────────── */
-.inputHint {
-  line-height: 1;
-}
-
 /* ── Chat bubbles ───────────────────────────────── */
 .messageBubbleRow {
   display: flex;
   margin-bottom: 4px;
 }
 
-.messageBubbleRowUser {
-  justify-content: flex-end;
-}
-
-.messageBubbleRowAssistant {
-  justify-content: flex-start;
-}
-
+/* User bubble: brand background, white text */
 .userBubble {
-  background: var(--mb-color-brand);
-  color: white;
-  border-radius: 16px 16px 4px 16px;
-  padding: 8px 14px;
+  background: var(--mb-color-brand) !important;
+  border-color: transparent !important;
+  border-radius: 16px 16px 4px 16px !important;
+  padding: 8px 14px !important;
   max-width: 82%;
-  font-size: 13px;
-  line-height: 1.45;
-  word-break: break-word;
-  white-space: pre-wrap;
+  box-shadow: none !important;
 }
 
+.userBubble * {
+  color: var(--mb-color-text-white) !important;
+}
+
+/* Assistant bubble: green tint background */
 .assistantBubble {
-  background: var(--mb-color-background-secondary, #f5f5f5);
-  color: var(--mb-color-text-primary);
-  border-radius: 16px 16px 16px 4px;
-  padding: 8px 14px;
+  background: color-mix(in srgb, var(--mb-color-success) 10%, transparent) !important;
+  border-color: color-mix(in srgb, var(--mb-color-success) 25%, transparent) !important;
+  border-radius: 16px 16px 16px 4px !important;
+  padding: 8px 14px !important;
   max-width: 82%;
   font-size: 13px;
   line-height: 1.45;
   word-break: break-word;
+  box-shadow: none !important;
 }
 
 /* Markdown inside assistant bubble */
 .assistantBubble p {
   margin: 0 0 6px;
+  color: var(--mb-color-text-primary);
 }
 
 .assistantBubble p:last-child {
@@ -303,50 +268,42 @@
 
 /* ── Tool call messages ─────────────────────────── */
 .toolMessage {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 10px;
   margin: 2px 0;
-  border-left: 2px solid var(--mb-color-border);
-  background: var(--mb-color-background-secondary, #fafafa);
-  border-radius: 0 6px 6px 0;
-}
-
-.toolHeader {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  border-left: 3px solid var(--mb-color-border) !important;
+  background: var(--mb-color-background-secondary) !important;
+  border-radius: 0 6px 6px 0 !important;
+  box-shadow: none !important;
+  overflow: hidden;
 }
 
 .toolResult {
-  padding: 4px 8px;
-  background: var(--mb-color-background);
-  border: 1px solid var(--mb-color-border);
-  border-radius: 4px;
   max-height: 72px;
   overflow: hidden;
   font-size: 11px;
+  background: var(--mb-color-background) !important;
+  border-top: 1px solid var(--mb-color-border) !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
   color: var(--mb-color-text-medium);
-  font-family: monospace;
-  white-space: pre-wrap;
-  word-break: break-all;
 }
 
 /* ── Loading bubble ─────────────────────────────── */
 .loadingBubble {
-  background: var(--mb-color-background-secondary, #f5f5f5);
-  border-radius: 16px 16px 16px 4px;
-  padding: 10px 14px;
-  display: inline-flex;
-  align-items: center;
+  background: var(--mb-color-background-secondary) !important;
+  border-color: transparent !important;
+  border-radius: 16px 16px 16px 4px !important;
+  padding: 10px 14px !important;
+  box-shadow: none !important;
 }
 
 /* ── Error banner ───────────────────────────────── */
 .errorBanner {
   padding: 8px 16px;
-  background: var(--mb-color-error-light, #fff0f0);
-  border-top: 1px solid var(--mb-color-error, #e74c3c);
+  background: var(--mb-color-error-light);
+  border-top: 1px solid var(--mb-color-error);
   flex-shrink: 0;
 }
 
@@ -356,7 +313,7 @@
   padding: 10px 12px 12px;
   flex-shrink: 0;
   background: var(--mb-color-background);
-  border-radius: 0 0 var(--default-border-radius, 8px) var(--default-border-radius, 8px);
+  border-radius: 0;
 }
 
 /* Composer: unified container wrapping textarea + footer row */
@@ -371,7 +328,6 @@
 
 .composer:focus-within {
   border-color: var(--mb-color-brand);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--mb-color-brand) 12%, transparent);
 }
 
 .composerTextarea {
@@ -385,6 +341,7 @@
   resize: none;
   font-size: 13px;
   line-height: 1.5;
+  color: var(--mb-color-text-primary);
 }
 
 /* Footer row: hint text left, send button right */

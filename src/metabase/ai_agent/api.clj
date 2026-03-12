@@ -12,9 +12,28 @@
    [metabase.api.common :as api]
    [metabase.api.macros :as api.macros]
    [metabase.util.log :as log]
-   [metabase.util.malli.schema :as ms]))
+   [metabase.util.malli.schema :as ms]
+   [toucan2.core :as t2]))
 
 (set! *warn-on-reflection* true)
+
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;; Access control
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+(defn- current-user-in-ai-group?
+  "Returns true if the current user is a superuser OR belongs to a permissions
+  group named exactly \"AI\"."
+  []
+  (or api/*is-superuser?*
+      (boolean
+       (seq (t2/query {:select [1]
+                       :from   [[:permissions_group_membership :pgm]]
+                       :join   [[:permissions_group :pg] [:= :pg.id :pgm.group_id]]
+                       :where  [:and
+                                [:= :pgm.user_id api/*current-user-id*]
+                                [:= :pg.name "AI"]]
+                       :limit  1})))))
 
 (def ^:private max-tool-iterations 10)
 
@@ -87,16 +106,34 @@
   [_route-params
    _query-params
    {message              :message
-    previous-response-id :previous_response_id} :- [:map
-                                                     [:message              ms/NonBlankString]
-                                                     [:previous_response_id {:optional true} [:maybe :string]]]]
+    previous-response-id :previous_response_id
+    context              :context} :- [:map
+                                       [:message              ms/NonBlankString]
+                                       [:previous_response_id {:optional true} [:maybe :string]]
+                                       [:context              {:optional true}
+                                        [:maybe [:map
+                                                 [:id    :int]
+                                                 [:name  :string]
+                                                 [:model :string]]]]]]
   (api/check-403 (ai.settings/ai-agent-enabled))
+  (api/check-403 (current-user-in-ai-group?))
   (let [api-key (ai.settings/ai-agent-openai-api-key)]
     (api/check-403 (some? api-key))
-    (let [model  (or (ai.settings/ai-agent-openai-model) "gpt-5.4")
-          opts   (cond-> {:message message}
-                   previous-response-id
-                   (assoc :previous-response-id previous-response-id))
+    (let [model          (or (ai.settings/ai-agent-openai-model) "gpt-5.4")
+          ;; Prepend context hint when the user has selected a specific entity
+          effective-msg  (if context
+                           (str "[Context: "
+                                (name (:model context))
+                                " \""
+                                (:name context)
+                                "\" (id="
+                                (:id context)
+                                ")]\n"
+                                message)
+                           message)
+          opts           (cond-> {:message effective-msg}
+                           previous-response-id
+                           (assoc :previous-response-id previous-response-id))
           result (run-tool-loop api-key model opts)]
       {:response_id (:response-id result)
        :content     (:content result)
@@ -112,7 +149,9 @@
   whether it is configured and which model is active."
   []
   (api/check-403 (ai.settings/ai-agent-enabled))
+  (api/check-403 (current-user-in-ai-group?))
   {:configured       (some? (ai.settings/ai-agent-openai-api-key))
+   :access           true
    :model            (or (ai.settings/ai-agent-openai-model) "gpt-5.4")
    :enabled          (ai.settings/ai-agent-enabled)
    :available_models [;; ── GPT-5 family (flagship, Mar 2026) ───────────────────────────

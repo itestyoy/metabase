@@ -6,6 +6,7 @@
   (:require
    [cheshire.core :as json]
    [metabase.api.common :as api]
+   [metabase.models.interface :as mi]
    [metabase.permissions.core :as perms]
    [metabase.queries.models.card :as queries.card]
    [metabase.query-processor :as qp]
@@ -48,9 +49,9 @@ Use this before writing SQL to understand the available tables and column names.
 Useful to check whether a similar question already exists before creating one."
     :strict      true
     :parameters  {:type                 "object"
-                  :properties           {:search {:type        "string"
-                                                  :description "Optional name filter (case-insensitive substring match)."}}
-                  :required             []
+                  :properties           {:search {:type        ["string" "null"]
+                                                  :description "Optional name filter (case-insensitive substring match). Pass null to list recent questions."}}
+                  :required             ["search"]
                   :additionalProperties false}}
 
    {:type        "function"
@@ -60,10 +61,11 @@ Useful to check whether a similar question already exists before creating one."
     :parameters  {:type                 "object"
                   :properties           {:query {:type        "string"
                                                  :description "Search query string."}
-                                         :type  {:type        "string"
-                                                 :enum        ["question" "dashboard" "collection" "table" "metric"]
-                                                 :description "Optional: restrict results to this item type."}}
-                  :required             ["query"]
+                                         :type  {:anyOf       [{:type "string"
+                                                                :enum ["question" "dashboard" "collection" "table" "metric"]}
+                                                               {:type "null"}]
+                                                 :description "Optional: restrict results to this item type. Pass null to search all types."}}
+                  :required             ["query" "type"]
                   :additionalProperties false}}
 
    {:type        "function"
@@ -80,6 +82,18 @@ Use this to preview data or validate SQL before saving a question."
                   :additionalProperties false}}
 
    {:type        "function"
+    :name        "execute_card"
+    :description "Run an existing saved question (card) by its ID and return the results.
+Use this to show the user the current data from a question they already have, or to
+inspect results before referencing them in your answer."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:card_id {:type        "integer"
+                                                   :description "ID of the saved question to execute."}}
+                  :required             ["card_id"]
+                  :additionalProperties false}}
+
+   {:type        "function"
     :name        "create_question"
     :description "Create and save a new question (saved query) in Metabase.
 After creating, always provide the URL /question/<id> to the user."
@@ -91,14 +105,15 @@ After creating, always provide the URL /question/<id> to the user."
                                                          :description "Database ID this question queries."}
                                          :sql           {:type        "string"
                                                          :description "Native SQL query."}
-                                         :description   {:type        "string"
-                                                         :description "Optional description of the question."}
-                                         :collection_id {:type        "integer"
-                                                         :description "Optional collection ID to save the question into."}
-                                         :display       {:type        "string"
-                                                         :enum        ["table" "bar" "line" "pie" "scalar" "area" "row"]
-                                                         :description "Visualization type. Defaults to table."}}
-                  :required             ["name" "database_id" "sql"]
+                                         :description   {:type        ["string" "null"]
+                                                         :description "Optional description of the question. Pass null if none."}
+                                         :collection_id {:type        ["integer" "null"]
+                                                         :description "Optional collection ID to save the question into. Pass null for default collection."}
+                                         :display       {:anyOf       [{:type "string"
+                                                                        :enum ["table" "bar" "line" "pie" "scalar" "area" "row"]}
+                                                                       {:type "null"}]
+                                                         :description "Visualization type. Pass null to use default (table)."}}
+                  :required             ["name" "database_id" "sql" "description" "collection_id" "display"]
                   :additionalProperties false}}])
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
@@ -106,7 +121,7 @@ After creating, always provide the URL /question/<id> to the user."
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
 (defn- list-databases []
-  (let [dbs (t2/select :model/Database {:order-by [[:name :asc]]})]
+  (let [dbs (filter mi/can-read? (t2/select :model/Database {:order-by [[:name :asc]]}))]
     (if (empty? dbs)
       "No databases available."
       (str "Available databases:\n"
@@ -119,8 +134,10 @@ After creating, always provide the URL /question/<id> to the user."
 (defn- get-database-schema [database-id]
   (let [db     (t2/select-one :model/Database :id database-id)
         _      (api/check-404 db)
-        tables (t2/select :model/Table :db_id database-id :active true
-                          {:order-by [[:schema :asc] [:name :asc]]})]
+        _      (api/check-403 (mi/can-read? db))
+        tables (filter mi/can-read?
+                       (t2/select :model/Table :db_id database-id :active true
+                                  {:order-by [[:schema :asc] [:name :asc]]}))]
     (if (empty? tables)
       (format "Database \"%s\" has no accessible tables." (:name db))
       (let [table-ids (map :id tables)
@@ -145,14 +162,16 @@ After creating, always provide the URL /question/<id> to the user."
              (clojure.string/join "\n\n" summaries))))))
 
 (defn- list-questions [search-term]
-  (let [cards (if (seq search-term)
-                (t2/select :model/Card
-                           :name [:like (str "%" search-term "%")]
-                           :archived false
-                           {:limit 20 :order-by [[:name :asc]]})
-                (t2/select :model/Card
-                           :archived false
-                           {:limit 20 :order-by [[:updated_at :desc]]}))]
+  (let [cards (->> (if (seq search-term)
+                     (t2/select :model/Card
+                                :name [:like (str "%" search-term "%")]
+                                :archived false
+                                {:limit 50 :order-by [[:name :asc]]})
+                     (t2/select :model/Card
+                                :archived false
+                                {:limit 50 :order-by [[:updated_at :desc]]}))
+                   (filter mi/can-read?)
+                   (take 20))]
     (if (empty? cards)
       (if search-term
         (format "No questions found matching \"%s\"." search-term)
@@ -193,34 +212,54 @@ After creating, always provide the URL /question/<id> to the user."
                               "")))
                   results))))))
 
+(defn- format-qp-result
+  "Formats a query-processor result map into a human-readable string for the AI."
+  [result]
+  (if-let [err (:error result)]
+    (str "Query error: " err)
+    (let [cols (get-in result [:data :cols] [])
+          rows (get-in result [:data :rows] [])]
+      (if (empty? rows)
+        "Query executed successfully. No rows returned."
+        (let [header    (clojure.string/join " | " (map :name cols))
+              separator (clojure.string/join " | " (repeat (count cols) "---"))
+              data-rows (map (fn [row]
+                               (clojure.string/join " | "
+                                 (map #(if (nil? %) "NULL" (str %)) row)))
+                             (take 10 rows))
+              total     (count rows)
+              note      (when (> total 10)
+                          (format "\n... (%d total rows, showing first 10)" total))]
+          (str "Results:\n" header "\n" separator "\n"
+               (clojure.string/join "\n" data-rows)
+               note))))))
+
 (defn- run-query [database-id sql]
-  (let [query    {:database database-id
-                  :type     :native
-                  :native   {:query sql}}
-        result   (try
-                   (qp/process-query
-                    (assoc query :info {:executed-by api/*current-user-id*
-                                        :context     :ad-hoc}))
-                   (catch Exception e
-                     {:error (.getMessage e)}))]
-    (if-let [err (:error result)]
-      (str "Query error: " err)
-      (let [cols (get-in result [:data :cols] [])
-            rows (get-in result [:data :rows] [])]
-        (if (empty? rows)
-          "Query executed successfully. No rows returned."
-          (let [header    (clojure.string/join " | " (map :name cols))
-                separator (clojure.string/join " | " (repeat (count cols) "---"))
-                data-rows (map (fn [row]
-                                 (clojure.string/join " | "
-                                   (map #(if (nil? %) "NULL" (str %)) row)))
-                               (take 10 rows))
-                total     (count rows)
-                note      (when (> total 10)
-                            (format "\n... (%d total rows, showing first 10)" total))]
-            (str "Results:\n" header "\n" separator "\n"
-                 (clojure.string/join "\n" data-rows)
-                 note)))))))
+  (let [query  {:database database-id
+                :type     :native
+                :native   {:query sql}}
+        result (try
+                 (qp/process-query
+                  (assoc query :info {:executed-by api/*current-user-id*
+                                      :context     :ad-hoc}))
+                 (catch Exception e
+                   {:error (.getMessage e)}))]
+    (format-qp-result result)))
+
+(defn- execute-card [card-id]
+  (let [card (t2/select-one :model/Card :id card-id)
+        _    (api/check-404 card)
+        _    (api/check-403 (mi/can-read? card))
+        result (try
+                 (qp/process-query
+                  (assoc (:dataset_query card)
+                         :info {:executed-by api/*current-user-id*
+                                :context     :ad-hoc
+                                :card-id     card-id}))
+                 (catch Exception e
+                   {:error (.getMessage e)}))]
+    (str (format "Results for question \"%s\" (ID: %d):\n" (:name card) card-id)
+         (format-qp-result result)))))
 
 (defn- create-question [{:strs [name description database_id sql collection_id display]}]
   (let [card-data (cond-> {:name          name
@@ -251,6 +290,7 @@ After creating, always provide the URL /question/<id> to the user."
       "list_questions"    (list-questions (get args "search"))
       "search_items"      (search-items (get args "query") (get args "type"))
       "run_query"         (run-query (get args "database_id") (get args "sql"))
+      "execute_card"      (execute-card (get args "card_id"))
       "create_question"   (create-question args)
       (str "Unknown tool: " tool-name))
     (catch Exception e

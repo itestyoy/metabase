@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import api from "metabase/lib/api";
 
+import type { AgentContextValue } from "../AgentContextPicker";
 import type { ChatMessage } from "../types";
 
 function makeId(): string {
@@ -12,6 +13,7 @@ export interface AgentSettings {
   configured: boolean;
   model: string;
   enabled: boolean;
+  access: boolean;
 }
 
 interface AgentResponse {
@@ -44,15 +46,18 @@ export function useAgentChat() {
           configured?: boolean;
           model?: string;
           enabled?: boolean;
+          access?: boolean;
         };
         setAgentSettings({
           configured: s.configured ?? false,
           model: s.model ?? "gpt-5.4",
           enabled: s.enabled ?? true,
+          access: s.access ?? false,
         });
       })
       .catch(() => {
-        setAgentSettings({ configured: false, model: "gpt-5.4", enabled: true });
+        // 403 means no access (not in AI group); other errors = assume no access
+        setAgentSettings({ configured: false, model: "gpt-5.4", enabled: true, access: false });
       });
   }, []);
 
@@ -63,7 +68,7 @@ export function useAgentChat() {
   }, []);
 
   const sendMessage = useCallback(
-    async (userText: string) => {
+    async (userText: string, context?: AgentContextValue | null) => {
       setError(null);
       setIsLoading(true);
 
@@ -85,6 +90,14 @@ export function useAgentChat() {
         const body: Record<string, unknown> = { message: userText };
         if (previousResponseId) {
           body.previous_response_id = previousResponseId;
+        }
+        if (context) {
+          body.context = {
+            id: context.id,
+            name: context.name,
+            model: context.model,
+            ...(context.url_params ? { url_params: context.url_params } : {}),
+          };
         }
 
         const response = (await api.POST("/api/ai-agent/chat")(
