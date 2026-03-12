@@ -120,14 +120,14 @@ function ToolCallMessage({ message }: { message: ChatMessage }) {
           size={12}
           color={isError ? "var(--mb-color-error)" : "var(--mb-color-success)"}
         />
-        <Text size="xs" c="text-medium" fs="italic" style={{ flex: 1 }}>
+        <Text size="xs" c="text-secondary" fs="italic" style={{ flex: 1 }}>
           {toolLabel}
         </Text>
         {message.toolResult && (
           <Icon
             name={isExpanded ? "chevronup" : "chevrondown"}
             size={10}
-            color="var(--mb-color-text-light)"
+            color="var(--mb-color-text-tertiary)"
           />
         )}
       </Group>
@@ -218,7 +218,7 @@ export function AgentChatMessages({
     return (
       <Stack className={S.emptyState} align="center" justify="center" gap="sm">
         <Icon name="ai" size={32} color="var(--mb-color-brand)" />
-        <Text size="sm" c="text-medium" ta="center" fw={500}>
+        <Text size="sm" c="text-secondary" ta="center" fw={500}>
           {t`What would you like to explore?`}
         </Text>
         {onSelectPrompt && (

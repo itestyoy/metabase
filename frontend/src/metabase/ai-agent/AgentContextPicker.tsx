@@ -63,7 +63,7 @@ export function AgentContextPicker({ value, onChange }: AgentContextPickerProps)
   return (
     <Box className={S.contextBar}>
       <Icon name="layers" size={12} className={S.contextIcon} />
-      <Text size="xs" c="text-light" className={S.contextLabel}>
+      <Text size="xs" c="text-tertiary" className={S.contextLabel}>
         {t`Context:`}
       </Text>
 
@@ -98,7 +98,7 @@ export function AgentContextPicker({ value, onChange }: AgentContextPickerProps)
             onClick={() => setIsOpen((o: boolean) => !o)}
           >
             <Icon name="add" size={10} className={S.contextAddIcon} />
-            <Text size="xs" c="text-light">{t`Add context`}</Text>
+            <Text size="xs" c="text-tertiary">{t`Add context`}</Text>
           </UnstyledButton>
         )}
 

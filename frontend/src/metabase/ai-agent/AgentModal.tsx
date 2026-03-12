@@ -165,11 +165,11 @@ export function AgentModal({ onClose }: AgentModalProps) {
         <>
           {isNotConfigured ? (
             <Stack align="center" justify="center" p="xl" gap="sm" style={{ flex: 1 }}>
-              <Icon name="gear_settings_filled" size={32} color="var(--mb-color-text-light)" />
-              <Text size="sm" c="text-medium" ta="center" fw={500}>
+              <Icon name="gear_settings_filled" size={32} color="var(--mb-color-text-tertiary)" />
+              <Text size="sm" c="text-secondary" ta="center" fw={500}>
                 {t`AI Agent is not configured`}
               </Text>
-              <Text size="xs" c="text-light" ta="center">
+              <Text size="xs" c="text-tertiary" ta="center">
                 {t`Set the OpenAI API key in`}{" "}
                 <Anchor href="/admin/settings/ai-agent" size="xs">
                   {t`Admin › Settings › AI Agent`}
@@ -212,7 +212,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                     className={S.composerTextarea}
                   />
                   <div className={S.composerFooter}>
-                    <Text size="xs" c="text-light" className={S.inputHint}>
+                    <Text size="xs" c="text-tertiary" className={S.inputHint}>
                       {t`Enter to send · Shift+Enter for new line`}
                     </Text>
                     <ActionIcon

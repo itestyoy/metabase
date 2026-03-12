@@ -6,7 +6,7 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  background: var(--mb-color-background);
+  background: var(--mb-color-background-primary);
   border: 1px solid var(--mb-color-border);
   border-radius: var(--default-border-radius, 8px);
   box-shadow: none;
@@ -70,17 +70,17 @@
   /* Classic three-dot resize grip via repeating gradient */
   background-image: radial-gradient(
       circle,
-      var(--mb-color-text-light) 1.2px,
+      var(--mb-color-text-tertiary) 1.2px,
       transparent 1.2px
     ),
     radial-gradient(
       circle,
-      var(--mb-color-text-light) 1.2px,
+      var(--mb-color-text-tertiary) 1.2px,
       transparent 1.2px
     ),
     radial-gradient(
       circle,
-      var(--mb-color-text-light) 1.2px,
+      var(--mb-color-text-tertiary) 1.2px,
       transparent 1.2px
     );
   background-size: 5px 5px;
@@ -113,7 +113,7 @@
 }
 
 .modalHeaderTitle svg {
-  color: var(--mb-color-text-white);
+  color: var(--mb-color-text-primary-inverse);
 }
 
 .modalHeaderActions {
@@ -161,7 +161,7 @@
   padding: 7px 12px;
   font-size: 12px;
   line-height: 1.4;
-  color: var(--mb-color-text-medium);
+  color: var(--mb-color-text-secondary);
   background: var(--mb-color-background-secondary);
   border: 1px solid var(--mb-color-border);
   border-radius: 6px;
@@ -182,7 +182,7 @@
   border: 1px solid var(--mb-color-border);
   border-radius: 6px;
   font-size: 11px;
-  color: var(--mb-color-text-medium);
+  color: var(--mb-color-text-secondary);
   font-family: monospace;
   word-break: break-all;
 }
@@ -204,7 +204,7 @@
 }
 
 .userBubble * {
-  color: var(--mb-color-text-white) !important;
+  color: var(--mb-color-text-primary-inverse) !important;
 }
 
 /* Assistant bubble: green tint background */
@@ -232,7 +232,7 @@
 }
 
 .assistantBubble pre {
-  background: var(--mb-color-background);
+  background: var(--mb-color-background-primary);
   border: 1px solid var(--mb-color-border);
   border-radius: 4px;
   padding: 8px;
@@ -242,7 +242,7 @@
 }
 
 .assistantBubble code {
-  background: var(--mb-color-background);
+  background: var(--mb-color-background-primary);
   border: 1px solid var(--mb-color-border);
   border-radius: 3px;
   padding: 1px 4px;
@@ -269,14 +269,14 @@
   max-height: 72px;
   overflow: hidden;
   font-size: 11px;
-  background: var(--mb-color-background) !important;
+  background: var(--mb-color-background-primary) !important;
   border-top: 1px solid var(--mb-color-border) !important;
   border-left: none !important;
   border-right: none !important;
   border-bottom: none !important;
   border-radius: 0 !important;
   box-shadow: none !important;
-  color: var(--mb-color-text-medium);
+  color: var(--mb-color-text-secondary);
 }
 
 /* ── Structured content blocks ─────────────────── */
@@ -284,7 +284,7 @@
   display: flex;
   align-items: center;
   padding: 8px 12px;
-  background: var(--mb-color-background);
+  background: var(--mb-color-background-primary);
   border: 1px solid var(--mb-color-border);
   border-radius: 8px;
   color: var(--mb-color-text-primary);
@@ -299,7 +299,7 @@
 
 .sqlBlock {
   font-size: 12px !important;
-  background: var(--mb-color-background) !important;
+  background: var(--mb-color-background-primary) !important;
   border: 1px solid var(--mb-color-border) !important;
   border-radius: 6px !important;
   padding: 8px 10px !important;
@@ -329,7 +329,7 @@
   border-top: 1px solid var(--mb-color-border);
   padding: 10px 12px 12px;
   flex-shrink: 0;
-  background: var(--mb-color-background);
+  background: var(--mb-color-background-primary);
   border-radius: 0;
 }
 
@@ -337,7 +337,7 @@
 .composer {
   border: 1.5px solid var(--mb-color-border);
   border-radius: 10px;
-  background: var(--mb-color-background);
+  background: var(--mb-color-background-primary);
   transition: border-color 0.15s;
   display: flex;
   flex-direction: column;
