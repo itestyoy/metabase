@@ -94,6 +94,32 @@ inspect results before referencing them in your answer."
                   :additionalProperties false}}
 
    {:type        "function"
+    :name        "get_card_details"
+    :description "Get detailed information about a saved question (card): its name, description,
+dataset query (SQL or structured), visualization type, parameters, and the collection it belongs to.
+Use this when the user asks about a specific question, wants to understand how it works, or you need
+to inspect its query before modifying or recreating it."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:card_id {:type        "integer"
+                                                   :description "ID of the saved question to inspect."}}
+                  :required             ["card_id"]
+                  :additionalProperties false}}
+
+   {:type        "function"
+    :name        "get_dashboard_details"
+    :description "Get detailed information about a dashboard: its name, description, parameters (filters),
+and the list of cards (questions) it contains with their sizes and positions.
+Use this when the user asks about a dashboard's structure, wants to know what questions are on it,
+or needs to understand how its filters work."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:dashboard_id {:type        "integer"
+                                                        :description "ID of the dashboard to inspect."}}
+                  :required             ["dashboard_id"]
+                  :additionalProperties false}}
+
+   {:type        "function"
     :name        "create_question"
     :description "Create and save a new question (saved query) in Metabase.
 After creating, always provide the URL /question/<id> to the user."
@@ -261,6 +287,99 @@ After creating, always provide the URL /question/<id> to the user."
     (str (format "Results for question \"%s\" (ID: %d):\n" (:name card) card-id)
          (format-qp-result result))))
 
+(defn- get-card-details [card-id]
+  (let [card (t2/select-one :model/Card :id card-id)
+        _    (api/check-404 card)
+        _    (api/check-403 (mi/can-read? card))
+        coll (when (:collection_id card)
+               (t2/select-one :model/Collection :id (:collection_id card)))
+        dq   (:dataset_query card)
+        query-info (cond
+                     (= "native" (name (or (:type dq) "")))
+                     (str "Type: Native SQL\nSQL:\n" (get-in dq [:native :query]))
+
+                     (= "query" (name (or (:type dq) "")))
+                     (str "Type: Structured (MBQL)\n"
+                          "Query: " (json/generate-string (:query dq)))
+
+                     :else
+                     (str "Query: " (json/generate-string dq)))]
+    (str (format "Question details (ID: %d):\n" card-id)
+         (format "- Name: \"%s\"\n" (:name card))
+         (when (:description card)
+           (format "- Description: %s\n" (:description card)))
+         (format "- Display: %s\n" (name (or (:display card) :table)))
+         (format "- Database ID: %s\n" (:database dq))
+         (when coll
+           (format "- Collection: \"%s\" (ID: %d)\n" (:name coll) (:id coll)))
+         (format "- Created at: %s\n" (:created_at card))
+         (format "- Updated at: %s\n" (:updated_at card))
+         (format "\n%s\n" query-info)
+         (when-let [params (:parameters card)]
+           (when (seq params)
+             (str "\nParameters:\n"
+                  (clojure.string/join "\n"
+                    (map (fn [p]
+                           (format "  - %s (slug: %s, type: %s)"
+                                   (get p "name" (:name p))
+                                   (get p "slug" (:slug p))
+                                   (get p "type" (:type p))))
+                         params))))))))
+
+(defn- get-dashboard-details [dashboard-id]
+  (let [dash (t2/select-one :model/Dashboard :id dashboard-id)
+        _    (api/check-404 dash)
+        _    (api/check-403 (mi/can-read? dash))
+        coll (when (:collection_id dash)
+               (t2/select-one :model/Collection :id (:collection_id dash)))
+        dashcards (t2/select :model/DashboardCard :dashboard_id dashboard-id
+                             {:order-by [[:row :asc] [:col :asc]]})
+        card-ids  (keep :card_id dashcards)
+        cards-map (when (seq card-ids)
+                    (into {} (map (juxt :id identity)
+                                  (t2/select :model/Card :id [:in card-ids]))))]
+    (str (format "Dashboard details (ID: %d):\n" dashboard-id)
+         (format "- Name: \"%s\"\n" (:name dash))
+         (when (:description dash)
+           (format "- Description: %s\n" (:description dash)))
+         (when coll
+           (format "- Collection: \"%s\" (ID: %d)\n" (:name coll) (:id coll)))
+         (format "- Created at: %s\n" (:created_at dash))
+         (format "- Updated at: %s\n" (:updated_at dash))
+
+         ;; Parameters (dashboard filters)
+         (when-let [params (:parameters dash)]
+           (when (seq params)
+             (str "\nFilters/Parameters:\n"
+                  (clojure.string/join "\n"
+                    (map (fn [p]
+                           (format "  - %s (slug: %s, type: %s)"
+                                   (get p "name" (:name p))
+                                   (get p "slug" (:slug p))
+                                   (get p "type" (:type p))))
+                         params)))))
+
+         ;; Cards on the dashboard
+         (str "\n\nCards on this dashboard (" (count dashcards) "):\n"
+              (clojure.string/join "\n"
+                (map (fn [dc]
+                       (let [card (get cards-map (:card_id dc))]
+                         (if card
+                           (format "  - Card ID: %d, Name: \"%s\", Display: %s, Position: row %d col %d, Size: %dx%d"
+                                   (:id card)
+                                   (:name card)
+                                   (name (or (:display card) :table))
+                                   (or (:row dc) 0)
+                                   (or (:col dc) 0)
+                                   (or (:size_x dc) 4)
+                                   (or (:size_y dc) 4))
+                           (format "  - Text/Heading card at row %d col %d, Size: %dx%d"
+                                   (or (:row dc) 0)
+                                   (or (:col dc) 0)
+                                   (or (:size_x dc) 4)
+                                   (or (:size_y dc) 4)))))
+                     dashcards))))))
+
 (defn- create-question [{:strs [name description database_id sql collection_id display]}]
   (let [card-data (cond-> {:name          name
                            :dataset_query {:database database_id
@@ -291,6 +410,8 @@ After creating, always provide the URL /question/<id> to the user."
       "search_items"      (search-items (get args "query") (get args "type"))
       "run_query"         (run-query (get args "database_id") (get args "sql"))
       "execute_card"      (execute-card (get args "card_id"))
+      "get_card_details"  (get-card-details (get args "card_id"))
+      "get_dashboard_details" (get-dashboard-details (get args "dashboard_id"))
       "create_question"   (create-question args)
       (str "Unknown tool: " tool-name))
     (catch Exception e

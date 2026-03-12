@@ -17,6 +17,8 @@ export interface AgentContextValue {
   db_id?: number;
   /** Query-string parameters from the current URL, if any. */
   url_params?: Record<string, string>;
+  /** Raw dataset_query from an ad-hoc (unsaved) question — includes aggregations, breakouts, filters, etc. */
+  dataset_query?: Record<string, unknown>;
 }
 
 interface AgentContextPickerProps {

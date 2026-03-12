@@ -245,6 +245,11 @@ export function useFloatingPanel(constraints: PanelConstraints) {
       if (e.button !== 0) {
         return;
       }
+      // Don't start drag when clicking interactive elements (buttons, links, inputs)
+      const target = e.target as HTMLElement;
+      if (target.closest("button, a, input, [role='button']")) {
+        return;
+      }
       const renderedHeight = state.isMinimized ? c.minimizedHeight : state.height;
       const modalLeft = window.innerWidth - state.right - state.width;
       const modalTop = window.innerHeight - state.bottom - renderedHeight;

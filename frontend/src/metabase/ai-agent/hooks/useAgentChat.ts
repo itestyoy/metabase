@@ -96,7 +96,9 @@ export function useAgentChat() {
             id: context.id,
             name: context.name,
             model: context.model,
+            ...(context.db_id != null ? { db_id: context.db_id } : {}),
             ...(context.url_params ? { url_params: context.url_params } : {}),
+            ...(context.dataset_query ? { dataset_query: context.dataset_query } : {}),
           };
         }
 

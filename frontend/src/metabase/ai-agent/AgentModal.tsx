@@ -15,7 +15,7 @@ import S from "./AgentModal.module.css";
 const PANEL_CONSTRAINTS = {
   minWidth: 320,
   maxWidth: 800,
-  minHeight: 360,
+  minHeight: 510,
   maxHeight: 920,
   appbarHeight: 50,
   minimizedHeight: 52,
