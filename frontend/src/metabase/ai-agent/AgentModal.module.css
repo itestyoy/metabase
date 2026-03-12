@@ -258,6 +258,11 @@
   overflow: hidden;
 }
 
+.toolHeader {
+  display: flex;
+  align-items: center;
+}
+
 .toolResult {
   max-height: 72px;
   overflow: hidden;
