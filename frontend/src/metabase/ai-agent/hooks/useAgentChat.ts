@@ -3,10 +3,49 @@ import { useCallback, useEffect, useState } from "react";
 import api from "metabase/lib/api";
 
 import type { AgentContextValue } from "../AgentContextPicker";
-import type { ChatMessage } from "../types";
+import type { ChatMessage, ContentBlock } from "../types";
 
 function makeId(): string {
   return Math.random().toString(36).slice(2);
+}
+
+/** Minimal check that a block has the required fields for its type. */
+function isValidBlock(b: unknown): b is ContentBlock {
+  if (!b || typeof b !== "object" || !("type" in b)) {
+    return false;
+  }
+  const block = b as Record<string, unknown>;
+  switch (block.type) {
+    case "text":
+    case "sql":
+      return typeof block.content === "string";
+    case "card_link":
+      return typeof block.card_id === "number" && typeof block.name === "string";
+    case "dashboard_link":
+      return typeof block.dashboard_id === "number" && typeof block.name === "string";
+    case "table":
+      return Array.isArray(block.columns) && Array.isArray(block.rows);
+    default:
+      return false;
+  }
+}
+
+/** Try to parse the AI response as structured JSON blocks.
+ *  Falls back to plain markdown if parsing or validation fails. */
+function parseBlocks(content: string): ContentBlock[] | undefined {
+  if (!content) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed && Array.isArray(parsed.blocks) && parsed.blocks.length > 0) {
+      const valid = parsed.blocks.filter(isValidBlock);
+      return valid.length > 0 ? valid : undefined;
+    }
+  } catch {
+    // Not JSON — return undefined so we render as plain markdown
+  }
+  return undefined;
 }
 
 export interface AgentSettings {
@@ -124,11 +163,14 @@ export function useAgentChat() {
           setMessages(prev => [...prev, ...toolMsgs]);
         }
 
-        // Final assistant text
+        // Final assistant text — try to parse structured blocks
+        const rawContent = response.content ?? "";
+        const blocks = parseBlocks(rawContent);
         const assistantMsg: ChatMessage = {
           id: makeId(),
           role: "assistant",
-          content: response.content ?? "",
+          content: blocks ? null : rawContent,
+          blocks,
         };
         setMessages(prev => [...prev, assistantMsg]);
 
