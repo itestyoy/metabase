@@ -86,6 +86,57 @@
   border-color: var(--mb-color-brand);
 }
 
+/* Bottom-right corner — resize in both axes (keeps top-left fixed) */
+.resizeHandleBottomRight {
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  border-radius: 0 0 var(--default-border-radius, 8px) 0;
+  /* Classic three-dot resize grip via repeating gradient */
+  background-image: radial-gradient(
+      circle,
+      var(--mb-color-text-light) 1.2px,
+      transparent 1.2px
+    ),
+    radial-gradient(
+      circle,
+      var(--mb-color-text-light) 1.2px,
+      transparent 1.2px
+    ),
+    radial-gradient(
+      circle,
+      var(--mb-color-text-light) 1.2px,
+      transparent 1.2px
+    );
+  background-size: 5px 5px;
+  background-position:
+    10px 10px,
+    6px 10px,
+    10px 6px;
+  background-repeat: no-repeat;
+  transition: background-image 0.12s;
+}
+
+.resizeHandleBottomRight:hover {
+  background-image: radial-gradient(
+      circle,
+      var(--mb-color-brand) 1.2px,
+      transparent 1.2px
+    ),
+    radial-gradient(
+      circle,
+      var(--mb-color-brand) 1.2px,
+      transparent 1.2px
+    ),
+    radial-gradient(
+      circle,
+      var(--mb-color-brand) 1.2px,
+      transparent 1.2px
+    );
+}
+
 /* ── Header ─────────────────────────────────────── */
 .modalHeader {
   display: flex;

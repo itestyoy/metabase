@@ -13,7 +13,7 @@ const MAX_WIDTH = 800;
 const MIN_HEIGHT = 360;
 const MAX_HEIGHT = 920;
 
-type ResizeEdge = "left" | "top" | "top-left";
+type ResizeEdge = "left" | "top" | "top-left" | "bottom-right";
 
 interface AgentModalProps {
   onClose: () => void;
@@ -42,6 +42,8 @@ export function AgentModal({ onClose }: AgentModalProps) {
     mouseY: number;
     width: number;
     height: number;
+    right: number;
+    bottom: number;
     edge: ResizeEdge;
   } | null>(null);
 
@@ -71,6 +73,8 @@ export function AgentModal({ onClose }: AgentModalProps) {
         mouseY: e.clientY,
         width: size.current.width,
         height: size.current.height,
+        right: position.current.right,
+        bottom: position.current.bottom,
         edge,
       };
     },
@@ -93,20 +97,33 @@ export function AgentModal({ onClose }: AgentModalProps) {
       const r = resizeOrigin.current;
       if (!r) return;
 
-      // Modal is right/bottom anchored: dragging left widens, dragging up tallens
-      const dx = r.mouseX - e.clientX;
-      const dy = r.mouseY - e.clientY;
+      if (r.edge === "bottom-right") {
+        // Keep top-left corner fixed: drag right → wider + right decreases,
+        // drag down → taller + bottom decreases
+        const dx = e.clientX - r.mouseX;
+        const dy = e.clientY - r.mouseY;
+        const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, r.width + dx));
+        const newHeight = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, r.height + dy));
+        size.current = { width: newWidth, height: newHeight };
+        position.current = {
+          right: r.right - (newWidth - r.width),
+          bottom: r.bottom - (newHeight - r.height),
+        };
+      } else {
+        // Left / top / top-left: dragging left widens, dragging up tallens
+        const dx = r.mouseX - e.clientX;
+        const dy = r.mouseY - e.clientY;
+        const newWidth =
+          r.edge === "top"
+            ? r.width
+            : Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, r.width + dx));
+        const newHeight =
+          r.edge === "left"
+            ? r.height
+            : Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, r.height + dy));
+        size.current = { width: newWidth, height: newHeight };
+      }
 
-      const newWidth =
-        r.edge === "top"
-          ? r.width
-          : Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, r.width + dx));
-      const newHeight =
-        r.edge === "left"
-          ? r.height
-          : Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, r.height + dy));
-
-      size.current = { width: newWidth, height: newHeight };
       forceRender(n => n + 1);
     };
 
@@ -175,6 +192,10 @@ export function AgentModal({ onClose }: AgentModalProps) {
           <div
             className={`${S.resizeHandle} ${S.resizeHandleTopLeft}`}
             onMouseDown={handleResizeMouseDown("top-left")}
+          />
+          <div
+            className={`${S.resizeHandle} ${S.resizeHandleBottomRight}`}
+            onMouseDown={handleResizeMouseDown("bottom-right")}
           />
         </>
       )}
