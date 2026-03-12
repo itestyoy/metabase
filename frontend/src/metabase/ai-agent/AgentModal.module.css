@@ -353,19 +353,50 @@
 /* ── Input area ─────────────────────────────────── */
 .inputArea {
   border-top: 1px solid var(--mb-color-border);
-  padding: 10px 12px;
+  padding: 10px 12px 12px;
   flex-shrink: 0;
   background: var(--mb-color-background);
-  /* Round bottom corners to match modal border-radius (no overflow:hidden on parent) */
   border-radius: 0 0 var(--default-border-radius, 8px) var(--default-border-radius, 8px);
 }
 
-.inputRow {
+/* Composer: unified container wrapping textarea + footer row */
+.composer {
+  border: 1.5px solid var(--mb-color-border);
+  border-radius: 10px;
+  background: var(--mb-color-background);
+  transition: border-color 0.15s;
   display: flex;
-  gap: 8px;
-  align-items: flex-end;
+  flex-direction: column;
 }
 
-.textareaWrapper {
-  flex: 1;
+.composer:focus-within {
+  border-color: var(--mb-color-brand);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--mb-color-brand) 12%, transparent);
+}
+
+.composerTextarea {
+  padding: 8px 12px 4px;
+}
+
+/* Strip Mantine's default textarea wrapper padding/margin */
+.composerTextarea textarea {
+  padding: 0 !important;
+  background: transparent !important;
+  resize: none;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Footer row: hint text left, send button right */
+.composerFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 6px 12px;
+}
+
+/* ── Input hint ──────────────────────────────────── */
+.inputHint {
+  line-height: 1;
+  font-size: 11px;
 }

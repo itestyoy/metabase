@@ -290,38 +290,37 @@ export function AgentModal({ onClose }: AgentModalProps) {
               )}
 
               <div className={S.inputArea}>
-                <Flex gap="xs" align="flex-end">
-                  <div className={S.textareaWrapper}>
-                    <Textarea
-                      value={inputText}
-                      onChange={e => setInputText(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder={t`Ask me to create a question, explore data…`}
-                      minRows={1}
-                      maxRows={4}
-                      autosize
-                      disabled={isLoading}
-                      size="sm"
-                      styles={{ input: { borderRadius: 8, resize: "none" } }}
-                    />
-                    <Text size="xs" c="text-light" mt={4} className={S.inputHint}>
+                <div className={S.composer}>
+                  <Textarea
+                    value={inputText}
+                    onChange={e => setInputText(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={t`Ask me anything about your data…`}
+                    minRows={1}
+                    maxRows={5}
+                    autosize
+                    disabled={isLoading}
+                    variant="unstyled"
+                    size="sm"
+                    className={S.composerTextarea}
+                  />
+                  <div className={S.composerFooter}>
+                    <Text size="xs" c="text-light" className={S.inputHint}>
                       {t`Enter to send · Shift+Enter for new line`}
                     </Text>
-                  </div>
-                  <Tooltip label={t`Send (Enter)`}>
                     <ActionIcon
                       variant="filled"
                       color="brand"
-                      size="lg"
+                      size="sm"
+                      radius="xl"
                       onClick={handleSend}
                       disabled={isLoading || !inputText.trim()}
                       aria-label={t`Send message`}
-                      style={{ flexShrink: 0, marginBottom: 20 }}
                     >
-                      <Icon name="send" size={16} />
+                      <Icon name="send" size={13} />
                     </ActionIcon>
-                  </Tooltip>
-                </Flex>
+                  </div>
+                </div>
               </div>
             </>
           )}
