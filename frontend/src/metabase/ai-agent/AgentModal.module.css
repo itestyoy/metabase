@@ -122,6 +122,10 @@
   gap: 2px;
 }
 
+.modalHeaderActions button:hover {
+  background: none;
+}
+
 /* ── Messages area ──────────────────────────────── */
 .messagesScroll {
   flex: 1;
