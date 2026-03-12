@@ -11,6 +11,7 @@
    [metabase.ai-agent.tools :as ai.tools]
    [metabase.api.common :as api]
    [metabase.api.macros :as api.macros]
+   [metabase.collections.models.collection :as collection]
    [metabase.util.log :as log]
    [metabase.util.malli.schema :as ms]
    [toucan2.core :as t2]))
@@ -120,17 +121,22 @@
   (let [api-key (ai.settings/ai-agent-openai-api-key)]
     (api/check-403 (some? api-key))
     (let [model          (or (ai.settings/ai-agent-openai-model) "gpt-5.4")
-          ;; Prepend context hint when the user has selected a specific entity
-          effective-msg  (if context
-                           (str "[Context: "
-                                (name (:model context))
-                                " \""
-                                (:name context)
-                                "\" (id="
-                                (:id context)
-                                ")]\n"
-                                message)
-                           message)
+          personal-coll-id (try
+                             (collection/user->personal-collection-id api/*current-user-id*)
+                             (catch Exception _ nil))
+          ;; Prepend context hints: personal collection + optional entity context
+          effective-msg  (str (when personal-coll-id
+                                (format "[User's personal collection ID: %d — ALWAYS use this as collection_id when creating questions or dashboards]\n"
+                                        personal-coll-id))
+                              (when context
+                                (str "[Context: "
+                                     (name (:model context))
+                                     " \""
+                                     (:name context)
+                                     "\" (id="
+                                     (:id context)
+                                     ")]\n"))
+                              message)
           opts           (cond-> {:message effective-msg}
                            previous-response-id
                            (assoc :previous-response-id previous-response-id))
