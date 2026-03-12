@@ -5,6 +5,7 @@
   position: fixed;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
   background: var(--mb-color-background);
   border: 1px solid var(--mb-color-border);
   border-radius: var(--default-border-radius, 8px);
@@ -12,20 +13,30 @@
   /* z-index below Mantine's default tooltip/popover z-index (300)
      so tooltips inside the modal are never covered by the modal itself */
   z-index: 200;
-  /* No overflow:hidden here — it clips portaled tooltips.
-     Instead each section handles its own overflow. */
+  /* overflow:hidden ensures content respects the set height and resize handles
+     stay at the visual edge. Mantine tooltips are portaled to <body> so they
+     are not clipped. */
+  overflow: hidden;
 }
 
 .floatingModalMinimized {
-  height: 52px;
-  overflow: hidden;
+  /* Override the inline height from JS — 52px includes border thanks to
+     box-sizing: border-box inherited from .floatingModal */
+  height: 52px !important;
   border-radius: var(--default-border-radius, 8px);
+}
+
+/* Applied during drag/resize to prevent text selection and disable transitions */
+.floatingModalInteracting {
+  user-select: none;
+  transition: none !important;
 }
 
 /* ── Resize handles ─────────────────────────────── */
 .resizeHandle {
   position: absolute;
   z-index: 10;
+  touch-action: none; /* prevent scroll on touch resize */
 }
 
 /* Left edge — horizontal resize */
@@ -121,8 +132,7 @@
   cursor: move;
   user-select: none;
   flex-shrink: 0;
-  /* Round only the top corners to match the modal border-radius */
-  border-radius: var(--default-border-radius, 8px) var(--default-border-radius, 8px) 0 0;
+  touch-action: none; /* prevent scroll on touch drag */
 }
 
 .modalHeaderTitle {
@@ -144,6 +154,7 @@
 /* ── Messages area ──────────────────────────────── */
 .messagesScroll {
   flex: 1;
+  min-height: 0; /* allow flex child to shrink below content size */
   overflow: hidden;
 }
 

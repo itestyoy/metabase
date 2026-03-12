@@ -8,44 +8,36 @@ import { AgentChatMessages } from "./AgentChatMessages";
 import type { AgentContextValue } from "./AgentContextPicker";
 import { AgentContextPicker } from "./AgentContextPicker";
 import { useAgentChat } from "./hooks/useAgentChat";
+import { useFloatingPanel } from "./hooks/useFloatingPanel";
 import { usePageContext } from "./hooks/usePageContext";
 import S from "./AgentModal.module.css";
 
-const MIN_WIDTH = 320;
-const MAX_WIDTH = 800;
-const MIN_HEIGHT = 360;
-const MAX_HEIGHT = 920;
-const APPBAR_HEIGHT = 50;
-const MINIMIZED_HEIGHT = 52;
-/** Minimum distance (px) from any viewport edge the modal must maintain. */
-const EDGE_BUFFER = 5;
-
-type ResizeEdge = "left" | "top" | "bottom-right";
+const PANEL_CONSTRAINTS = {
+  minWidth: 320,
+  maxWidth: 800,
+  minHeight: 360,
+  maxHeight: 920,
+  appbarHeight: 50,
+  minimizedHeight: 52,
+  edgeBuffer: 5,
+} as const;
 
 interface AgentModalProps {
   onClose: () => void;
 }
 
 export function AgentModal({ onClose }: AgentModalProps) {
-  const [isMinimized, setIsMinimized] = useState(false);
-  // Ref mirrors isMinimized so the mousemove closure (deps=[]) can read it without going stale
-  const isMinimizedRef = useRef(false);
-  const toggleMinimized = useCallback(() => {
-    setIsMinimized((m: boolean) => {
-      isMinimizedRef.current = !m;
-      return !m;
-    });
-  }, []);
+  const { panelState, panelStyle, headerProps, resizeHandleProps, toggleMinimized } =
+    useFloatingPanel(PANEL_CONSTRAINTS);
+
   const [inputText, setInputText] = useState("");
   const [context, setContext] = useState<AgentContextValue | null>(null);
-  // Tracks whether the user manually changed the context (vs auto-populated from URL)
   const isContextManual = useRef(false);
 
   const { messages, isLoading, error, agentSettings, sendMessage, clearMessages } =
     useAgentChat();
 
   // Auto-populate context from current page; re-runs on every SPA navigation.
-  // If the user manually picked a context, don't overwrite it.
   const pageContext = usePageContext();
   useEffect(() => {
     if (!isContextManual.current) {
@@ -53,131 +45,9 @@ export function AgentModal({ onClose }: AgentModalProps) {
     }
   }, [pageContext]);
 
-  // Wrap setContext to mark manual changes
   const handleContextChange = useCallback((value: AgentContextValue | null) => {
     isContextManual.current = true;
     setContext(value);
-  }, []);
-
-  // ── Position (right/bottom anchored) ───────────────────────────────────
-  // Open near top-right, just below the AppBar, at minimum size
-  const initialBottom = window.innerHeight - APPBAR_HEIGHT - MIN_HEIGHT - EDGE_BUFFER;
-  const position = useRef({ right: EDGE_BUFFER + 20, bottom: Math.max(EDGE_BUFFER, initialBottom) });
-  const size = useRef({ width: MIN_WIDTH, height: MIN_HEIGHT });
-
-  // dragOrigin: cursor offset from modal's top-left corner at drag start
-  const dragOrigin = useRef<{
-    offsetX: number; // cursor.x - modal.left
-    offsetY: number; // cursor.y - modal.top
-  } | null>(null);
-
-  // resizeOrigin: snapshot of fixed edges at resize start
-  const resizeOrigin = useRef<{
-    // Fixed edges (screen coords, pixels from screen top-left)
-    fixedRight: number;  // right edge X = window.innerWidth - right (for left-resize)
-    fixedBottom: number; // bottom edge Y = window.innerHeight - bottom (for top-resize)
-    fixedLeft: number;   // left edge X (for bottom-right resize)
-    fixedTop: number;    // top edge Y (for bottom-right resize)
-    edge: ResizeEdge;
-  } | null>(null);
-
-  const [, forceRender] = useState(0);
-
-  // ── Drag header ─────────────────────────────────────────────────────────
-  // Store cursor offset from modal top-left so the modal doesn't jump on drag start.
-  // When minimized the rendered height is MINIMIZED_HEIGHT (header only), not size.current.height.
-  const handleHeaderMouseDown = useCallback((e: React.MouseEvent) => {
-    const renderedHeight = isMinimizedRef.current ? MINIMIZED_HEIGHT : size.current.height;
-    const modalLeft = window.innerWidth  - position.current.right - size.current.width;
-    const modalTop  = window.innerHeight - position.current.bottom - renderedHeight;
-    dragOrigin.current = {
-      offsetX: e.clientX - modalLeft,
-      offsetY: e.clientY - modalTop,
-    };
-  }, []);
-
-  // ── Resize handles ──────────────────────────────────────────────────────
-  const handleResizeMouseDown = useCallback(
-    (edge: ResizeEdge) => (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const { right, bottom } = position.current;
-      const { width, height } = size.current;
-      resizeOrigin.current = {
-        fixedRight:  window.innerWidth  - right,          // right edge X in screen coords
-        fixedBottom: window.innerHeight - bottom,         // bottom edge Y in screen coords
-        fixedLeft:   window.innerWidth  - right - width,  // left edge X in screen coords
-        fixedTop:    window.innerHeight - bottom - height,// top edge Y in screen coords
-        edge,
-      };
-    },
-    [],
-  );
-
-  // ── Global mouse move/up ────────────────────────────────────────────────
-  useEffect(() => {
-    const clamp = (v: number, min: number, max: number) =>
-      Math.min(max, Math.max(min, v));
-
-    const onMouseMove = (e: MouseEvent) => {
-      // ── Drag ──────────────────────────────────────────────────────────
-      const d = dragOrigin.current;
-      if (d) {
-        const modalLeft = e.clientX - d.offsetX;
-        const modalTop  = e.clientY - d.offsetY;
-        const renderedHeight = isMinimizedRef.current ? MINIMIZED_HEIGHT : size.current.height;
-        // Clamp so every edge stays within the viewport (with EDGE_BUFFER margin).
-        // Top edge must stay below the AppBar.
-        position.current = {
-          right:  clamp(window.innerWidth  - modalLeft - size.current.width, EDGE_BUFFER, window.innerWidth  - size.current.width  - EDGE_BUFFER),
-          bottom: clamp(window.innerHeight - modalTop  - renderedHeight,     EDGE_BUFFER, window.innerHeight - renderedHeight - APPBAR_HEIGHT - EDGE_BUFFER),
-        };
-        forceRender(n => n + 1);
-        return;
-      }
-
-      // ── Resize ────────────────────────────────────────────────────────
-      const r = resizeOrigin.current;
-      if (!r) return;
-
-      if (r.edge === "left") {
-        // Right edge fixed; left edge follows cursor; left must stay ≥ EDGE_BUFFER from viewport left
-        const maxWidth = Math.min(MAX_WIDTH, r.fixedRight - EDGE_BUFFER);
-        const newWidth = clamp(r.fixedRight - e.clientX, MIN_WIDTH, maxWidth);
-        size.current = { ...size.current, width: newWidth };
-      } else if (r.edge === "top") {
-        // Bottom edge fixed; top edge follows cursor; top must stay ≥ APPBAR_HEIGHT + EDGE_BUFFER
-        const maxHeight = Math.min(MAX_HEIGHT, r.fixedBottom - APPBAR_HEIGHT - EDGE_BUFFER);
-        const newHeight = clamp(r.fixedBottom - e.clientY, MIN_HEIGHT, maxHeight);
-        size.current = { ...size.current, height: newHeight };
-      } else if (r.edge === "bottom-right") {
-        // Left+top edges fixed; right+bottom edges follow cursor
-        // Right must stay ≤ viewport right - EDGE_BUFFER; bottom ≤ viewport bottom - EDGE_BUFFER
-        const maxWidth  = Math.min(MAX_WIDTH,  window.innerWidth  - EDGE_BUFFER - r.fixedLeft);
-        const maxHeight = Math.min(MAX_HEIGHT, window.innerHeight - EDGE_BUFFER - r.fixedTop);
-        const newWidth  = clamp(e.clientX - r.fixedLeft, MIN_WIDTH,  maxWidth);
-        const newHeight = clamp(e.clientY - r.fixedTop,  MIN_HEIGHT, maxHeight);
-        size.current = { width: newWidth, height: newHeight };
-        position.current = {
-          right:  Math.max(EDGE_BUFFER, window.innerWidth  - r.fixedLeft - newWidth),
-          bottom: Math.max(EDGE_BUFFER, window.innerHeight - r.fixedTop  - newHeight),
-        };
-      }
-
-      forceRender(n => n + 1);
-    };
-
-    const onMouseUp = () => {
-      dragOrigin.current   = null;
-      resizeOrigin.current = null;
-    };
-
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-    return () => {
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-    };
   }, []);
 
   // ── Send ───────────────────────────────────────────────────────────────
@@ -206,38 +76,39 @@ export function AgentModal({ onClose }: AgentModalProps) {
     [sendMessage, context],
   );
 
+  const { isMinimized, isInteracting } = panelState;
   const isNotConfigured = agentSettings !== null && !agentSettings.configured;
 
+  const modalClassName = [
+    S.floatingModal,
+    isMinimized && S.floatingModalMinimized,
+    isInteracting && S.floatingModalInteracting,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   const modal = (
-    <div
-      className={`${S.floatingModal} ${isMinimized ? S.floatingModalMinimized : ""}`}
-      style={{
-        right: position.current.right,
-        bottom: position.current.bottom,
-        width: size.current.width,
-        height: isMinimized ? undefined : size.current.height,
-      }}
-    >
+    <div className={modalClassName} style={panelStyle}>
       {/* ── Resize handles (hidden when minimized) ──── */}
       {!isMinimized && (
         <>
           <div
             className={`${S.resizeHandle} ${S.resizeHandleLeft}`}
-            onMouseDown={handleResizeMouseDown("left")}
+            onPointerDown={resizeHandleProps("left")}
           />
           <div
             className={`${S.resizeHandle} ${S.resizeHandleTop}`}
-            onMouseDown={handleResizeMouseDown("top")}
+            onPointerDown={resizeHandleProps("top")}
           />
           <div
             className={`${S.resizeHandle} ${S.resizeHandleBottomRight}`}
-            onMouseDown={handleResizeMouseDown("bottom-right")}
+            onPointerDown={resizeHandleProps("bottom-right")}
           />
         </>
       )}
 
       {/* ── Header ─────────────────────────────────── */}
-      <div className={S.modalHeader} onMouseDown={handleHeaderMouseDown}>
+      <div className={S.modalHeader} {...headerProps}>
         <div className={S.modalHeaderTitle}>
           <Icon name="ai" size={18} color="rgba(255,255,255,0.9)" />
           <Text size="sm" fw={600} c="white">
