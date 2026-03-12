@@ -108,16 +108,22 @@
   whether it is configured and which model is active."
   []
   (api/check-403 (ai.settings/ai-agent-enabled))
-  {:configured? (some? (ai.settings/ai-agent-openai-api-key))
-   :model       (or (ai.settings/ai-agent-openai-model) "gpt-4.1")
-   :enabled     (ai.settings/ai-agent-enabled)
-   :available_models [{:value "gpt-4.1"      :label "GPT-4.1 (recommended)"}
-                      {:value "gpt-4.1-mini"  :label "GPT-4.1 Mini (faster)"}
-                      {:value "gpt-4.1-nano"  :label "GPT-4.1 Nano (cheapest)"}
-                      {:value "o4-mini"        :label "o4-mini (reasoning)"}
-                      {:value "o3"             :label "o3 (advanced reasoning)"}
-                      {:value "o3-mini"        :label "o3-mini (reasoning, fast)"}
-                      {:value "gpt-4o"         :label "GPT-4o"}
-                      {:value "gpt-4o-mini"    :label "GPT-4o Mini"}]})
+  {:configured?      (some? (ai.settings/ai-agent-openai-api-key))
+   :model            (or (ai.settings/ai-agent-openai-model) "gpt-5.4")
+   :enabled          (ai.settings/ai-agent-enabled)
+   :available_models [;; ── GPT-5 family (flagship, Mar 2026) ───────────────────────────
+                      {:value "gpt-5.4"       :label "GPT-5.4 — flagship, best quality (recommended)" :group "GPT-5"}
+                      {:value "gpt-5.4-pro"   :label "GPT-5.4 Pro — max capability, higher cost"      :group "GPT-5"}
+                      {:value "gpt-5.3"       :label "GPT-5.3 — conversational, fast"                 :group "GPT-5"}
+                      {:value "gpt-5.2"       :label "GPT-5.2 — balanced quality/cost"                :group "GPT-5"}
+                      {:value "gpt-5-mini"    :label "GPT-5 Mini — near-frontier, very cheap"         :group "GPT-5"}
+                      ;; ── Reasoning / o-series ────────────────────────────────────────
+                      {:value "o4-mini"       :label "o4-mini — fast reasoning, coding"               :group "Reasoning"}
+                      {:value "o3"            :label "o3 — advanced reasoning"                        :group "Reasoning"}
+                      {:value "o3-mini"       :label "o3-mini — reasoning, cost-efficient"            :group "Reasoning"}
+                      ;; ── GPT-4.1 family ──────────────────────────────────────────────
+                      {:value "gpt-4.1"       :label "GPT-4.1 — 1M context, instruction following"   :group "GPT-4.1"}
+                      {:value "gpt-4.1-mini"  :label "GPT-4.1 Mini — faster, lower cost"             :group "GPT-4.1"}
+                      {:value "gpt-4.1-nano"  :label "GPT-4.1 Nano — lightest, cheapest"             :group "GPT-4.1"}]})
 
 (def routes (api.macros/ns-handler))

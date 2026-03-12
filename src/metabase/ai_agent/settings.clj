@@ -15,12 +15,12 @@
 
 (settings/defsetting ai-agent-openai-model
   "OpenAI model used by the AI Agent.
-   Supported values: gpt-4.1, gpt-4.1-mini, gpt-4.1-nano,
-                     gpt-4o, gpt-4o-mini,
-                     o3, o3-mini, o4-mini."
+   GPT-5 family (flagship, Mar 2026): gpt-5.4, gpt-5.4-pro, gpt-5.3, gpt-5.2, gpt-5-mini.
+   Reasoning (o-series): o4-mini, o3, o3-mini.
+   GPT-4.1 family: gpt-4.1, gpt-4.1-mini, gpt-4.1-nano."
   :visibility :authenticated
   :type :string
-  :default "gpt-4.1"
+  :default "gpt-5.4"
   :export? false)
 
 (settings/defsetting ai-agent-enabled
