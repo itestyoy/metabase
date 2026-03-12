@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 import { t } from "ttag";
 
 import Markdown from "metabase/common/components/Markdown";
 import {
-  Anchor,
   Code,
   Flex,
   Group,
@@ -30,35 +30,27 @@ const EXAMPLE_PROMPTS = [
 
 function CardLinkBlock({ block }: { block: Extract<ContentBlock, { type: "card_link" }> }) {
   return (
-    <Anchor
-      href={`/question/${block.card_id}`}
-      className={S.blockLink}
-      underline="never"
-    >
+    <Link to={`/question/${block.card_id}`} className={S.blockLink}>
       <Group gap={8} wrap="nowrap">
         <Icon name="table2" size={16} color="var(--mb-color-brand)" />
         <Text size="sm" fw={500} truncate>
           {block.name}
         </Text>
       </Group>
-    </Anchor>
+    </Link>
   );
 }
 
 function DashboardLinkBlock({ block }: { block: Extract<ContentBlock, { type: "dashboard_link" }> }) {
   return (
-    <Anchor
-      href={`/dashboard/${block.dashboard_id}`}
-      className={S.blockLink}
-      underline="never"
-    >
+    <Link to={`/dashboard/${block.dashboard_id}`} className={S.blockLink}>
       <Group gap={8} wrap="nowrap">
         <Icon name="dashboard" size={16} color="var(--mb-color-brand)" />
         <Text size="sm" fw={500} truncate>
           {block.name}
         </Text>
       </Group>
-    </Anchor>
+    </Link>
   );
 }
 
