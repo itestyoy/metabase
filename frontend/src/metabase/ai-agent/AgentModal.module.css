@@ -1,4 +1,4 @@
-/* Floating agent modal container */
+/* Floating agent modal - fixed bottom-right, draggable */
 .floatingModal {
   position: fixed;
   bottom: 80px;
@@ -9,9 +9,9 @@
   flex-direction: column;
   background: var(--mb-color-background);
   border: 1px solid var(--mb-color-border);
-  border-radius: 12px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.18);
-  z-index: 9999;
+  border-radius: var(--default-border-radius, 8px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+  z-index: 300;
   overflow: hidden;
 }
 
@@ -19,14 +19,14 @@
   height: 52px;
 }
 
-/* Header */
+/* ── Header ─────────────────────────────────────── */
 .modalHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 0 12px;
+  height: 52px;
   background: var(--mb-color-brand);
-  color: white;
   cursor: move;
   user-select: none;
   flex-shrink: 0;
@@ -36,54 +36,65 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 600;
-  font-size: 14px;
-  color: white;
+}
+
+.modalHeaderTitle svg {
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .modalHeaderActions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
-.headerIconBtn {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.85);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s;
-}
-
-.headerIconBtn:hover {
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
-}
-
-/* Messages area */
-.messagesContainer {
+/* ── Messages area ──────────────────────────────── */
+.messagesScroll {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
+}
+
+.messagesInner {
   padding: 12px 16px;
-  scroll-behavior: smooth;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .emptyState {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  gap: 12px;
 }
 
-/* Chat bubbles */
+/* ── Chat bubbles ───────────────────────────────── */
+.messageBubbleRow {
+  display: flex;
+  margin-bottom: 4px;
+}
+
+.messageBubbleRowUser {
+  justify-content: flex-end;
+}
+
+.messageBubbleRowAssistant {
+  justify-content: flex-start;
+}
+
 .userBubble {
   background: var(--mb-color-brand);
   color: white;
   border-radius: 16px 16px 4px 16px;
   padding: 8px 14px;
-  max-width: 80%;
+  max-width: 82%;
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .assistantBubble {
@@ -91,33 +102,92 @@
   color: var(--mb-color-text-primary);
   border-radius: 16px 16px 16px 4px;
   padding: 8px 14px;
-  max-width: 80%;
+  max-width: 82%;
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
 }
 
-/* Tool messages */
-.toolMessage {
-  flex-direction: column;
-  padding: 6px 12px;
+/* Markdown inside assistant bubble */
+.assistantBubble p {
+  margin: 0 0 6px;
+}
+
+.assistantBubble p:last-child {
+  margin-bottom: 0;
+}
+
+.assistantBubble pre {
+  background: var(--mb-color-background);
+  border: 1px solid var(--mb-color-border);
+  border-radius: 4px;
+  padding: 8px;
+  overflow-x: auto;
+  font-size: 12px;
   margin: 4px 0;
-  border-left: 3px solid var(--mb-color-border);
-  background: var(--mb-color-background-secondary, #f9f9f9);
-  border-radius: 0 8px 8px 0;
+}
+
+.assistantBubble code {
+  background: var(--mb-color-background);
+  border: 1px solid var(--mb-color-border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 12px;
+}
+
+/* ── Tool call messages ─────────────────────────── */
+.toolMessage {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  margin: 2px 0;
+  border-left: 2px solid var(--mb-color-border);
+  background: var(--mb-color-background-secondary, #fafafa);
+  border-radius: 0 6px 6px 0;
+}
+
+.toolHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .toolResult {
-  margin-top: 4px;
   padding: 4px 8px;
   background: var(--mb-color-background);
-  border-radius: 4px;
   border: 1px solid var(--mb-color-border);
-  max-height: 80px;
+  border-radius: 4px;
+  max-height: 72px;
   overflow: hidden;
+  font-size: 11px;
+  color: var(--mb-color-text-medium);
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
-/* Input area */
+/* ── Loading bubble ─────────────────────────────── */
+.loadingBubble {
+  background: var(--mb-color-background-secondary, #f5f5f5);
+  border-radius: 16px 16px 16px 4px;
+  padding: 10px 14px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ── Error banner ───────────────────────────────── */
+.errorBanner {
+  padding: 8px 16px;
+  background: var(--mb-color-error-light, #fff0f0);
+  border-top: 1px solid var(--mb-color-error, #e74c3c);
+  flex-shrink: 0;
+}
+
+/* ── Input area ─────────────────────────────────── */
 .inputArea {
   border-top: 1px solid var(--mb-color-border);
-  padding: 12px;
+  padding: 10px 12px;
   flex-shrink: 0;
   background: var(--mb-color-background);
 }
@@ -128,70 +198,6 @@
   align-items: flex-end;
 }
 
-.textInput {
+.textareaWrapper {
   flex: 1;
-  border: 1px solid var(--mb-color-border);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 14px;
-  resize: none;
-  min-height: 38px;
-  max-height: 100px;
-  background: var(--mb-color-background);
-  color: var(--mb-color-text-primary);
-  font-family: inherit;
-  line-height: 1.4;
-  outline: none;
-  transition: border-color 0.15s;
-}
-
-.textInput:focus {
-  border-color: var(--mb-color-brand);
-}
-
-.textInput::placeholder {
-  color: var(--mb-color-text-light);
-}
-
-.sendBtn {
-  background: var(--mb-color-brand);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  padding: 8px 14px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  height: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 0.15s;
-  flex-shrink: 0;
-}
-
-.sendBtn:hover:not(:disabled) {
-  opacity: 0.85;
-}
-
-.sendBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Error message */
-.errorBanner {
-  padding: 8px 16px;
-  background: #fff3f3;
-  border-top: 1px solid #ffc0c0;
-  font-size: 12px;
-  color: #c0392b;
-  flex-shrink: 0;
-}
-
-/* Agent trigger button in header */
-.agentTriggerButton {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }

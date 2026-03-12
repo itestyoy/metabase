@@ -1,27 +1,31 @@
-import { useState } from "react";
+import { t } from "ttag";
 
-import { Button } from "metabase/ui";
+import { ActionIcon, Icon, Tooltip } from "metabase/ui";
 
 import { AgentModal } from "./AgentModal";
+import { useAgentModal } from "./hooks/useAgentModal";
 
 export function AgentButton() {
-  const [isOpen, setIsOpen] = useState(false);
+  const { isOpen, open, close } = useAgentModal();
+  const label = t`AI Agent`;
 
   return (
     <>
-      <Button
-        h="36px"
-        variant="subtle"
-        color="text-medium"
-        leftSection={<span style={{ fontSize: 16 }}>🤖</span>}
-        onClick={() => setIsOpen(true)}
-        aria-label="AI Agent"
-        style={{ fontWeight: 600 }}
-      >
-        Agent
-      </Button>
+      <Tooltip label={label}>
+        <ActionIcon
+          variant="subtle"
+          c="var(--mb-color-text-primary)"
+          bd="1px solid var(--mb-color-border)"
+          h="2.25rem"
+          w="2.25rem"
+          aria-label={label}
+          onClick={open}
+        >
+          <Icon name="ai" />
+        </ActionIcon>
+      </Tooltip>
 
-      {isOpen && <AgentModal onClose={() => setIsOpen(false)} />}
+      {isOpen && <AgentModal onClose={close} />}
     </>
   );
 }

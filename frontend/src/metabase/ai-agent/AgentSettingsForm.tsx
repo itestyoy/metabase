@@ -1,20 +1,13 @@
 import { useState } from "react";
+import { t } from "ttag";
 
-import {
-  Button,
-  Flex,
-  Select,
-  Stack,
-  Text,
-  TextInput,
-  Title,
-} from "metabase/ui";
+import { Button, Flex, Select, Stack, Text, TextInput, Title } from "metabase/ui";
 
 import type { AgentSettings } from "./types";
 
 const MODEL_OPTIONS = [
   { value: "gpt-4o", label: "GPT-4o (recommended)" },
-  { value: "gpt-4o-mini", label: "GPT-4o Mini (faster, cheaper)" },
+  { value: "gpt-4o-mini", label: "GPT-4o Mini (faster)" },
   { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
   { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" },
 ];
@@ -39,39 +32,31 @@ export function AgentSettingsForm({
   };
 
   return (
-    <Stack p="md" gap="md">
-      <Title order={5}>Agent Settings</Title>
+    <Stack p="md" gap="md" style={{ flex: 1, overflowY: "auto" }}>
+      <Title order={5}>{t`AI Agent Settings`}</Title>
 
-      <Stack gap="xs">
-        <Text size="sm" fw={500}>
-          OpenAI API Key
-        </Text>
-        <TextInput
-          type="password"
-          placeholder="sk-..."
-          value={apiKey}
-          onChange={e => setApiKey(e.target.value)}
-          description="Your key is stored only in browser localStorage and never sent to Metabase servers."
-        />
-      </Stack>
+      <TextInput
+        label={t`OpenAI API Key`}
+        type="password"
+        placeholder="sk-..."
+        value={apiKey}
+        onChange={e => setApiKey(e.target.value)}
+        description={t`Stored only in your browser's localStorage. Never sent to Metabase servers.`}
+      />
 
-      <Stack gap="xs">
-        <Text size="sm" fw={500}>
-          Model
-        </Text>
-        <Select
-          data={MODEL_OPTIONS}
-          value={model}
-          onChange={val => setModel(val ?? "gpt-4o")}
-        />
-      </Stack>
+      <Select
+        label={t`Model`}
+        data={MODEL_OPTIONS}
+        value={model}
+        onChange={val => setModel(val ?? "gpt-4o")}
+      />
 
-      <Flex gap="sm" justify="flex-end">
+      <Flex gap="sm" justify="flex-end" mt="auto">
         <Button variant="subtle" onClick={onBack}>
-          Cancel
+          {t`Cancel`}
         </Button>
-        <Button onClick={handleSave} disabled={!apiKey.trim()}>
-          Save
+        <Button variant="filled" onClick={handleSave} disabled={!apiKey.trim()}>
+          {t`Save`}
         </Button>
       </Flex>
     </Stack>

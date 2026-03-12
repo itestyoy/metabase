@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { t } from "ttag";
 
-import { Box, Text } from "metabase/ui";
+import { ActionIcon, Flex, Icon, Text, Textarea, Tooltip } from "metabase/ui";
 
 import { AgentChatMessages } from "./AgentChatMessages";
 import { AgentSettingsForm } from "./AgentSettingsForm";
@@ -27,68 +28,56 @@ export function AgentModal({ onClose }: AgentModalProps) {
     clearMessages,
   } = useAgentChat();
 
-  // Dragging state
+  // ── Drag logic ─────────────────────────────────────────────────────────
+  const position = useRef({ right: 24, bottom: 80 });
+  const dragOrigin = useRef<{
+    mouseX: number;
+    mouseY: number;
+    right: number;
+    bottom: number;
+  } | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
-  const dragState = useRef<{
-    isDragging: boolean;
-    startX: number;
-    startY: number;
-    initialRight: number;
-    initialBottom: number;
-  }>({
-    isDragging: false,
-    startX: 0,
-    startY: 0,
-    initialRight: 24,
-    initialBottom: 80,
-  });
-  const [position, setPosition] = useState({ right: 24, bottom: 80 });
+  // trigger re-render after drag
+  const [, forceRender] = useState(0);
 
-  const handleMouseDown = useCallback(
+  const handleHeaderMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      if (isMinimized) {
-        return;
-      }
-      dragState.current = {
-        isDragging: true,
-        startX: e.clientX,
-        startY: e.clientY,
-        initialRight: position.right,
-        initialBottom: position.bottom,
+      if (isMinimized) return;
+      dragOrigin.current = {
+        mouseX: e.clientX,
+        mouseY: e.clientY,
+        right: position.current.right,
+        bottom: position.current.bottom,
       };
     },
-    [isMinimized, position],
+    [isMinimized],
   );
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      const ds = dragState.current;
-      if (!ds.isDragging) {
-        return;
-      }
-      const deltaX = e.clientX - ds.startX;
-      const deltaY = e.clientY - ds.startY;
-      setPosition({
-        right: Math.max(0, ds.initialRight - deltaX),
-        bottom: Math.max(0, ds.initialBottom - deltaY),
-      });
+    const onMouseMove = (e: MouseEvent) => {
+      const o = dragOrigin.current;
+      if (!o) return;
+      position.current = {
+        right: Math.max(0, o.right - (e.clientX - o.mouseX)),
+        bottom: Math.max(0, o.bottom - (e.clientY - o.mouseY)),
+      };
+      forceRender(n => n + 1);
     };
-    const handleMouseUp = () => {
-      dragState.current.isDragging = false;
+    const onMouseUp = () => {
+      dragOrigin.current = null;
     };
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
     return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
     };
   }, []);
 
+  // ── Send message ───────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
     const text = inputText.trim();
-    if (!text || isLoading) {
-      return;
-    }
+    if (!text || isLoading) return;
     setInputText("");
     sendMessage(text);
   }, [inputText, isLoading, sendMessage]);
@@ -103,61 +92,80 @@ export function AgentModal({ onClose }: AgentModalProps) {
     [handleSend],
   );
 
-  // Show settings if no API key configured
-  const effectiveShowSettings =
-    showSettings || !settings.openaiApiKey;
+  // Show settings if no API key yet
+  const effectiveShowSettings = showSettings || !settings.openaiApiKey;
 
-  const modalContent = (
+  const modal = (
     <div
       ref={modalRef}
       className={`${S.floatingModal} ${isMinimized ? S.floatingModalMinimized : ""}`}
-      style={{ right: position.right, bottom: position.bottom }}
+      style={{
+        right: position.current.right,
+        bottom: position.current.bottom,
+      }}
     >
-      {/* Header */}
-      <div className={S.modalHeader} onMouseDown={handleMouseDown}>
+      {/* ── Header ─────────────────────────────────── */}
+      <div className={S.modalHeader} onMouseDown={handleHeaderMouseDown}>
         <div className={S.modalHeaderTitle}>
-          <span>🤖</span>
+          <Icon name="ai" size={18} color="rgba(255,255,255,0.9)" />
           <Text size="sm" fw={600} c="white">
-            AI Agent
+            {t`AI Agent`}
           </Text>
         </div>
+
         <div className={S.modalHeaderActions}>
           {!isMinimized && (
             <>
-              <button
-                className={S.headerIconBtn}
-                onClick={clearMessages}
-                title="Clear conversation"
-              >
-                🗑
-              </button>
-              <button
-                className={S.headerIconBtn}
-                onClick={() => setShowSettings(s => !s)}
-                title="Settings"
-              >
-                ⚙️
-              </button>
+              <Tooltip label={t`Clear conversation`}>
+                <ActionIcon
+                  variant="subtle"
+                  c="rgba(255,255,255,0.8)"
+                  size="sm"
+                  onClick={clearMessages}
+                  aria-label={t`Clear conversation`}
+                >
+                  <Icon name="trash" size={14} />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label={t`Settings`}>
+                <ActionIcon
+                  variant="subtle"
+                  c="rgba(255,255,255,0.8)"
+                  size="sm"
+                  onClick={() => setShowSettings(s => !s)}
+                  aria-label={t`Settings`}
+                >
+                  <Icon name="gear" size={14} />
+                </ActionIcon>
+              </Tooltip>
             </>
           )}
-          <button
-            className={S.headerIconBtn}
-            onClick={() => setIsMinimized(m => !m)}
-            title={isMinimized ? "Expand" : "Minimize"}
-          >
-            {isMinimized ? "▲" : "▼"}
-          </button>
-          <button
-            className={S.headerIconBtn}
-            onClick={onClose}
-            title="Close"
-          >
-            ✕
-          </button>
+          <Tooltip label={isMinimized ? t`Expand` : t`Minimize`}>
+            <ActionIcon
+              variant="subtle"
+              c="rgba(255,255,255,0.8)"
+              size="sm"
+              onClick={() => setIsMinimized(m => !m)}
+              aria-label={isMinimized ? t`Expand` : t`Minimize`}
+            >
+              <Icon name={isMinimized ? "chevronup" : "chevrondown"} size={14} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label={t`Close`}>
+            <ActionIcon
+              variant="subtle"
+              c="rgba(255,255,255,0.8)"
+              size="sm"
+              onClick={onClose}
+              aria-label={t`Close`}
+            >
+              <Icon name="close" size={14} />
+            </ActionIcon>
+          </Tooltip>
         </div>
       </div>
 
-      {/* Body */}
+      {/* ── Body ───────────────────────────────────── */}
       {!isMinimized && (
         <>
           {effectiveShowSettings ? (
@@ -171,30 +179,45 @@ export function AgentModal({ onClose }: AgentModalProps) {
               <AgentChatMessages messages={messages} isLoading={isLoading} />
 
               {error && (
-                <Box className={S.errorBanner}>
-                  <Text size="xs">{error}</Text>
-                </Box>
+                <div className={S.errorBanner}>
+                  <Text size="xs" c="error">
+                    {error}
+                  </Text>
+                </div>
               )}
 
               <div className={S.inputArea}>
-                <div className={S.inputRow}>
-                  <textarea
-                    className={S.textInput}
-                    value={inputText}
-                    onChange={e => setInputText(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Ask me to create a question, explore data..."
-                    rows={1}
-                    disabled={isLoading}
-                  />
-                  <button
-                    className={S.sendBtn}
-                    onClick={handleSend}
-                    disabled={isLoading || !inputText.trim()}
-                  >
-                    ↑
-                  </button>
-                </div>
+                <Flex gap="xs" align="flex-end">
+                  <div className={S.textareaWrapper}>
+                    <Textarea
+                      value={inputText}
+                      onChange={e => setInputText(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder={t`Ask me to create a question, explore data…`}
+                      minRows={1}
+                      maxRows={4}
+                      autosize
+                      disabled={isLoading}
+                      size="sm"
+                      styles={{
+                        input: { borderRadius: 8, resize: "none" },
+                      }}
+                    />
+                  </div>
+                  <Tooltip label={t`Send (Enter)`}>
+                    <ActionIcon
+                      variant="filled"
+                      color="brand"
+                      size="lg"
+                      onClick={handleSend}
+                      disabled={isLoading || !inputText.trim()}
+                      aria-label={t`Send message`}
+                      style={{ flexShrink: 0, marginBottom: 1 }}
+                    >
+                      <Icon name="send" size={16} />
+                    </ActionIcon>
+                  </Tooltip>
+                </Flex>
               </div>
             </>
           )}
@@ -203,5 +226,5 @@ export function AgentModal({ onClose }: AgentModalProps) {
     </div>
   );
 
-  return createPortal(modalContent, document.body);
+  return createPortal(modal, document.body);
 }

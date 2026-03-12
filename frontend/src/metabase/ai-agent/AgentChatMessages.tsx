@@ -1,45 +1,48 @@
 import { useEffect, useRef } from "react";
+import { t } from "ttag";
 
-import { Box, Flex, Loader, Text } from "metabase/ui";
+import Markdown from "metabase/common/components/Markdown";
+import { Box, Flex, Icon, Loader, ScrollArea, Text } from "metabase/ui";
 
-import type { ChatMessage } from "./types";
 import S from "./AgentModal.module.css";
-
-interface AgentChatMessagesProps {
-  messages: ChatMessage[];
-  isLoading: boolean;
-}
+import type { ChatMessage } from "./types";
 
 function ToolCallMessage({ message }: { message: ChatMessage }) {
-  const icon =
-    message.toolStatus === "running"
-      ? "⏳"
-      : message.toolStatus === "error"
-        ? "❌"
-        : "✅";
-
+  const isRunning = message.toolStatus === "running";
+  const isError = message.toolStatus === "error";
   const toolLabel =
-    message.toolName?.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) ??
-    "Tool";
+    message.toolName
+      ?.replace(/_/g, " ")
+      .replace(/\b\w/g, c => c.toUpperCase()) ?? "Tool";
 
   return (
-    <Flex align="flex-start" gap="xs" className={S.toolMessage}>
-      <Text size="sm" c="dimmed">
-        {icon} <em>{toolLabel}</em>
-        {message.toolStatus === "running" && (
-          <Loader size="xs" ml="xs" display="inline-block" />
+    <div className={S.toolMessage}>
+      <div className={S.toolHeader}>
+        {isRunning ? (
+          <Loader size={12} />
+        ) : (
+          <Icon
+            name={isError ? "warning" : "check"}
+            size={12}
+            color={
+              isError
+                ? "var(--mb-color-error)"
+                : "var(--mb-color-success)"
+            }
+          />
         )}
-      </Text>
-      {message.toolStatus !== "running" && message.toolResult && (
-        <Box className={S.toolResult}>
-          <Text size="xs" c="dimmed" style={{ whiteSpace: "pre-wrap" }}>
-            {message.toolResult.length > 400
-              ? message.toolResult.slice(0, 400) + "…"
-              : message.toolResult}
-          </Text>
-        </Box>
+        <Text size="xs" c="text-medium" fs="italic">
+          {toolLabel}
+        </Text>
+      </div>
+      {!isRunning && message.toolResult && (
+        <div className={S.toolResult}>
+          {message.toolResult.length > 300
+            ? message.toolResult.slice(0, 300) + "…"
+            : message.toolResult}
+        </div>
       )}
-    </Flex>
+    </div>
   );
 }
 
@@ -51,66 +54,73 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
 
   return (
-    <Flex
-      justify={isUser ? "flex-end" : "flex-start"}
-      mb="xs"
+    <div
+      className={`${S.messageBubbleRow} ${isUser ? S.messageBubbleRowUser : S.messageBubbleRowAssistant}`}
     >
-      <Box className={isUser ? S.userBubble : S.assistantBubble}>
-        <Text size="sm" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-          {message.content}
-        </Text>
-      </Box>
-    </Flex>
+      {isUser ? (
+        <div className={S.userBubble}>{message.content}</div>
+      ) : (
+        <div className={S.assistantBubble}>
+          <Markdown>{message.content ?? ""}</Markdown>
+        </div>
+      )}
+    </div>
   );
+}
+
+interface AgentChatMessagesProps {
+  messages: ChatMessage[];
+  isLoading: boolean;
 }
 
 export function AgentChatMessages({
   messages,
   isLoading,
 }: AgentChatMessagesProps) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (viewportRef.current) {
+      viewportRef.current.scrollTo({
+        top: viewportRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, [messages, isLoading]);
 
   if (messages.length === 0) {
     return (
-      <Flex
-        flex="1"
-        align="center"
-        justify="center"
-        direction="column"
-        gap="sm"
-        p="lg"
-        className={S.emptyState}
-      >
-        <Text size="xl">🤖</Text>
-        <Text size="sm" c="dimmed" ta="center">
-          Ask me to create questions, explore your data, or search for existing
-          reports.
+      <div className={S.emptyState}>
+        <Icon name="ai" size={32} color="var(--mb-color-text-light)" />
+        <Text size="sm" c="text-medium" ta="center">
+          {t`Ask me to create questions, explore your data, or search for existing reports.`}
         </Text>
-        <Text size="xs" c="dimmed" ta="center">
-          Example: "Create a question showing total orders per day for the last
-          30 days"
+        <Text size="xs" c="text-light" ta="center">
+          {t`Example: "Create a question showing total orders per day for the last 30 days"`}
         </Text>
-      </Flex>
+      </div>
     );
   }
 
   return (
-    <Box className={S.messagesContainer}>
-      {messages.map(msg => (
-        <MessageBubble key={msg.id} message={msg} />
-      ))}
-      {isLoading && (
-        <Flex justify="flex-start" mb="xs">
-          <Box className={S.assistantBubble}>
-            <Loader size="xs" />
-          </Box>
-        </Flex>
-      )}
-      <div ref={bottomRef} />
-    </Box>
+    <ScrollArea
+      className={S.messagesScroll}
+      viewportRef={viewportRef}
+      scrollbarSize={6}
+    >
+      <div className={S.messagesInner}>
+        {messages.map(msg => (
+          <MessageBubble key={msg.id} message={msg} />
+        ))}
+        {isLoading && (
+          <div className={`${S.messageBubbleRow} ${S.messageBubbleRowAssistant}`}>
+            <div className={S.loadingBubble}>
+              <Loader size="xs" />
+            </div>
+          </div>
+        )}
+        {/* sentinel for auto-scroll via scrollTo */}
+      </div>
+    </ScrollArea>
   );
 }
