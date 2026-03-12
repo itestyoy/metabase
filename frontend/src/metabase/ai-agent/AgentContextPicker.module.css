@@ -4,12 +4,12 @@
   align-items: center;
   gap: 6px;
   padding: 5px 12px 7px;
-  background: var(--mb-color-background);
+  background: var(--mb-color-background-primary);
   flex-shrink: 0;
 }
 
 .contextIcon {
-  color: var(--mb-color-text-light);
+  color: var(--mb-color-text-tertiary);
   flex-shrink: 0;
 }
 
@@ -91,5 +91,5 @@
 }
 
 .contextAddIcon {
-  color: var(--mb-color-text-light);
+  color: var(--mb-color-text-tertiary);
 }
