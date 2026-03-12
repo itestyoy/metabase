@@ -2,10 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { t } from "ttag";
 
-import { ActionIcon, Flex, Icon, Text, Textarea, Tooltip } from "metabase/ui";
+import { ActionIcon, Flex, Icon, Stack, Text, Textarea, Tooltip } from "metabase/ui";
 
 import { AgentChatMessages } from "./AgentChatMessages";
-import { AgentSettingsForm } from "./AgentSettingsForm";
 import { useAgentChat } from "./hooks/useAgentChat";
 import S from "./AgentModal.module.css";
 
@@ -15,18 +14,10 @@ interface AgentModalProps {
 
 export function AgentModal({ onClose }: AgentModalProps) {
   const [isMinimized, setIsMinimized] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [inputText, setInputText] = useState("");
 
-  const {
-    messages,
-    isLoading,
-    error,
-    settings,
-    updateSettings,
-    sendMessage,
-    clearMessages,
-  } = useAgentChat();
+  const { messages, isLoading, error, agentSettings, sendMessage, clearMessages } =
+    useAgentChat();
 
   // ── Drag logic ─────────────────────────────────────────────────────────
   const position = useRef({ right: 24, bottom: 80 });
@@ -36,8 +27,6 @@ export function AgentModal({ onClose }: AgentModalProps) {
     right: number;
     bottom: number;
   } | null>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
-  // trigger re-render after drag
   const [, forceRender] = useState(0);
 
   const handleHeaderMouseDown = useCallback(
@@ -74,7 +63,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
     };
   }, []);
 
-  // ── Send message ───────────────────────────────────────────────────────
+  // ── Send ───────────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
     const text = inputText.trim();
     if (!text || isLoading) return;
@@ -92,17 +81,13 @@ export function AgentModal({ onClose }: AgentModalProps) {
     [handleSend],
   );
 
-  // Show settings if no API key yet
-  const effectiveShowSettings = showSettings || !settings.openaiApiKey;
+  const isNotConfigured =
+    agentSettings !== null && !agentSettings.configured;
 
   const modal = (
     <div
-      ref={modalRef}
       className={`${S.floatingModal} ${isMinimized ? S.floatingModalMinimized : ""}`}
-      style={{
-        right: position.current.right,
-        bottom: position.current.bottom,
-      }}
+      style={{ right: position.current.right, bottom: position.current.bottom }}
     >
       {/* ── Header ─────────────────────────────────── */}
       <div className={S.modalHeader} onMouseDown={handleHeaderMouseDown}>
@@ -111,34 +96,26 @@ export function AgentModal({ onClose }: AgentModalProps) {
           <Text size="sm" fw={600} c="white">
             {t`AI Agent`}
           </Text>
+          {agentSettings && (
+            <Text size="xs" c="rgba(255,255,255,0.65)">
+              {agentSettings.model}
+            </Text>
+          )}
         </div>
 
         <div className={S.modalHeaderActions}>
-          {!isMinimized && (
-            <>
-              <Tooltip label={t`Clear conversation`}>
-                <ActionIcon
-                  variant="subtle"
-                  c="rgba(255,255,255,0.8)"
-                  size="sm"
-                  onClick={clearMessages}
-                  aria-label={t`Clear conversation`}
-                >
-                  <Icon name="trash" size={14} />
-                </ActionIcon>
-              </Tooltip>
-              <Tooltip label={t`Settings`}>
-                <ActionIcon
-                  variant="subtle"
-                  c="rgba(255,255,255,0.8)"
-                  size="sm"
-                  onClick={() => setShowSettings(s => !s)}
-                  aria-label={t`Settings`}
-                >
-                  <Icon name="gear" size={14} />
-                </ActionIcon>
-              </Tooltip>
-            </>
+          {!isMinimized && messages.length > 0 && (
+            <Tooltip label={t`Clear conversation`}>
+              <ActionIcon
+                variant="subtle"
+                c="rgba(255,255,255,0.8)"
+                size="sm"
+                onClick={clearMessages}
+                aria-label={t`Clear conversation`}
+              >
+                <Icon name="trash" size={14} />
+              </ActionIcon>
+            </Tooltip>
           )}
           <Tooltip label={isMinimized ? t`Expand` : t`Minimize`}>
             <ActionIcon
@@ -168,12 +145,17 @@ export function AgentModal({ onClose }: AgentModalProps) {
       {/* ── Body ───────────────────────────────────── */}
       {!isMinimized && (
         <>
-          {effectiveShowSettings ? (
-            <AgentSettingsForm
-              settings={settings}
-              onSave={updateSettings}
-              onBack={() => setShowSettings(false)}
-            />
+          {isNotConfigured ? (
+            /* ── Not configured banner ─────────────── */
+            <Stack align="center" justify="center" p="xl" gap="sm" style={{ flex: 1 }}>
+              <Icon name="gear_settings_filled" size={32} color="var(--mb-color-text-light)" />
+              <Text size="sm" c="text-medium" ta="center" fw={500}>
+                {t`AI Agent is not configured`}
+              </Text>
+              <Text size="xs" c="text-light" ta="center">
+                {t`Ask your administrator to set the OpenAI API key in Admin › Settings › AI Agent.`}
+              </Text>
+            </Stack>
           ) : (
             <>
               <AgentChatMessages messages={messages} isLoading={isLoading} />
@@ -199,9 +181,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                       autosize
                       disabled={isLoading}
                       size="sm"
-                      styles={{
-                        input: { borderRadius: 8, resize: "none" },
-                      }}
+                      styles={{ input: { borderRadius: 8, resize: "none" } }}
                     />
                   </div>
                   <Tooltip label={t`Send (Enter)`}>

@@ -1,0 +1,236 @@
+(ns metabase.ai-agent.tools
+  "Tool implementations executed under the current user's identity and permissions.
+   All functions rely on `api/*current-user*` / `api/*current-user-id*` being bound by
+   the surrounding request middleware — so results are always scoped to what the user
+   is allowed to see."
+  (:require
+   [cheshire.core :as json]
+   [metabase.api.common :as api]
+   [metabase.queries.models.card :as queries.card]
+   [metabase.query-processor.core :as qp]
+   [metabase.search.core :as search]
+   [metabase.util.log :as log]
+   [toucan2.core :as t2]))
+
+(set! *warn-on-reflection* true)
+
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;; Tool definitions (for OpenAI Responses API)
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+(def tool-definitions
+  "Tool schemas passed to OpenAI."
+  [{:type "function"
+    :name "list_databases"
+    :description "List all databases in Metabase that the current user has access to."
+    :parameters {:type "object" :properties {} :required []}}
+
+   {:type "function"
+    :name "get_database_schema"
+    :description "Get the full schema (tables and columns) for a specific database.
+Use this before writing SQL to understand the available tables and column names."
+    :parameters {:type       "object"
+                 :properties {:database_id {:type        "number"
+                                            :description "ID of the database."}}
+                 :required   ["database_id"]}}
+
+   {:type "function"
+    :name "list_questions"
+    :description "List existing saved questions (cards) in Metabase.
+Useful to check whether a similar question already exists."
+    :parameters {:type       "object"
+                 :properties {:search {:type        "string"
+                                       :description "Optional name search filter."}}
+                 :required   []}}
+
+   {:type "function"
+    :name "search_items"
+    :description "Search across all Metabase items: questions, dashboards, collections, tables, metrics."
+    :parameters {:type       "object"
+                 :properties {:query {:type        "string"
+                                      :description "Search query string."}
+                              :type  {:type        "string"
+                                      :enum        ["question" "dashboard" "collection" "table" "metric"]
+                                      :description "Optional: filter by item type."}}
+                 :required   ["query"]}}
+
+   {:type "function"
+    :name "run_query"
+    :description "Execute a native SQL query and return the first rows of results.
+Use this to validate a query before creating a saved question."
+    :parameters {:type       "object"
+                 :properties {:database_id {:type        "number"
+                                            :description "Database ID to run the query against."}
+                              :sql         {:type        "string"
+                                            :description "SQL query to execute."}}
+                 :required   ["database_id" "sql"]}}
+
+   {:type "function"
+    :name "create_question"
+    :description "Create and save a new question (saved query) in Metabase.
+After creating, always tell the user the URL: /question/<id>"
+    :parameters {:type       "object"
+                 :properties {:name          {:type        "string"
+                                              :description "Question title."}
+                              :description   {:type        "string"
+                                              :description "Optional description."}
+                              :database_id   {:type        "number"
+                                              :description "Database ID this question queries."}
+                              :sql           {:type        "string"
+                                              :description "Native SQL query."}
+                              :collection_id {:type        "number"
+                                              :description "Optional collection ID to save into."}
+                              :display       {:type        "string"
+                                              :enum        ["table" "bar" "line" "pie" "scalar" "area" "row"]
+                                              :description "Visualization type. Default: table."}}
+                 :required   ["name" "database_id" "sql"]}}])
+
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;; Tool implementations
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+(defn- list-databases []
+  (let [dbs (t2/select :model/Database {:order-by [[:name :asc]]})]
+    (if (empty? dbs)
+      "No databases available."
+      (str "Available databases:\n"
+           (clojure.string/join "\n"
+             (map (fn [db]
+                    (format "- ID: %d, Name: \"%s\", Engine: %s"
+                            (:id db) (:name db) (name (:engine db))))
+                  dbs))))))
+
+(defn- get-database-schema [database-id]
+  (let [db     (t2/select-one :model/Database :id database-id)
+        _      (api/check-404 db)
+        tables (t2/select :model/Table :db_id database-id :active true
+                          {:order-by [[:schema :asc] [:name :asc]]})]
+    (if (empty? tables)
+      (format "Database \"%s\" has no accessible tables." (:name db))
+      (let [table-ids (map :id tables)
+            fields    (when (seq table-ids)
+                        (t2/select :model/Field
+                                   :table_id [:in table-ids]
+                                   :active true
+                                   {:order-by [[:table_id :asc] [:position :asc]]}))
+            by-table  (group-by :table_id fields)
+            summaries (map (fn [tbl]
+                             (let [flds (get by-table (:id tbl) [])]
+                               (str (format "Table: %s%s (ID: %d)\n"
+                                            (if (:schema tbl) (str (:schema tbl) ".") "")
+                                            (:name tbl)
+                                            (:id tbl))
+                                    (clojure.string/join "\n"
+                                      (map (fn [f]
+                                             (format "    - %s (%s)" (:name f) (name (:base_type f))))
+                                           flds)))))
+                           tables)]
+        (str (format "Schema for \"%s\":\n\n" (:name db))
+             (clojure.string/join "\n\n" summaries))))))
+
+(defn- list-questions [search-term]
+  (let [cards (if (seq search-term)
+                (t2/select :model/Card
+                           :name [:like (str "%" search-term "%")]
+                           :archived false
+                           {:limit 20 :order-by [[:name :asc]]})
+                (t2/select :model/Card
+                           :archived false
+                           {:limit 20 :order-by [[:updated_at :desc]]}))]
+    (if (empty? cards)
+      (if search-term
+        (format "No questions found matching \"%s\"." search-term)
+        "No questions found.")
+      (str "Questions (up to 20):\n"
+           (clojure.string/join "\n"
+             (map (fn [c]
+                    (format "- ID: %d, Name: \"%s\"%s"
+                            (:id c) (:name c)
+                            (if (:description c) (str ", Desc: " (:description c)) "")))
+                  cards))))))
+
+(defn- search-items [query item-type]
+  (let [params  (cond-> {:q query :limit 15}
+                  item-type (assoc :models [item-type]))
+        results (try
+                  (:data (search/search (search/search-context params)))
+                  (catch Exception e
+                    (log/warn e "AI Agent search failed")
+                    []))]
+    (if (empty? results)
+      (format "No results found for \"%s\"." query)
+      (str (format "Search results for \"%s\" (up to 15):\n" query)
+           (clojure.string/join "\n"
+             (map (fn [item]
+                    (format "- [%s] ID: %d, Name: \"%s\"%s"
+                            (name (:model item))
+                            (:id item)
+                            (:name item)
+                            (if-let [d (:description item)]
+                              (str ", Desc: " (subs d 0 (min 80 (count d))))
+                              "")))
+                  results))))))
+
+(defn- run-query [database-id sql]
+  (let [query    {:database database-id
+                  :type     :native
+                  :native   {:query sql}}
+        result   (try
+                   (qp/process-query
+                    (assoc query :info {:executed-by api/*current-user-id*
+                                        :context     :ad-hoc}))
+                   (catch Exception e
+                     {:error (.getMessage e)}))]
+    (if-let [err (:error result)]
+      (str "Query error: " err)
+      (let [cols (get-in result [:data :cols] [])
+            rows (get-in result [:data :rows] [])]
+        (if (empty? rows)
+          "Query executed successfully. No rows returned."
+          (let [header    (clojure.string/join " | " (map :name cols))
+                separator (clojure.string/join " | " (repeat (count cols) "---"))
+                data-rows (map (fn [row]
+                                 (clojure.string/join " | "
+                                   (map #(if (nil? %) "NULL" (str %)) row)))
+                               (take 10 rows))
+                total     (count rows)
+                note      (when (> total 10)
+                            (format "\n... (%d total rows, showing first 10)" total))]
+            (str "Results:\n" header "\n" separator "\n"
+                 (clojure.string/join "\n" data-rows)
+                 note)))))))
+
+(defn- create-question [{:strs [name description database_id sql collection_id display]}]
+  (let [card-data (cond-> {:name          name
+                           :dataset_query {:database database_id
+                                           :type     :native
+                                           :native   {:query              sql
+                                                      :template-tags      {}}}
+                           :display       (keyword (or display "table"))
+                           :visualization_settings {}}
+                    description   (assoc :description description)
+                    collection_id (assoc :collection_id collection_id))
+        card      (queries.card/create-card! card-data @api/*current-user*)]
+    (format "Question created successfully!\n- ID: %d\n- Name: \"%s\"\n- URL: /question/%d"
+            (:id card) (:name card) (:id card))))
+
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;; Dispatcher
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+(defn execute-tool
+  "Execute a tool call and return its string result.
+   Runs under the current user's bound identity/permissions."
+  [tool-name args]
+  (try
+    (case tool-name
+      "list_databases"    (list-databases)
+      "get_database_schema" (get-database-schema (get args "database_id"))
+      "list_questions"    (list-questions (get args "search"))
+      "search_items"      (search-items (get args "query") (get args "type"))
+      "run_query"         (run-query (get args "database_id") (get args "sql"))
+      "create_question"   (create-question args)
+      (str "Unknown tool: " tool-name))
+    (catch Exception e
+      (log/warn e "AI Agent tool execution failed" {:tool tool-name})
+      (str "Error executing " tool-name ": " (.getMessage e)))))
