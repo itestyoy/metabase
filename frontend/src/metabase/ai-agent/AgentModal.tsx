@@ -8,6 +8,13 @@ import { AgentChatMessages } from "./AgentChatMessages";
 import { useAgentChat } from "./hooks/useAgentChat";
 import S from "./AgentModal.module.css";
 
+const MIN_WIDTH = 320;
+const MAX_WIDTH = 800;
+const MIN_HEIGHT = 360;
+const MAX_HEIGHT = 920;
+
+type ResizeEdge = "left" | "top" | "top-left";
+
 interface AgentModalProps {
   onClose: () => void;
 }
@@ -19,16 +26,28 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const { messages, isLoading, error, agentSettings, sendMessage, clearMessages } =
     useAgentChat();
 
-  // ── Drag logic ─────────────────────────────────────────────────────────
+  // ── Position (right/bottom anchored) ───────────────────────────────────
   const position = useRef({ right: 24, bottom: 80 });
+  const size = useRef({ width: 420, height: 560 });
+
   const dragOrigin = useRef<{
     mouseX: number;
     mouseY: number;
     right: number;
     bottom: number;
   } | null>(null);
+
+  const resizeOrigin = useRef<{
+    mouseX: number;
+    mouseY: number;
+    width: number;
+    height: number;
+    edge: ResizeEdge;
+  } | null>(null);
+
   const [, forceRender] = useState(0);
 
+  // ── Drag header ─────────────────────────────────────────────────────────
   const handleHeaderMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (isMinimized) return;
@@ -42,19 +61,60 @@ export function AgentModal({ onClose }: AgentModalProps) {
     [isMinimized],
   );
 
+  // ── Resize handles ──────────────────────────────────────────────────────
+  const handleResizeMouseDown = useCallback(
+    (edge: ResizeEdge) => (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation(); // prevent drag from starting
+      resizeOrigin.current = {
+        mouseX: e.clientX,
+        mouseY: e.clientY,
+        width: size.current.width,
+        height: size.current.height,
+        edge,
+      };
+    },
+    [],
+  );
+
+  // ── Global mouse move/up ────────────────────────────────────────────────
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
-      const o = dragOrigin.current;
-      if (!o) return;
-      position.current = {
-        right: Math.max(0, o.right - (e.clientX - o.mouseX)),
-        bottom: Math.max(0, o.bottom - (e.clientY - o.mouseY)),
-      };
+      const d = dragOrigin.current;
+      if (d) {
+        position.current = {
+          right: Math.max(0, d.right - (e.clientX - d.mouseX)),
+          bottom: Math.max(0, d.bottom - (e.clientY - d.mouseY)),
+        };
+        forceRender(n => n + 1);
+        return;
+      }
+
+      const r = resizeOrigin.current;
+      if (!r) return;
+
+      // Modal is right/bottom anchored: dragging left widens, dragging up tallens
+      const dx = r.mouseX - e.clientX;
+      const dy = r.mouseY - e.clientY;
+
+      const newWidth =
+        r.edge === "top"
+          ? r.width
+          : Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, r.width + dx));
+      const newHeight =
+        r.edge === "left"
+          ? r.height
+          : Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, r.height + dy));
+
+      size.current = { width: newWidth, height: newHeight };
       forceRender(n => n + 1);
     };
+
     const onMouseUp = () => {
       dragOrigin.current = null;
+      resizeOrigin.current = null;
     };
+
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
     return () => {
@@ -81,7 +141,6 @@ export function AgentModal({ onClose }: AgentModalProps) {
     [handleSend],
   );
 
-  // ── Prompt chip handler: fill input and immediately send ───────────────
   const handleSelectPrompt = useCallback(
     (prompt: string) => {
       setInputText("");
@@ -90,14 +149,36 @@ export function AgentModal({ onClose }: AgentModalProps) {
     [sendMessage],
   );
 
-  const isNotConfigured =
-    agentSettings !== null && !agentSettings.configured;
+  const isNotConfigured = agentSettings !== null && !agentSettings.configured;
 
   const modal = (
     <div
       className={`${S.floatingModal} ${isMinimized ? S.floatingModalMinimized : ""}`}
-      style={{ right: position.current.right, bottom: position.current.bottom }}
+      style={{
+        right: position.current.right,
+        bottom: position.current.bottom,
+        width: isMinimized ? undefined : size.current.width,
+        height: isMinimized ? undefined : size.current.height,
+      }}
     >
+      {/* ── Resize handles (hidden when minimized) ──── */}
+      {!isMinimized && (
+        <>
+          <div
+            className={`${S.resizeHandle} ${S.resizeHandleLeft}`}
+            onMouseDown={handleResizeMouseDown("left")}
+          />
+          <div
+            className={`${S.resizeHandle} ${S.resizeHandleTop}`}
+            onMouseDown={handleResizeMouseDown("top")}
+          />
+          <div
+            className={`${S.resizeHandle} ${S.resizeHandleTopLeft}`}
+            onMouseDown={handleResizeMouseDown("top-left")}
+          />
+        </>
+      )}
+
       {/* ── Header ─────────────────────────────────── */}
       <div className={S.modalHeader} onMouseDown={handleHeaderMouseDown}>
         <div className={S.modalHeaderTitle}>
@@ -155,7 +236,6 @@ export function AgentModal({ onClose }: AgentModalProps) {
       {!isMinimized && (
         <>
           {isNotConfigured ? (
-            /* ── Not configured banner ─────────────── */
             <Stack align="center" justify="center" p="xl" gap="sm" style={{ flex: 1 }}>
               <Icon name="gear_settings_filled" size={32} color="var(--mb-color-text-light)" />
               <Text size="sm" c="text-medium" ta="center" fw={500}>
