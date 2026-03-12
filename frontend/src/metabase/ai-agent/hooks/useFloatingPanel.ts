@@ -51,6 +51,7 @@ interface ResizeMoveAction {
 
 interface ToggleMinimizedAction {
   type: "TOGGLE_MINIMIZED";
+  constraints: PanelConstraints;
 }
 
 interface SetInteractingAction {
@@ -152,8 +153,14 @@ function panelReducer(state: PanelState, action: PanelAction): PanelState {
       };
     }
 
-    case "TOGGLE_MINIMIZED":
-      return { ...state, isMinimized: !state.isMinimized };
+    case "TOGGLE_MINIMIZED": {
+      // Keep the top edge fixed: adjust bottom so the panel collapses/expands upward.
+      const c = action.constraints;
+      const currentHeight = state.isMinimized ? c.minimizedHeight : state.height;
+      const nextHeight = state.isMinimized ? state.height : c.minimizedHeight;
+      const newBottom = Math.max(c.edgeBuffer, state.bottom + currentHeight - nextHeight);
+      return { ...state, isMinimized: !state.isMinimized, bottom: newBottom };
+    }
 
     case "SET_INTERACTING":
       return state.isInteracting === action.value
@@ -289,8 +296,8 @@ export function useFloatingPanel(constraints: PanelConstraints) {
   // ── Toggle minimized ──────────────────────────────────────────────────
 
   const toggleMinimized = useCallback(() => {
-    dispatch({ type: "TOGGLE_MINIMIZED" });
-  }, []);
+    dispatch({ type: "TOGGLE_MINIMIZED", constraints: c });
+  }, [c]);
 
   // ── Derived style ──────────────────────────────────────────────────────
 
