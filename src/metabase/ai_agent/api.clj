@@ -112,7 +112,7 @@
   whether it is configured and which model is active."
   []
   (api/check-403 (ai.settings/ai-agent-enabled))
-  {:configured?      (some? (ai.settings/ai-agent-openai-api-key))
+  {:configured       (some? (ai.settings/ai-agent-openai-api-key))
    :model            (or (ai.settings/ai-agent-openai-model) "gpt-5.4")
    :enabled          (ai.settings/ai-agent-enabled)
    :available_models [;; ── GPT-5 family (flagship, Mar 2026) ───────────────────────────

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { t } from "ttag";
 
-import { ActionIcon, Flex, Icon, Stack, Text, Textarea, Tooltip } from "metabase/ui";
+import { ActionIcon, Anchor, Flex, Icon, Stack, Text, Textarea, Tooltip } from "metabase/ui";
 
 import { AgentChatMessages } from "./AgentChatMessages";
 import { useAgentChat } from "./hooks/useAgentChat";
@@ -81,6 +81,15 @@ export function AgentModal({ onClose }: AgentModalProps) {
     [handleSend],
   );
 
+  // ── Prompt chip handler: fill input and immediately send ───────────────
+  const handleSelectPrompt = useCallback(
+    (prompt: string) => {
+      setInputText("");
+      sendMessage(prompt);
+    },
+    [sendMessage],
+  );
+
   const isNotConfigured =
     agentSettings !== null && !agentSettings.configured;
 
@@ -153,12 +162,23 @@ export function AgentModal({ onClose }: AgentModalProps) {
                 {t`AI Agent is not configured`}
               </Text>
               <Text size="xs" c="text-light" ta="center">
-                {t`Ask your administrator to set the OpenAI API key in Admin › Settings › AI Agent.`}
+                {t`Set the OpenAI API key in`}{" "}
+                <Anchor href="/admin/settings/ai-agent" size="xs">
+                  {t`Admin › Settings › AI Agent`}
+                </Anchor>
+                {t`, or via environment variable:`}
               </Text>
+              <div className={S.envVarBox}>
+                <code>MB_AI_AGENT_OPENAI_API_KEY</code>
+              </div>
             </Stack>
           ) : (
             <>
-              <AgentChatMessages messages={messages} isLoading={isLoading} />
+              <AgentChatMessages
+                messages={messages}
+                isLoading={isLoading}
+                onSelectPrompt={handleSelectPrompt}
+              />
 
               {error && (
                 <div className={S.errorBanner}>
@@ -183,6 +203,9 @@ export function AgentModal({ onClose }: AgentModalProps) {
                       size="sm"
                       styles={{ input: { borderRadius: 8, resize: "none" } }}
                     />
+                    <Text size="xs" c="text-light" mt={4} className={S.inputHint}>
+                      {t`Enter to send · Shift+Enter for new line`}
+                    </Text>
                   </div>
                   <Tooltip label={t`Send (Enter)`}>
                     <ActionIcon
@@ -192,7 +215,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                       onClick={handleSend}
                       disabled={isLoading || !inputText.trim()}
                       aria-label={t`Send message`}
-                      style={{ flexShrink: 0, marginBottom: 1 }}
+                      style={{ flexShrink: 0, marginBottom: 20 }}
                     >
                       <Icon name="send" size={16} />
                     </ActionIcon>

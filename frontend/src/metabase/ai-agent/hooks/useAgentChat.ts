@@ -47,12 +47,12 @@ export function useAgentChat() {
         };
         setAgentSettings({
           configured: s.configured ?? false,
-          model: s.model ?? "gpt-4o",
+          model: s.model ?? "gpt-5.4",
           enabled: s.enabled ?? true,
         });
       })
       .catch(() => {
-        setAgentSettings({ configured: false, model: "gpt-4o", enabled: true });
+        setAgentSettings({ configured: false, model: "gpt-5.4", enabled: true });
       });
   }, []);
 
