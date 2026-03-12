@@ -7,6 +7,8 @@ import { Box, Flex } from "metabase/ui";
 import type { CollectionId } from "metabase-types/api";
 import type { DetailViewState } from "metabase-types/store";
 
+import { AgentButton } from "metabase/ai-agent";
+
 import CollectionBreadcrumbs from "../../containers/CollectionBreadcrumbs";
 import QuestionLineage from "../../containers/QuestionLineage";
 import NewItemButton from "../NewItemButton";
@@ -94,7 +96,7 @@ const AppBarLarge = ({
           ) : null}
         </AppBarInfoContainer>
       </Flex>
-      {(isSearchVisible || isNewButtonVisible || isProfileLinkVisible) && (
+      {(isSearchVisible || isNewButtonVisible || isProfileLinkVisible || !isEmbeddingIframe) && (
         <Flex
           align="center"
           gap="sm"
@@ -104,6 +106,7 @@ const AppBarLarge = ({
         >
           {isSearchVisible &&
             (isEmbeddingIframe ? <SearchBar /> : <SearchButton mr="md" />)}
+          {!isEmbeddingIframe && <AgentButton />}
           {isNewButtonVisible && <NewItemButton collectionId={collectionId} />}
           {!isEmbeddingIframe && <PLUGIN_METABOT.MetabotAppBarButton />}
           {isProfileLinkVisible && (
