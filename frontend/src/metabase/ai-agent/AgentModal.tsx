@@ -125,7 +125,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
           {!isMinimized && messages.length > 0 && (
             <Tooltip label={t`Clear conversation`}>
               <ActionIcon
-                variant="subtle"
+                variant="transparent"
                 c="rgba(255,255,255,0.8)"
                 size="sm"
                 onClick={clearMessages}
@@ -137,7 +137,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
           )}
           <Tooltip label={isMinimized ? t`Expand` : t`Minimize`}>
             <ActionIcon
-              variant="subtle"
+              variant="transparent"
               c="rgba(255,255,255,0.8)"
               size="sm"
               onClick={toggleMinimized}
@@ -148,7 +148,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
           </Tooltip>
           <Tooltip label={t`Close`}>
             <ActionIcon
-              variant="subtle"
+              variant="transparent"
               c="rgba(255,255,255,0.8)"
               size="sm"
               onClick={onClose}

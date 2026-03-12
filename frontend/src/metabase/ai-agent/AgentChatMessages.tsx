@@ -3,6 +3,7 @@ import { t } from "ttag";
 
 import Markdown from "metabase/common/components/Markdown";
 import {
+  Anchor,
   Code,
   Flex,
   Group,
@@ -16,7 +17,7 @@ import {
 } from "metabase/ui";
 
 import S from "./AgentModal.module.css";
-import type { ChatMessage } from "./types";
+import type { ChatMessage, ContentBlock } from "./types";
 
 const EXAMPLE_PROMPTS = [
   t`Show total orders per day for the last 30 days`,
@@ -24,6 +25,79 @@ const EXAMPLE_PROMPTS = [
   t`Find dashboards related to revenue`,
   t`Create a question showing monthly active users`,
 ];
+
+/* ── Block renderers ─────────────────────────────────────────────────────── */
+
+function CardLinkBlock({ block }: { block: Extract<ContentBlock, { type: "card_link" }> }) {
+  return (
+    <Anchor
+      href={`/question/${block.card_id}`}
+      className={S.blockLink}
+      underline="never"
+    >
+      <Group gap={8} wrap="nowrap">
+        <Icon name="table2" size={16} color="var(--mb-color-brand)" />
+        <Text size="sm" fw={500} truncate>
+          {block.name}
+        </Text>
+      </Group>
+    </Anchor>
+  );
+}
+
+function DashboardLinkBlock({ block }: { block: Extract<ContentBlock, { type: "dashboard_link" }> }) {
+  return (
+    <Anchor
+      href={`/dashboard/${block.dashboard_id}`}
+      className={S.blockLink}
+      underline="never"
+    >
+      <Group gap={8} wrap="nowrap">
+        <Icon name="dashboard" size={16} color="var(--mb-color-brand)" />
+        <Text size="sm" fw={500} truncate>
+          {block.name}
+        </Text>
+      </Group>
+    </Anchor>
+  );
+}
+
+function SqlBlock({ block }: { block: Extract<ContentBlock, { type: "sql" }> }) {
+  return (
+    <Code className={S.sqlBlock} block>
+      {block.content}
+    </Code>
+  );
+}
+
+function TableBlock({ block }: { block: Extract<ContentBlock, { type: "table" }> }) {
+  const esc = (v: unknown) => String(v ?? "").replace(/\|/g, "\\|");
+  const header = `| ${block.columns.map(esc).join(" | ")} |`;
+  const divider = `| ${block.columns.map(() => "---").join(" | ")} |`;
+  const rows = block.rows
+    .map(r => `| ${r.map(esc).join(" | ")} |`)
+    .join("\n");
+  return <Markdown>{`${header}\n${divider}\n${rows}`}</Markdown>;
+}
+
+function ContentBlockRenderer({ block }: { block: ContentBlock }) {
+  switch (block.type) {
+    case "text":
+      return <Markdown>{block.content}</Markdown>;
+    case "card_link":
+      return <CardLinkBlock block={block} />;
+    case "dashboard_link":
+      return <DashboardLinkBlock block={block} />;
+    case "sql":
+      return <SqlBlock block={block} />;
+    case "table":
+      return <TableBlock block={block} />;
+    default:
+      return null;
+  }
+}
+
+/* ── Tool call message ───────────────────────────────────────────────────── */
 
 function ToolCallMessage({ message }: { message: ChatMessage }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -74,37 +148,57 @@ function ToolCallMessage({ message }: { message: ChatMessage }) {
   );
 }
 
+/* ── Message bubble ──────────────────────────────────────────────────────── */
+
 function MessageBubble({ message }: { message: ChatMessage }) {
   if (message.role === "tool") {
     return <ToolCallMessage message={message} />;
   }
 
   // Skip the optimistic placeholder added while waiting for the server response
-  if (message.content === null) {
+  if (message.content === null && !message.blocks) {
     return null;
   }
 
   const isUser = message.role === "user";
 
-  return (
-    <Flex
-      className={S.messageBubbleRow}
-      justify={isUser ? "flex-end" : "flex-start"}
-    >
-      {isUser ? (
+  if (isUser) {
+    return (
+      <Flex className={S.messageBubbleRow} justify="flex-end">
         <Paper className={S.userBubble} radius="xl">
           <Text size="sm" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
             {message.content}
           </Text>
         </Paper>
-      ) : (
+      </Flex>
+    );
+  }
+
+  // Assistant message — structured blocks or plain markdown fallback
+  if (message.blocks && message.blocks.length > 0) {
+    return (
+      <Flex className={S.messageBubbleRow} justify="flex-start">
         <Paper className={S.assistantBubble} radius="xl">
-          <Markdown>{message.content ?? ""}</Markdown>
+          <Stack gap={8}>
+            {message.blocks.map((block, idx) => (
+              <ContentBlockRenderer key={idx} block={block} />
+            ))}
+          </Stack>
         </Paper>
-      )}
+      </Flex>
+    );
+  }
+
+  return (
+    <Flex className={S.messageBubbleRow} justify="flex-start">
+      <Paper className={S.assistantBubble} radius="xl">
+        <Markdown>{message.content ?? ""}</Markdown>
+      </Paper>
     </Flex>
   );
 }
+
+/* ── Main component ──────────────────────────────────────────────────────── */
 
 interface AgentChatMessagesProps {
   messages: ChatMessage[];

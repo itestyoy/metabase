@@ -122,10 +122,6 @@
   gap: 2px;
 }
 
-.modalHeaderActions button:hover {
-  background: none;
-}
-
 /* ── Messages area ──────────────────────────────── */
 .messagesScroll {
   flex: 1;
@@ -222,6 +218,7 @@
   line-height: 1.45;
   word-break: break-word;
   box-shadow: none !important;
+  color: var(--mb-color-text-primary);
 }
 
 /* Markdown inside assistant bubble */
@@ -250,6 +247,7 @@
   border-radius: 3px;
   padding: 1px 4px;
   font-size: 12px;
+  color: var(--mb-color-text-primary);
 }
 
 /* ── Tool call messages ─────────────────────────── */
@@ -279,6 +277,33 @@
   border-radius: 0 !important;
   box-shadow: none !important;
   color: var(--mb-color-text-medium);
+}
+
+/* ── Structured content blocks ─────────────────── */
+.blockLink {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--mb-color-background);
+  border: 1px solid var(--mb-color-border);
+  border-radius: 8px;
+  color: var(--mb-color-text-primary);
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.blockLink:hover {
+  border-color: var(--mb-color-brand);
+  background: color-mix(in srgb, var(--mb-color-brand) 6%, transparent);
+}
+
+.sqlBlock {
+  font-size: 12px !important;
+  background: var(--mb-color-background) !important;
+  border: 1px solid var(--mb-color-border) !important;
+  border-radius: 6px !important;
+  padding: 8px 10px !important;
+  overflow-x: auto;
+  color: var(--mb-color-text-primary) !important;
 }
 
 /* ── Loading bubble ─────────────────────────────── */
