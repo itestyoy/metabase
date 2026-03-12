@@ -19,71 +19,86 @@
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
 (def tool-definitions
-  "Tool schemas passed to OpenAI."
-  [{:type "function"
-    :name "list_databases"
+  "Tool schemas in the Responses API format (flat, NOT nested under a :function key).
+   All tools use strict: true with additionalProperties: false for reliable parameter validation."
+  [{:type        "function"
+    :name        "list_databases"
     :description "List all databases in Metabase that the current user has access to."
-    :parameters {:type "object" :properties {} :required []}}
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {}
+                  :required             []
+                  :additionalProperties false}}
 
-   {:type "function"
-    :name "get_database_schema"
+   {:type        "function"
+    :name        "get_database_schema"
     :description "Get the full schema (tables and columns) for a specific database.
 Use this before writing SQL to understand the available tables and column names."
-    :parameters {:type       "object"
-                 :properties {:database_id {:type        "number"
-                                            :description "ID of the database."}}
-                 :required   ["database_id"]}}
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:database_id {:type        "integer"
+                                                       :description "ID of the database."}}
+                  :required             ["database_id"]
+                  :additionalProperties false}}
 
-   {:type "function"
-    :name "list_questions"
+   {:type        "function"
+    :name        "list_questions"
     :description "List existing saved questions (cards) in Metabase.
-Useful to check whether a similar question already exists."
-    :parameters {:type       "object"
-                 :properties {:search {:type        "string"
-                                       :description "Optional name search filter."}}
-                 :required   []}}
+Useful to check whether a similar question already exists before creating one."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:search {:type        "string"
+                                                  :description "Optional name filter (case-insensitive substring match)."}}
+                  :required             []
+                  :additionalProperties false}}
 
-   {:type "function"
-    :name "search_items"
+   {:type        "function"
+    :name        "search_items"
     :description "Search across all Metabase items: questions, dashboards, collections, tables, metrics."
-    :parameters {:type       "object"
-                 :properties {:query {:type        "string"
-                                      :description "Search query string."}
-                              :type  {:type        "string"
-                                      :enum        ["question" "dashboard" "collection" "table" "metric"]
-                                      :description "Optional: filter by item type."}}
-                 :required   ["query"]}}
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:query {:type        "string"
+                                                 :description "Search query string."}
+                                         :type  {:type        "string"
+                                                 :enum        ["question" "dashboard" "collection" "table" "metric"]
+                                                 :description "Optional: restrict results to this item type."}}
+                  :required             ["query"]
+                  :additionalProperties false}}
 
-   {:type "function"
-    :name "run_query"
-    :description "Execute a native SQL query and return the first rows of results.
-Use this to validate a query before creating a saved question."
-    :parameters {:type       "object"
-                 :properties {:database_id {:type        "number"
-                                            :description "Database ID to run the query against."}
-                              :sql         {:type        "string"
-                                            :description "SQL query to execute."}}
-                 :required   ["database_id" "sql"]}}
+   {:type        "function"
+    :name        "run_query"
+    :description "Execute a native SQL query against a database and return the first 10 rows.
+Use this to preview data or validate SQL before saving a question."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:database_id {:type        "integer"
+                                                       :description "Database ID to run the query against."}
+                                         :sql         {:type        "string"
+                                                       :description "SQL query to execute."}}
+                  :required             ["database_id" "sql"]
+                  :additionalProperties false}}
 
-   {:type "function"
-    :name "create_question"
+   {:type        "function"
+    :name        "create_question"
     :description "Create and save a new question (saved query) in Metabase.
-After creating, always tell the user the URL: /question/<id>"
-    :parameters {:type       "object"
-                 :properties {:name          {:type        "string"
-                                              :description "Question title."}
-                              :description   {:type        "string"
-                                              :description "Optional description."}
-                              :database_id   {:type        "number"
-                                              :description "Database ID this question queries."}
-                              :sql           {:type        "string"
-                                              :description "Native SQL query."}
-                              :collection_id {:type        "number"
-                                              :description "Optional collection ID to save into."}
-                              :display       {:type        "string"
-                                              :enum        ["table" "bar" "line" "pie" "scalar" "area" "row"]
-                                              :description "Visualization type. Default: table."}}
-                 :required   ["name" "database_id" "sql"]}}])
+After creating, always provide the URL /question/<id> to the user."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:name          {:type        "string"
+                                                         :description "Question title."}
+                                         :database_id   {:type        "integer"
+                                                         :description "Database ID this question queries."}
+                                         :sql           {:type        "string"
+                                                         :description "Native SQL query."}
+                                         :description   {:type        "string"
+                                                         :description "Optional description of the question."}
+                                         :collection_id {:type        "integer"
+                                                         :description "Optional collection ID to save the question into."}
+                                         :display       {:type        "string"
+                                                         :enum        ["table" "bar" "line" "pie" "scalar" "area" "row"]
+                                                         :description "Visualization type. Defaults to table."}}
+                  :required             ["name" "database_id" "sql"]
+                  :additionalProperties false}}])
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Tool implementations

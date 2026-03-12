@@ -1,9 +1,15 @@
 (ns metabase.ai-agent.openai
-  "Client for the OpenAI Responses API.
+  "Client for the OpenAI Responses API (POST /v1/responses).
 
-  Uses the Responses API (POST /v1/responses) instead of Chat Completions so that
-  conversation history is managed server-side via `previous_response_id` — no need
-  to re-send the full message history on every turn."
+  Key differences from Chat Completions that this implementation respects:
+  - Tool definitions are FLAT: {:type \"function\" :name … :description … :parameters …}
+    (no nested {:function {…}} wrapper like Chat Completions)
+  - System prompt goes in the top-level `instructions` field, not in `input`
+  - Tool results use {:type \"function_call_output\" :call_id … :output …}
+    (field is `call_id`, not `tool_call_id` as in Chat Completions)
+  - Text is available via the `output_text` shortcut on the response object
+  - Conversation history is managed server-side via `previous_response_id` —
+    on every turn we only send the new input, not the full history"
   (:require
    [cheshire.core :as json]
    [clj-http.client :as http]
@@ -13,133 +19,143 @@
 
 (def ^:private openai-responses-url "https://api.openai.com/v1/responses")
 
-(def ^:private system-prompt
+(def ^:private system-instructions
   "You are a helpful Metabase analyst assistant.
 You help users explore data, create saved questions, and find existing reports.
 
 When a user asks you to do something (e.g. \"create a question showing monthly revenue\"):
-1. Discover available databases if you don't know them yet.
-2. Explore the relevant database schema to understand tables/columns.
+1. Discover available databases if you don't know them yet (list_databases).
+2. Explore the relevant database schema to understand tables/columns (get_database_schema).
 3. Write a SQL query and optionally validate it with run_query.
 4. Create and save the question with create_question.
-5. Always share the URL (/question/<id>) so the user can open it.
+5. Always share the direct URL (/question/<id>) so the user can open it immediately.
 
-Be proactive: if the user doesn't specify a database, list them first and pick the most likely one.
-Keep SQL readable with clear aliases.
-After completing an action, summarise what was done in plain language.")
+Be proactive: if the user doesn't specify a database, list them first and pick the most relevant one.
+Write clean SQL with descriptive column aliases.
+After completing an action, briefly summarise what was done in plain language.")
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
-;;; Request helpers
+;;; Request building
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
-(defn- auth-headers [api-key]
-  {"Authorization" (str "Bearer " api-key)
-   "Content-Type"  "application/json"})
+(defn- build-input
+  "Build the `input` array for a Responses API request.
 
-(defn- make-request-body
-  "Build the request body for the Responses API.
+  - Tool result turn: array of function_call_output items (one per tool result).
+  - User message turn: array with a single user message item."
+  [{:keys [message tool-results]}]
+  (if (seq tool-results)
+    ;; Submitting tool outputs — field is `call_id` (not `tool_call_id`)
+    (mapv (fn [{:keys [call-id output]}]
+            {:type    "function_call_output"
+             :call_id call-id
+             :output  (str output)})
+          tool-results)
+    ;; Regular user turn
+    [{:role    "user"
+      :content (str message)}]))
 
-  On the first turn `previous-response-id` is nil and we include the system
-  prompt + user message in `input`.  On subsequent turns we pass
-  `previous_response_id` and only include the new user input."
-  [{:keys [model message previous-response-id tool-results tools]}]
-  (let [input (cond
-                ;; Submitting tool outputs back to the model
-                (seq tool-results)
-                (mapv (fn [{:keys [call-id output]}]
-                        {:type   "function_call_output"
-                         :call_id call-id
-                         :output  output})
-                      tool-results)
-
-                ;; First turn — include system instructions
-                (nil? previous-response-id)
-                [{:role    "system"
-                  :content system-prompt}
-                 {:role    "user"
-                  :content message}]
-
-                ;; Subsequent turns — just the new user message
-                :else
-                [{:role    "user"
-                  :content message}])]
-    (cond-> {:model input
-             :input input}
-      previous-response-id (assoc :previous_response_id previous-response-id)
-      (seq tools)          (assoc :tools tools)
-      ;; Always be explicit about tool choice
-      (seq tools)          (assoc :tool_choice "auto"))))
+(defn- build-request-body
+  "Build the complete POST body for /v1/responses."
+  [{:keys [model tools previous-response-id] :as opts}]
+  (cond-> {:model        model
+           ;; System prompt via `instructions` (not inside `input`)
+           :instructions system-instructions
+           :input        (build-input opts)
+           :store        true}    ; store=true is required for previous_response_id to work
+    previous-response-id (assoc :previous_response_id previous-response-id)
+    (seq tools)          (assoc :tools        tools
+                                :tool_choice  "auto")))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Public API
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
 (defn create-response
-  "Call the OpenAI Responses API and return the parsed response map.
+  "Call POST /v1/responses and return the parsed response map.
 
-  Options:
-  - `:api-key`             — OpenAI API key (required)
-  - `:model`               — model string, e.g. \"gpt-4o\" (required)
-  - `:message`             — user message string (required on first/next user turn)
-  - `:previous-response-id`— ID from the previous response (optional)
-  - `:tool-results`        — seq of {:call-id … :output …} for tool submissions
-  - `:tools`               — vector of tool definition maps"
+  Options (all keys are Clojure keywords):
+  - `:api-key`              — OpenAI API key (required)
+  - `:model`                — model ID string, e.g. \"gpt-5.4\" (required)
+  - `:message`              — user message string (required on user turns)
+  - `:previous-response-id` — ID from the previous response; enables server-side history
+  - `:tool-results`         — seq of {:call-id \"…\" :output \"…\"} for tool submissions
+  - `:tools`                — vector of flat tool-definition maps"
   [{:keys [api-key model] :as opts}]
   {:pre [(string? api-key) (seq api-key)
          (string? model)   (seq model)]}
-  (let [body (-> (make-request-body opts)
-                 (assoc :model model)
-                 (dissoc :model)) ; make-request-body put model as a dummy key; fix below
-        ;; rebuild correctly
-        body (cond-> {:model model
-                      :input (:input (make-request-body opts))}
-               (:previous-response-id opts)
-               (assoc :previous_response_id (:previous-response-id opts))
-
-               (seq (:tools opts))
-               (assoc :tools (:tools opts)
-                      :tool_choice "auto"))]
-    (log/debug "OpenAI Responses API request" {:model model :input (count (:input body)) :prev (:previous_response_id body)})
+  (let [body (build-request-body opts)]
+    (log/debug "OpenAI Responses API →"
+               {:model model
+                :input-count      (count (:input body))
+                :prev-response-id (:previous_response_id body)
+                :tool-count       (count (:tools body))})
     (let [resp (http/post openai-responses-url
-                          {:headers      (auth-headers api-key)
-                           :body         (json/generate-string body)
-                           :as           :json
-                           :content-type :json
+                          {:headers         {"Authorization" (str "Bearer " api-key)
+                                             "Content-Type"  "application/json"}
+                           :body            (json/generate-string body)
+                           :as              :json
                            :throw-exceptions false})]
       (if (= 200 (:status resp))
         (:body resp)
-        (throw (ex-info "OpenAI API error"
-                        {:status (:status resp)
-                         :body   (:body resp)}))))))
+        (let [err-body (:body resp)
+              message  (or (get-in err-body [:error :message])
+                           (str err-body))]
+          (throw (ex-info (str "OpenAI API error " (:status resp) ": " message)
+                          {:status (:status resp)
+                           :body   err-body})))))))
 
-(defn response-id [response]
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;; Response parsing helpers
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+(defn response-id
+  "Return the response ID (use as `previous_response_id` on the next turn)."
+  [response]
   (get response :id))
 
 (defn extract-text
-  "Extract the plain text content from a Responses API response."
+  "Return the assistant's text reply.
+  Uses the `output_text` shortcut field available on all Responses API responses."
   [response]
-  (->> (get response :output [])
-       (filter #(= "message" (get % :type)))
-       (mapcat #(get % :content []))
-       (filter #(= "output_text" (get % :type)))
-       (map #(get % :text ""))
-       (clojure.string/join "")))
+  ;; output_text is a convenience field that concatenates all text output items
+  (or (get response :output_text)
+      ;; fallback: traverse manually for safety
+      (->> (get response :output [])
+           (filter #(= "message" (get % :type)))
+           (mapcat #(get % :content []))
+           (filter #(= "output_text" (get % :type)))
+           (map #(get % :text ""))
+           (clojure.string/join ""))
+      ""))
 
 (defn extract-tool-calls
-  "Return a seq of tool call maps from a Responses API response.
-  Each map has :call-id, :name, :arguments (parsed map)."
+  "Return tool calls from a response as seq of maps:
+  {:call-id \"…\" :name \"…\" :arguments {…}}
+
+  In the Responses API, tool calls appear in `output` as items with
+  `type == \"function_call\"`.  Fields are flat (no `.function.` nesting):
+    - `.call_id`   — the ID to echo back in function_call_output
+    - `.name`      — function name
+    - `.arguments` — JSON string of arguments"
   [response]
   (->> (get response :output [])
        (filter #(= "function_call" (get % :type)))
        (map (fn [item]
               {:call-id   (get item :call_id)
                :name      (get item :name)
+               ;; Parse with string keys to match execute-tool's (get args "field") calls
                :arguments (try
                             (json/parse-string (get item :arguments "{}"))
                             (catch Exception _
                               {}))}))))
 
 (defn has-tool-calls?
-  "Returns true if the response contains tool calls that need to be executed."
+  "True when the response contains function_call items that must be executed."
   [response]
-  (seq (extract-tool-calls response)))
+  (boolean (seq (extract-tool-calls response))))
+
+(defn failed?
+  "True when the response status indicates an error."
+  [response]
+  (contains? #{"failed" "cancelled" "incomplete"} (get response :status)))

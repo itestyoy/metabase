@@ -40,7 +40,11 @@
                                                           :api-key api-key
                                                           :model   model
                                                           :tools   ai.tools/tool-definitions))
-            response-id (ai.openai/response-id response)]
+            response-id (ai.openai/response-id response)
+            _           (when (ai.openai/failed? response)
+                          (throw (ex-info (str "OpenAI returned status: " (get response :status))
+                                          {:status (get response :status)
+                                           :error  (get response :error)})))]
         (if (ai.openai/has-tool-calls? response)
           ;; ── Tool calls: execute each and loop back ─────────────────────────
           (let [tool-calls (ai.openai/extract-tool-calls response)
@@ -89,7 +93,7 @@
   (api/check-403 (ai.settings/ai-agent-enabled))
   (let [api-key (ai.settings/ai-agent-openai-api-key)]
     (api/check-403 (some? api-key) "AI Agent is not configured. Ask your administrator to set the OpenAI API key in Admin settings.")
-    (let [model  (or (ai.settings/ai-agent-openai-model) "gpt-4o")
+    (let [model  (or (ai.settings/ai-agent-openai-model) "gpt-5.4")
           opts   (cond-> {:message message}
                    previous-response-id
                    (assoc :previous-response-id previous-response-id))
