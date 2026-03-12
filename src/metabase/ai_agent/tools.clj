@@ -259,7 +259,7 @@ After creating, always provide the URL /question/<id> to the user."
                  (catch Exception e
                    {:error (.getMessage e)}))]
     (str (format "Results for question \"%s\" (ID: %d):\n" (:name card) card-id)
-         (format-qp-result result)))))
+         (format-qp-result result))))
 
 (defn- create-question [{:strs [name description database_id sql collection_id display]}]
   (let [card-data (cond-> {:name          name
