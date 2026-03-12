@@ -6,8 +6,9 @@
   (:require
    [cheshire.core :as json]
    [metabase.api.common :as api]
+   [metabase.permissions.core :as perms]
    [metabase.queries.models.card :as queries.card]
-   [metabase.query-processor.core :as qp]
+   [metabase.query-processor :as qp]
    [metabase.search.core :as search]
    [metabase.util.log :as log]
    [toucan2.core :as t2]))
@@ -165,10 +166,16 @@ After creating, always provide the URL /question/<id> to the user."
                   cards))))))
 
 (defn- search-items [query item-type]
-  (let [params  (cond-> {:q query :limit 15}
-                  item-type (assoc :models [item-type]))
+  (let [ctx     (cond-> {:search-string        query
+                         :limit                15
+                         :current-user-id      api/*current-user-id*
+                         :current-user-perms   @api/*current-user-permissions-set*
+                         :is-superuser?        api/*is-superuser?*
+                         :is-impersonated-user? (perms/impersonated-user?)
+                         :is-sandboxed-user?   (perms/sandboxed-user?)}
+                  item-type (assoc :models #{item-type}))
         results (try
-                  (:data (search/search (search/search-context params)))
+                  (:data (search/search (search/search-context ctx)))
                   (catch Exception e
                     (log/warn e "AI Agent search failed")
                     []))]
