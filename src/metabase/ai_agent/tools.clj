@@ -10,6 +10,7 @@
    [metabase.permissions.core :as perms]
    [metabase.queries.models.card :as queries.card]
    [metabase.query-processor :as qp]
+   [metabase.query-processor.util :as qp.util]
    [metabase.search.core :as search]
    [metabase.util.log :as log]
    [toucan2.core :as t2]))
@@ -267,7 +268,8 @@ After creating, always provide the URL /question/<id> to the user."
         result (try
                  (qp/process-query
                   (assoc query :info {:executed-by api/*current-user-id*
-                                      :context     :ad-hoc}))
+                                      :context     :ad-hoc
+                                      :query-hash  (qp.util/query-hash query)}))
                  (catch Exception e
                    {:error (.getMessage e)}))]
     (format-qp-result result)))
@@ -276,12 +278,14 @@ After creating, always provide the URL /question/<id> to the user."
   (let [card (t2/select-one :model/Card :id card-id)
         _    (api/check-404 card)
         _    (api/check-403 (mi/can-read? card))
+        dq   (:dataset_query card)
         result (try
                  (qp/process-query
-                  (assoc (:dataset_query card)
+                  (assoc dq
                          :info {:executed-by api/*current-user-id*
                                 :context     :ad-hoc
-                                :card-id     card-id}))
+                                :card-id     card-id
+                                :query-hash  (qp.util/query-hash dq)}))
                  (catch Exception e
                    {:error (.getMessage e)}))]
     (str (format "Results for question \"%s\" (ID: %d):\n" (:name card) card-id)
