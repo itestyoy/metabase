@@ -1,0 +1,346 @@
+/* Floating agent modal - fixed bottom-right, draggable.
+   position/size set exclusively via inline styles in AgentModal.tsx — no CSS defaults
+   to avoid any layout race between CSS class and inline style on first paint. */
+.floatingModal {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--mb-color-background);
+  border: 1px solid var(--mb-color-border);
+  border-radius: var(--default-border-radius, 8px);
+  box-shadow: none;
+  /* z-index below Mantine's default tooltip/popover z-index (300)
+     so tooltips inside the modal are never covered by the modal itself */
+  z-index: 200;
+  /* overflow:hidden ensures content respects the set height and resize handles
+     stay at the visual edge. Mantine tooltips are portaled to <body> so they
+     are not clipped. */
+  overflow: hidden;
+}
+
+.floatingModalMinimized {
+  /* Override the inline height from JS — 52px includes border thanks to
+     box-sizing: border-box inherited from .floatingModal */
+  height: 52px !important;
+  border-radius: var(--default-border-radius, 8px);
+}
+
+/* Applied during drag/resize to prevent text selection and disable transitions */
+.floatingModalInteracting {
+  user-select: none;
+  transition: none !important;
+}
+
+/* ── Resize handles ─────────────────────────────── */
+.resizeHandle {
+  position: absolute;
+  z-index: 10;
+  touch-action: none; /* prevent scroll on touch resize */
+}
+
+/* Left edge — horizontal resize */
+.resizeHandleLeft {
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 5px;
+  cursor: ew-resize;
+}
+
+
+/* Top edge — vertical resize */
+.resizeHandleTop {
+  top: 0;
+  left: 8px;
+  right: 8px;
+  height: 5px;
+  cursor: ns-resize;
+}
+
+
+/* Bottom-right corner — resize in both axes (keeps top-left fixed) */
+.resizeHandleBottomRight {
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  border-radius: 0 0 var(--default-border-radius, 8px) 0;
+  /* Classic three-dot resize grip via repeating gradient */
+  background-image: radial-gradient(
+      circle,
+      var(--mb-color-text-light) 1.2px,
+      transparent 1.2px
+    ),
+    radial-gradient(
+      circle,
+      var(--mb-color-text-light) 1.2px,
+      transparent 1.2px
+    ),
+    radial-gradient(
+      circle,
+      var(--mb-color-text-light) 1.2px,
+      transparent 1.2px
+    );
+  background-size: 5px 5px;
+  /* Anchored from bottom-right so dots always sit in the corner */
+  background-position:
+    right 3px bottom 3px,
+    right 8px bottom 3px,
+    right 3px bottom 8px;
+  background-repeat: no-repeat;
+}
+
+/* ── Header ─────────────────────────────────────── */
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  height: 52px;
+  background: var(--mb-color-brand);
+  cursor: move;
+  user-select: none;
+  flex-shrink: 0;
+  touch-action: none; /* prevent scroll on touch drag */
+}
+
+.modalHeaderTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modalHeaderTitle svg {
+  color: var(--mb-color-text-white);
+}
+
+.modalHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ── Messages area ──────────────────────────────── */
+.messagesScroll {
+  flex: 1;
+  min-height: 0; /* allow flex child to shrink below content size */
+  overflow: hidden;
+}
+
+.messagesInner {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.emptyState {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  gap: 12px;
+}
+
+/* ── Example prompt chips ────────────────────────── */
+.promptChips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.promptChip {
+  width: 100%;
+  text-align: left;
+  padding: 7px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mb-color-text-medium);
+  background: var(--mb-color-background-secondary);
+  border: 1px solid var(--mb-color-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.promptChip:hover {
+  background: var(--mb-color-brand-lighter);
+  border-color: var(--mb-color-brand);
+  color: var(--mb-color-brand);
+}
+
+/* ── Not configured — env var box ───────────────── */
+.envVarBox {
+  padding: 6px 12px;
+  background: var(--mb-color-background-secondary);
+  border: 1px solid var(--mb-color-border);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--mb-color-text-medium);
+  font-family: monospace;
+  word-break: break-all;
+}
+
+/* ── Chat bubbles ───────────────────────────────── */
+.messageBubbleRow {
+  display: flex;
+  margin-bottom: 4px;
+}
+
+/* User bubble: brand background, white text */
+.userBubble {
+  background: var(--mb-color-brand) !important;
+  border-color: transparent !important;
+  border-radius: 16px 16px 4px 16px !important;
+  padding: 8px 14px !important;
+  max-width: 82%;
+  box-shadow: none !important;
+}
+
+.userBubble * {
+  color: var(--mb-color-text-white) !important;
+}
+
+/* Assistant bubble: green tint background */
+.assistantBubble {
+  background: color-mix(in srgb, var(--mb-color-success) 10%, transparent) !important;
+  border-color: color-mix(in srgb, var(--mb-color-success) 25%, transparent) !important;
+  border-radius: 16px 16px 16px 4px !important;
+  padding: 8px 14px !important;
+  max-width: 82%;
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+  box-shadow: none !important;
+}
+
+/* Markdown inside assistant bubble */
+.assistantBubble p {
+  margin: 0 0 6px;
+  color: var(--mb-color-text-primary);
+}
+
+.assistantBubble p:last-child {
+  margin-bottom: 0;
+}
+
+.assistantBubble pre {
+  background: var(--mb-color-background);
+  border: 1px solid var(--mb-color-border);
+  border-radius: 4px;
+  padding: 8px;
+  overflow-x: auto;
+  font-size: 12px;
+  margin: 4px 0;
+}
+
+.assistantBubble code {
+  background: var(--mb-color-background);
+  border: 1px solid var(--mb-color-border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 12px;
+}
+
+/* ── Tool call messages ─────────────────────────── */
+.toolMessage {
+  margin: 2px 0;
+  border-left: 3px solid var(--mb-color-border) !important;
+  background: var(--mb-color-background-secondary) !important;
+  border-radius: 0 6px 6px 0 !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+
+.toolHeader {
+  display: flex;
+  align-items: center;
+}
+
+.toolResult {
+  max-height: 72px;
+  overflow: hidden;
+  font-size: 11px;
+  background: var(--mb-color-background) !important;
+  border-top: 1px solid var(--mb-color-border) !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: var(--mb-color-text-medium);
+}
+
+/* ── Loading bubble ─────────────────────────────── */
+.loadingBubble {
+  background: var(--mb-color-background-secondary) !important;
+  border-color: transparent !important;
+  border-radius: 16px 16px 16px 4px !important;
+  padding: 10px 14px !important;
+  box-shadow: none !important;
+}
+
+/* ── Error banner ───────────────────────────────── */
+.errorBanner {
+  padding: 8px 16px;
+  background: var(--mb-color-error-light);
+  border-top: 1px solid var(--mb-color-error);
+  flex-shrink: 0;
+}
+
+/* ── Input area ─────────────────────────────────── */
+.inputArea {
+  border-top: 1px solid var(--mb-color-border);
+  padding: 10px 12px 12px;
+  flex-shrink: 0;
+  background: var(--mb-color-background);
+  border-radius: 0;
+}
+
+/* Composer: unified container wrapping textarea + footer row */
+.composer {
+  border: 1.5px solid var(--mb-color-border);
+  border-radius: 10px;
+  background: var(--mb-color-background);
+  transition: border-color 0.15s;
+  display: flex;
+  flex-direction: column;
+}
+
+.composer:focus-within {
+  border-color: var(--mb-color-brand);
+}
+
+.composerTextarea {
+  padding: 8px 12px 4px;
+}
+
+/* Strip Mantine's default textarea wrapper padding/margin */
+.composerTextarea textarea {
+  padding: 0 !important;
+  background: transparent !important;
+  resize: none;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--mb-color-text-primary);
+}
+
+/* Footer row: hint text left, send button right */
+.composerFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 6px 12px;
+}
+
+/* ── Input hint ──────────────────────────────────── */
+.inputHint {
+  line-height: 1;
+  font-size: 11px;
+}

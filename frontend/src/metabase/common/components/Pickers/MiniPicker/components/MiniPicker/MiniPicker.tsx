@@ -26,6 +26,8 @@ export type MiniPickerProps = {
   onBrowseAll?: () => void;
   shouldHide?: (item: MiniPickerItem | unknown) => boolean;
   shouldShowLibrary?: boolean;
+  /** Margin-top of the dropdown. Defaults to "xl" to match the original spacing. */
+  dropdownMt?: string | number;
 };
 
 export function MiniPicker({
@@ -39,6 +41,7 @@ export function MiniPicker({
   trapFocus = false,
   shouldHide,
   shouldShowLibrary = true,
+  dropdownMt = "xl",
 }: MiniPickerProps) {
   const { data: libraryCollection } =
     PLUGIN_DATA_STUDIO.useGetLibraryCollection();
@@ -100,7 +103,7 @@ export function MiniPicker({
         </Menu.Target>
 
         <Menu.Dropdown
-          mt="xl"
+          mt={dropdownMt}
           ml="-1rem"
           px={0}
           py="sm"
