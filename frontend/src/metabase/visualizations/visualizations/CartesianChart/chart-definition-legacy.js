@@ -4,6 +4,8 @@ import { NULL_DISPLAY_VALUE } from "metabase/lib/constants";
 import { formatValue } from "metabase/lib/formatting";
 import { isEmpty } from "metabase/lib/validate";
 import { getComputedSettingsForSeries } from "metabase/visualizations/lib/settings/visualization";
+import { MAX_SERIES } from "metabase/visualizations/lib/utils";
+import { getRowsForStableKeys } from "metabase-types/api";
 
 // TODO: this series transformation is used only for the visualization settings computation which is excessive.
 // Replace this with defining settings models per visualization type which will contain all necessary info
@@ -30,6 +32,7 @@ function transformSingleSeries(s, series, seriesIndex) {
   }
 
   const { cols, rows } = data;
+  const rowsForBreakoutKeys = getRowsForStableKeys(data);
   const settings = getComputedSettingsForSeries([s]);
 
   const dimensions = (settings["graph.dimensions"] || []).filter(
@@ -62,12 +65,16 @@ function transformSingleSeries(s, series, seriesIndex) {
 
     for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
       const row = rows[rowIndex];
-      const seriesValue = row[seriesColumnIndex];
+      const seriesValue = rowsForBreakoutKeys[rowIndex][seriesColumnIndex];
 
       let seriesRows = breakoutRowsByValue.get(seriesValue);
       if (!seriesRows) {
         breakoutRowsByValue.set(seriesValue, (seriesRows = []));
         breakoutValues.push(seriesValue);
+
+        if (breakoutValues.length > MAX_SERIES) {
+          return [s];
+        }
       }
 
       const newRow = rowColumnIndexes.map((columnIndex) => row[columnIndex]);
@@ -124,7 +131,7 @@ function transformSingleSeries(s, series, seriesIndex) {
       const name = [
         // show series title if it's multiseries
         series.length > 1 && card.name,
-        // show column name if there are multiple metrics or sigle series
+        // show column name if there are multiple metrics or single series
         (metricColumnIndexes.length > 1 || series.length === 1) &&
           col?.display_name,
       ]

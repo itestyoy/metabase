@@ -110,7 +110,7 @@ const AppBarLarge = ({
           {isNewButtonVisible && <NewItemButton collectionId={collectionId} />}
           {!isEmbeddingIframe && <PLUGIN_METABOT.MetabotAppBarButton />}
           {isProfileLinkVisible && (
-            <Box c="var(--mb-color-text-primary)" aria-label={t`Settings menu`}>
+            <Box c="text-primary" aria-label={t`Settings menu`}>
               <ProfileLink />
             </Box>
           )}

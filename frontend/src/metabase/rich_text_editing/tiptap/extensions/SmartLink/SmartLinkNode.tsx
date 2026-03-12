@@ -19,6 +19,7 @@ import {
   useGetTableQuery,
   useListMentionsQuery,
 } from "metabase/api";
+import Link from "metabase/common/components/Link";
 import { updateMentionsCache } from "metabase/documents/documents.slice";
 import {
   type IconModel,
@@ -411,7 +412,7 @@ export const useEntityData = (
 };
 
 export const SmartLinkComponent = memo(
-  ({ node }: NodeViewProps) => {
+  ({ node, updateAttributes }: NodeViewProps) => {
     const { entityId, model, label } = node.attrs;
 
     const {
@@ -427,9 +428,10 @@ export const SmartLinkComponent = memo(
       if (entity) {
         const name =
           "display_name" in entity ? entity.display_name : entity?.name;
+        updateAttributes({ label: name });
         dispatch(updateMentionsCache({ entityId, model, name }));
       }
-    }, [dispatch, entity, entityId, model]);
+    }, [updateAttributes, dispatch, entity, entityId, model]);
 
     const showLoading = isLoading && !entity;
     if (showLoading) {
@@ -489,9 +491,9 @@ export const SmartLinkComponent = memo(
           );
 
     return (
-      <NodeViewWrapper as="span">
-        <a
-          href={entityUrl || "#"}
+      <NodeViewWrapper as="span" data-type="smart-link">
+        <Link
+          to={entityUrl || "#"}
           target="_blank"
           rel="noreferrer"
           tabIndex={-1}
@@ -505,7 +507,7 @@ export const SmartLinkComponent = memo(
             <Icon name={iconData.name} className={styles.icon} />
             {getName(entity)}
           </span>
-        </a>
+        </Link>
       </NodeViewWrapper>
     );
   },

@@ -926,9 +926,25 @@
   (let [query (lib/native-query meta/metadata-provider "SELECT * FROM ORDERS;")]
     (is (= "Created At is Jan 1 – Dec 31, 2023"
            (lib/display-name query [:= {:lib/uuid "79e513f8-af80-4c15-96b6-e72eff7f37cc"}
-                                    [:field {:effective-type :type/Integer
+                                    [:field {:effective-type :type/DateTime
                                              :base-type      :type/DateTime
                                              :temporal-unit  :year
                                              :lib/uuid       "1fe5dc66-54af-4368-9e4a-1e64a1fbe484"}
                                      "CREATED_AT"]
                                     "2023-01-01T00:00:00Z"])))))
+
+(deftest ^:parallel boolean-literal-filter-test
+  (testing "Boolean literals can be used as filters"
+    (doseq [bool [false true]]
+      (testing (str bool " literal is wrapped in :value clause with :lib/uuid for removal support")
+        (let [query  (lib/query meta/metadata-provider (meta/table-metadata :orders))
+              query' (lib/filter query bool)]
+          (is (=? {:stages [{:filters [[:value {:lib/uuid string?
+                                                :effective-type :type/Boolean
+                                                :base-type :type/Boolean}
+                                        bool]]}]}
+                  query'))
+          (testing "can be removed"
+            (let [filters (lib/filters query')
+                  query'' (lib/remove-clause query' (first filters))]
+              (is (empty? (lib/filters query''))))))))))

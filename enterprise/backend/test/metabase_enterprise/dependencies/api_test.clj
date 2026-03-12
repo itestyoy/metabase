@@ -2,6 +2,7 @@
   (:require
    [clojure.test :refer :all]
    [medley.core :as m]
+   [metabase.events.core :as events]
    [metabase.lib.core :as lib]
    [metabase.lib.metadata :as lib.metadata]
    [metabase.native-query-snippets.models.native-query-snippet.permissions :as snippet.perms]
@@ -215,6 +216,34 @@
                        :bad_transforms []}
                       (update response :bad_cards #(into #{} (map :id) %)))))))))))
 
+(deftest check-card-skips-native-cards-test
+  (testing "POST /api/ee/dependencies/check_card does not validate native cards"
+    (mt/dataset test-data
+      (mt/with-premium-features #{:dependencies}
+        (mt/with-temp [:model/User user {:email "test@test.com"}]
+          (mt/with-model-cleanup [:model/Card :model/Dependency]
+            (let [mp (mt/metadata-provider)
+                  ;; Create base card querying real orders table
+                  base-card (card/create-card! (basic-card) user)
+                  ;; Create dependent card that filters on TOTAL
+                  dependent-query (lib/native-query mp (str "select * from {{#"
+                                                            (:id base-card)
+                                                            "}} orders where total > 100"))
+                  _dependent-card (card/create-card!
+                                   (card-with-query "Dependent Card filtering on Total" dependent-query)
+                                   user)
+                  ;; Propose changing to products table (doesn't have TOTAL column, breaks downstream)
+                  proposed-query (lib/query mp (lib.metadata/table mp (mt/id :products)))
+                  proposed-card {:id (:id base-card)
+                                 :type :question
+                                 :dataset_query proposed-query
+                                 :result_metadata nil}
+                  response (mt/user-http-request :rasta :post 200 "ee/dependencies/check_card" proposed-card)]
+              (is (=? {:success true
+                       :bad_cards []
+                       :bad_transforms []}
+                      response)))))))))
+
 (deftest check-transform-test
   (testing "POST /api/ee/dependencies/check_transform"
     (mt/with-premium-features #{:dependencies}
@@ -232,8 +261,8 @@
           (is (= {:bad_cards [], :bad_transforms [], :success true}
                  response)))))))
 
-(deftest check-snippet-content-change-breaks-cards-test
-  (testing "POST /api/ee/dependencies/check_snippet detects when snippet content changes break dependent cards"
+(deftest check-snippet-content-change-doest-not-break-cards-test
+  (testing "POST /api/ee/dependencies/check_snippet doesn't catch when a change would break a card, because native query validation is disabled"
     (mt/dataset test-data
       (mt/with-premium-features #{:dependencies}
         (mt/with-temp [:model/User user {:email "test@test.com"}
@@ -248,17 +277,17 @@
                                                                       :type :snippet
                                                                       :snippet-name snippet-name
                                                                       :snippet-id snippet-id}}))
-                  card (card/create-card! {:name "Card using snippet"
-                                           :dataset_query native-query
-                                           :display :table
-                                           :visualization_settings {}}
-                                          user)
+                  _card (card/create-card! {:name "Card using snippet"
+                                            :dataset_query native-query
+                                            :display :table
+                                            :visualization_settings {}}
+                                           user)
                   proposed-content "WHERE NONEXISTENT_COLUMN > 100"
                   response (mt/user-http-request :rasta :post 200 "ee/dependencies/check_snippet"
                                                  {:id snippet-id
                                                   :content proposed-content})]
-              (is (=? {:success false
-                       :bad_cards [{:id (:id card)}]
+              (is (=? {:success true
+                       :bad_cards []
                        :bad_transforms []}
                       response)))))))))
 
@@ -802,3 +831,40 @@
                        (get-in card-node [:data :document])))
                 (is (= (:id document)
                        (get-in card-node [:data :document_id])))))))))))
+
+;;; ------------------------------------------------ Table API Tests -------------------------------------------------
+;;; Tests for dependency-related filtering on the /api/table endpoint
+
+(deftest unused-only-filter-test
+  (mt/with-premium-features #{:dependencies}
+    (testing "GET /api/table?unused-only=true"
+      (testing "filters tables that have no non-transform dependents"
+        (mt/with-temp [:model/Database {db-id :id} {}
+                       :model/Table {table-1-id :id} {:db_id db-id, :name "table_1", :active true}
+                       :model/Table {table-2-id :id} {:db_id db-id, :name "table_2", :active true}]
+          (testing "both tables returned without filter"
+            (is (= #{table-1-id table-2-id}
+                   (->> (mt/user-http-request :crowberto :get 200 "table")
+                        (filter #(= (:db_id %) db-id))
+                        (map :id)
+                        set))))
+
+          (testing "both tables returned with unused_only=false"
+            (is (= #{table-1-id table-2-id}
+                   (->> (mt/user-http-request :crowberto :get 200 "table" :unused-only false)
+                        (filter #(= (:db_id %) db-id))
+                        (map :id)
+                        set))))
+
+          (mt/with-temp [:model/Card card {:database_id   db-id
+                                           :table_id      table-1-id
+                                           :dataset_query {:database db-id
+                                                           :type     :query
+                                                           :query    {:source-table table-1-id}}}]
+            (events/publish-event! :event/card-create {:object card :user-id (:creator_id card)})
+            (testing "after creating card that depends on table-1, only table-2 is unused"
+              (is (= #{table-2-id}
+                     (->> (mt/user-http-request :crowberto :get 200 "table" :unused-only true)
+                          (filter #(= (:db_id %) db-id))
+                          (map :id)
+                          set))))))))))

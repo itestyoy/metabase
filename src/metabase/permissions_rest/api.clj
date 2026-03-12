@@ -137,7 +137,7 @@
                (some? query)  (sql.helpers/where query))))
 
 (defn- maybe-fix-name
-  "With Tenants enabled, we refer to the `all-internal-users` group as \"All Internal Users\", but
+  "With Tenants enabled, we refer to the `all-internal-users` group as \"All internal users\", but
    if Tenants is disabled we should call it \"All Users\".
 
   Actually changing the name brings a whole host of problems, and we very rarely actually present the names of
@@ -147,7 +147,7 @@
   (update group :name (fn [n]
                         (if (and (= magic_group_type perms/all-users-magic-group-type)
                                  using-tenants?)
-                          "All Internal Users"
+                          "All internal users"
                           n))))
 
 (defn- maybe-fix-names
@@ -317,7 +317,7 @@
       (perms/check-advanced-permissions-enabled :group-manager)
       (api/check
        (t2/exists? :model/User :id user_id :is_superuser false)
-       [400 (tru "Admin cant be a group manager.")]))
+       [400 (tru "Admin cannot be a group manager.")]))
     (perms/add-user-to-group! user_id group_id is_group_manager)
     ;; TODO - it's a bit silly to return the entire list of members for the group, just return the newly created one and
     ;; let the frontend add it as appropriate
@@ -344,7 +344,7 @@
     (perms/check-manager-of-group (:group_id old))
     (api/check
      (t2/exists? :model/User :id (:user_id old) :is_superuser false)
-     [400 (tru "Admin cant be a group manager.")])
+     [400 (tru "Admin cannot be a group manager.")])
     (t2/update! :model/PermissionsGroupMembership (:id old)
                 {:is_group_manager is_group_manager})
     (t2/select-one :model/PermissionsGroupMembership :id (:id old))))
@@ -360,7 +360,7 @@
   (perms/check-manager-of-group group-id)
   (api/check-404 (t2/exists? :model/PermissionsGroup :id group-id))
   (api/check-400 (not= group-id (u/the-id (perms/admin-group))))
-  (t2/delete! :model/PermissionsGroupMembership :group_id group-id)
+  (perms/remove-all-users-from-group! group-id)
   api/generic-204-no-content)
 
 ;; TODO (Cam 2025-11-25) please add a response schema to this API endpoint, it makes it easier for our customers to
@@ -374,5 +374,5 @@
   (let [membership (t2/select-one :model/PermissionsGroupMembership :id id)]
     (api/check-404 membership)
     (perms/check-manager-of-group (:group_id membership))
-    (t2/delete! :model/PermissionsGroupMembership :id id)
+    (perms/remove-user-from-group! (:user_id membership) (:group_id membership))
     api/generic-204-no-content))

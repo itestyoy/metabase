@@ -27,6 +27,15 @@
   []
   (t2/select-pks-vec :model/Collection :is_remote_synced true))
 
+(defn- model-fields-for-sync
+  "Returns the fields to select for a given model type when syncing."
+  [model-name]
+  (case model-name
+    "Card" [:id :name :collection_id :display]
+    "NativeQuerySnippet" [:id :name]
+    "Collection" [:id :name [:id :collection_id]]
+    [:id :name :collection_id]))
+
 (defn- sync-objects!
   "Populates the remote-sync-object table with imported entities. Deletes all existing RemoteSyncObject records and
   inserts new ones for each imported entity, marking them as 'synced' with the given timestamp.
@@ -35,12 +44,18 @@
   entity IDs that were imported."
   [timestamp imported-entities-by-model]
   (t2/delete! :model/RemoteSyncObject)
-  (let [inserts (->> imported-entities-by-model
+  ;; TODO(edpaget 2026-01-19): Actions are not dirty tracked
+  (let [inserts (->> (dissoc imported-entities-by-model "Action")
                      (mapcat (fn [[model entity-ids]]
-                               (t2/select [(keyword "model" model) :id] :entity_id [:in entity-ids])))
-                     (map (fn [{:keys [id] :as model}]
-                            {:model_type (name (t2/model model))
+                               (let [fields (model-fields-for-sync model)
+                                     model-kw (keyword "model" model)]
+                                 (t2/select (into [model-kw] fields) :entity_id [:in entity-ids]))))
+                     (map (fn [{:keys [id name collection_id display] :as model}]
+                            {:model_type (clojure.core/name (t2/model model))
                              :model_id id
+                             :model_name name
+                             :model_collection_id collection_id
+                             :model_display (some-> display clojure.core/name)
                              :status "synced"
                              :status_changed_at timestamp})))]
     (t2/insert! :model/RemoteSyncObject inserts)))
@@ -94,6 +109,19 @@
     (str/includes? (ex-message e) "branch")
     "Branch error: Please check the specified branch exists"
 
+    (some-> e ex-cause ex-message (str/includes? "Can't create a tenant collection without tenants enabled"))
+    "This repository contains tenant collections, but the tenants feature is disabled on your instance."
+
+    (str/includes? (ex-message e) "Missing commit")
+    "Repository cache is stale: the remote repository may have been force-pushed. Please retry the operation."
+
+    (= (:error (ex-data e)) :metabase-enterprise.serialization.v2.load/not-found)
+    (let [{:keys [model id]} (ex-data e)]
+      (format "Import failed: %s '%s' does not exist on this instance. Make sure all referenced databases and other dependencies are set up before importing." model id))
+
+    (some-> e ex-cause ex-message (str/includes? "database not found"))
+    (format "Import failed: A referenced database does not exist on this instance. %s" (ex-message (ex-cause e)))
+
     :else
     (format "Failed to reload from git repository: %s" (ex-message e))))
 
@@ -139,7 +167,7 @@
                       :version (source.p/version snapshot)
                       :message (format "Skipping import: snapshot version %s matches last imported version" snapshot-version)}
               (log/infof (:message <>)))
-            (let [ingestable-snapshot (->> (source.p/->ingestable snapshot {:path-filters [#"collections/.*"]})
+            (let [ingestable-snapshot (->> (source.p/->ingestable snapshot {:path-filters [#"collections/.*" #"actions/.*"]})
                                            (source.ingestable/wrap-progress-ingestable task-id 0.7))
                   load-result (serdes/with-cache
                                 (serialization/load-metabase! ingestable-snapshot))

@@ -61,7 +61,7 @@ export const MetabotInlineSQLPrompt = ({
             handleSubmit();
           }
         },
-        "$mod+;": (e) => {
+        "$mod+Shift+i": (e) => {
           e.preventDefault();
           handleClose();
         },
@@ -76,7 +76,7 @@ export const MetabotInlineSQLPrompt = ({
         <MetabotPromptInput
           ref={inputRef}
           value={value}
-          placeholder={t`Describe what SQL you want...`}
+          placeholder={t`Describe what SQL you want, type @ to mention an item.`}
           autoFocus
           disabled={isDoingScience}
           onChange={setValue}
@@ -103,7 +103,7 @@ export const MetabotInlineSQLPrompt = ({
           disabled={disabled}
           leftSection={
             isDoingScience ? (
-              <Loader size="xs" color="text-light" />
+              <Loader size="xs" color="text-tertiary" />
             ) : (
               <Icon name="insight" />
             )

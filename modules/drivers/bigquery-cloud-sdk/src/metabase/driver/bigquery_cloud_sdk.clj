@@ -12,6 +12,7 @@
    [metabase.driver.bigquery-cloud-sdk.params :as bigquery.params]
    [metabase.driver.bigquery-cloud-sdk.query-processor :as bigquery.qp]
    [metabase.driver.common.table-rows-sample :as table-rows-sample]
+   [metabase.driver.settings :as driver.settings]
    [metabase.driver.sql :as driver.sql]
    [metabase.driver.sql-jdbc :as driver.sql-jdbc]
    [metabase.driver.sql-jdbc.sync.describe-database :as sql-jdbc.describe-database]
@@ -53,6 +54,7 @@
     TableDefinition$Type
     TableId
     TableResult)
+   (com.google.cloud.http HttpTransportOptions)
    (com.google.common.collect ImmutableMap)
    (com.google.gson JsonParser)
    (java.util Iterator)))
@@ -82,9 +84,14 @@
         user-agent (format "Metabase/%s (GPN:Metabase; %s)" mb-version run-mode)
         header-provider (FixedHeaderProvider/create
                          (ImmutableMap/of "user-agent" user-agent))
-        bq-bldr (doto (BigQueryOptions/newBuilder)
-                  (.setCredentials (.createScoped creds bigquery-scopes))
-                  (.setHeaderProvider header-provider))]
+        read-timeout-ms driver.settings/*query-timeout-ms*
+        transport-options (-> (HttpTransportOptions/newBuilder)
+                              (.setReadTimeout read-timeout-ms)
+                              (.build))
+        bq-bldr      (doto (BigQueryOptions/newBuilder)
+                       (.setCredentials (.createScoped creds bigquery-scopes))
+                       (.setHeaderProvider header-provider)
+                       (.setTransportOptions transport-options))]
     (when-let [host (not-empty (:host details))]
       (.setHost bq-bldr host))
     (.. bq-bldr build getService)))
@@ -325,7 +332,7 @@
   "_PARTITIONTIME")
 
 (def ^:private partitioned-date-field-name
-  "This is also a pseudo-column, similiar to [[partitioned-time-field-name]].
+  "This is also a pseudo-column, similar to [[partitioned-time-field-name]].
   In fact _PARTITIONDATE is _PARTITIONTIME truncated to DATE.
   See https://cloud.google.com/bigquery/docs/querying-partitioned-tables#query_an_ingestion-time_partitioned_table"
   "_PARTITIONDATE")
@@ -555,7 +562,7 @@
 ;;;     - Execution passes to `execute-bigquery`
 ;;; 3. `execute-bigquery`
 ;;;     - Makes the initial query and checks `cancel-chan` in case the browser cancels execution.
-;;;     - Either throws approriate exceptions or takes the initial page `TableResult` to the next step.
+;;;     - Either throws appropriate exceptions or takes the initial page `TableResult` to the next step.
 ;;;     - Execution passes to `execute-bigquery`
 ;;; 4. `bigquery-execute-response`
 ;;;     - Builds `cols` metadata response.
@@ -775,30 +782,32 @@
 ;;; +----------------------------------------------------------------------------------------------------------------+
 
 (doseq [[feature supported?] {:convert-timezone                 true
-                              :describe-fields                  true
-                              :nested-fields                    true
+                              :create-or-replace-table          true
+                              :database-routing                 true
                               :datetime-diff                    true
+                              :describe-fields                  true
+                              :expression-literals              true
                               :expressions                      true
+                              :expressions/date                 true
+                              :expressions/float                true
+                              :expressions/integer              true
+                              :expressions/text                 true
+                              :identifiers-with-spaces          true
+                              :metadata/key-constraints         false
+                              :metadata/table-existence-check   true
+                              :nested-fields                    true
                               :now                              true
                               :percentile-aggregations          true
-                              ;; we can't support `alter table .. rename ..`  in general
-                              ;; since it won't work for streaming tables
+                              :regex/lookaheads-and-lookbehinds false
+                              ;; we can't support `alter table .. rename ..` in general since it won't work for
+                              ;; streaming tables
                               :rename                           false
-                              :metadata/key-constraints         false
-                              :identifiers-with-spaces          true
-                              :expressions/integer              true
-                              :expressions/float                true
-                              :expressions/date                 true
-                              :expressions/text                 true
-                              :split-part                       true
                               ;; BigQuery uses timezone operators and arguments on calls like extract() and
                               ;; timezone_trunc() rather than literally using SET TIMEZONE, but we need to flag it as
                               ;; supporting set-timezone anyway so that reporting timezones are returned and used, and
                               ;; tests expect the converted values.
                               :set-timezone                     true
-                              :expression-literals              true
-                              :database-routing                 true
-                              :metadata/table-existence-check   true
+                              :split-part                       true
                               :transforms/python                true
                               :transforms/table                 true}]
   (defmethod driver/database-supports? [:bigquery-cloud-sdk feature] [_driver _feature _db] supported?))
@@ -823,7 +832,7 @@
   * any associated Table instances will be updated to have schema set (to the dataset-id value)
   * the Database model itself will be updated to persist this change to db-details back to the app DB
 
-  Returns the passed `database` parameter with the aformentioned changes having been made and persisted."
+  Returns the passed `database` parameter with the aforementioned changes having been made and persisted."
   [database dataset-id]
   (let [db-id (u/the-id database)]
     (log/infof "DB %s had hardcoded dataset-id; changing to an inclusion pattern and updating table schemas"
@@ -853,7 +862,7 @@
   (when-not (empty? (filter some? ((juxt :auth-code :client-id :client-secret) details)))
     (log/errorf (str "Database ID %d, which was migrated from the legacy :bigquery driver to :bigquery-cloud-sdk, has"
                      " one or more OAuth style authentication scheme parameters saved to db-details, which cannot"
-                     " be automatically migrated to the newer driver (since it *requires* service-account-json intead);"
+                     " be automatically migrated to the newer driver (since it *requires* service-account-json instead);"
                      " this database must therefore be updated by an administrator (by adding a service-account-json)"
                      " before sync and queries will work again")
                 (u/the-id database)))

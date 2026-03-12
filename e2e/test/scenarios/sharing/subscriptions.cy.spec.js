@@ -2,6 +2,7 @@ const { H } = cy;
 import { USERS } from "e2e/support/cypress_data";
 import { SAMPLE_DATABASE } from "e2e/support/cypress_sample_database";
 import { ORDERS_DASHBOARD_ID } from "e2e/support/cypress_sample_instance_data";
+import { embedModalEnableEmbedding } from "e2e/support/helpers";
 
 const { PRODUCTS, PRODUCTS_ID } = SAMPLE_DATABASE;
 const { admin, normal } = USERS;
@@ -794,6 +795,31 @@ describe("scenarios > dashboard > subscriptions", () => {
         H.sidebar()
           .findByText("Set filter values for when this gets sent")
           .should("not.exist");
+      });
+    });
+
+    describe("modular embedding", () => {
+      it("should not include links to Metabase", () => {
+        H.visitDashboard(ORDERS_DASHBOARD_ID);
+
+        H.openSharingMenu();
+        H.sharingMenu().findByRole("menuitem", { name: "Embed" }).click();
+        cy.findByLabelText("Metabase account (SSO)").click();
+        embedModalEnableEmbedding();
+        cy.findByLabelText("Allow subscriptions").check().should("be.checked");
+        H.getIframeBody().within(() => {
+          cy.button("Subscriptions").click();
+          H.sendEmailAndVisitIt();
+        });
+
+        cy.log(
+          "Links should be disabled in modular embedding and modular embedding SDK subscription emails",
+        );
+        cy.findAllByRole("table")
+          .first()
+          .findByText("Orders in a dashboard")
+          .should("exist");
+        cy.findAllByRole("link").should("not.exist");
       });
     });
   });

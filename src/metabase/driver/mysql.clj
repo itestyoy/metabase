@@ -95,6 +95,8 @@
                               :metadata/table-existence-check         true
                               :transforms/python                      true
                               :transforms/table                       true
+                              ;; currently disabled as :describe-indexes is not supported
+                              :transforms/index-ddl                   false
                               :describe-default-expr                  true
                               :describe-is-nullable                   true
                               :describe-is-generated                  true}]
@@ -103,7 +105,8 @@
 ;; This is a bit of a lie since the JSON type was introduced for MySQL since 5.7.8.
 ;; And MariaDB doesn't have the JSON type at all, though `JSON` was introduced as an alias for LONGTEXT in 10.2.7.
 ;; But since JSON unfolding will only apply columns with JSON types, this won't cause any problems during sync.
-(defmethod driver/database-supports? [:mysql :nested-field-columns] [_driver _feat db]
+(defmethod driver/database-supports? [:mysql :nested-field-columns]
+  [_driver _feat db]
   (driver.common/json-unfolding-default db))
 
 (doseq [feature [:actions :actions/custom :actions/data-editing]]
@@ -116,6 +119,15 @@
   "Returns true if the database is MariaDB. Assumes the database has been synced so `:dbms_version` is present."
   [database]
   (-> database :dbms_version :flavor (= "MariaDB")))
+
+(defn- mysql?
+  "Returns true if the database is MySQL (not MariaDB).
+   Returns true for unsynced databases (unknown flavor)."
+  [db]
+  (= "MySQL"
+     (if-let [conn (:connection db)]
+       (->> ^java.sql.Connection conn .getMetaData .getDatabaseProductName)
+       (-> db :dbms_version :flavor))))
 
 (defn mariadb-connection?
   "Returns true if the database is MariaDB."
@@ -143,12 +155,17 @@
 (defmethod driver/database-supports? [:mysql :metadata/table-writable-check]
   [driver _feat db]
   (and (= driver :mysql)
-       (not (mariadb? db))
+       (mysql? db)
        (not (try
               (partial-revokes-enabled? driver db)
               (catch Exception e
                 (log/warn e "Failed to check table writable")
                 false)))))
+
+(defmethod driver/database-supports? [:mysql :regex/lookaheads-and-lookbehinds]
+  [driver _feat db]
+  (and (= driver :mysql)
+       (not (mariadb? db))))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                             metabase.driver impls                                              |
@@ -724,7 +741,7 @@
 ;; Since MySQL TIMESTAMPs aren't timezone-aware this means comparisons are done between timestamps in the report
 ;; timezone and the local datetime portion of the parameter, in UTC. Bad!
 ;;
-;; Convert it to a LocalDateTime, in the report timezone, so comparisions will work correctly.
+;; Convert it to a LocalDateTime, in the report timezone, so comparisons will work correctly.
 ;;
 ;; See also — https://dev.mysql.com/doc/refman/5.5/en/datetime.html
 ;;
@@ -755,7 +772,7 @@
 ;; There is currently no way to tell whether the column is the result of a `timediff()` call (i.e., a duration) or a
 ;; normal `LocalTime` -- JDBC doesn't have interval/duration type enums. `java.time.LocalTime`only accepts values of
 ;; hour between 0 and 23 (inclusive). The MariaDB JDBC driver's implementations of `(.getObject rs i
-;; java.time.LocalTime)` will throw Exceptions theses cases.
+;; java.time.LocalTime)` will throw Exceptions in these cases.
 ;;
 ;; Thus we should attempt to fetch temporal results the normal way and fall back to string representations for cases
 ;; where the values are unparseable.
@@ -1152,6 +1169,10 @@
 (defmethod sql-jdbc/impl-query-canceled? :mysql [_ ^SQLException e]
   ;; ok to hardcode driver name here because this function only supports app DB types
   (driver-api/query-canceled-exception? :mysql e))
+
+(defmethod sql-jdbc/drop-index-sql :mysql [_ _schema table-name index-name]
+  (let [{quote-identifier :quote} (sql/get-dialect :mysql)]
+    (format "DROP INDEX %s ON %s" (quote-identifier (name index-name)) (quote-identifier (name table-name)))))
 
 ;;; ------------------------------------------------- User Impersonation --------------------------------------------------
 

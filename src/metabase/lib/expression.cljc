@@ -411,7 +411,7 @@
 (mu/defn value :- ::lib.schema.expression/expression
   "Creates a `:value` clause for the `literal`. Converts bigint literals to strings for serialization purposes."
   [literal :- [:or :string number? :boolean [:fn u.number/bigint?]]]
-  (let [base-type (lib.schema.expression/type-of literal)]
+  (let [base-type (lib.schema.expression/type-of-resolved literal)]
     (lib.options/ensure-uuid [:value
                               {:base-type base-type, :effective-type base-type}
                               (cond-> literal (u.number/bigint? literal) str)])))
@@ -544,7 +544,7 @@
   (lib.options/update-options
    (if (lib.util/clause? an-expression-clause)
      an-expression-clause
-     [:value {:effective-type (lib.schema.expression/type-of an-expression-clause)}
+     [:value {:effective-type (lib.schema.expression/type-of-resolved an-expression-clause)}
       an-expression-clause])
    (fn [opts]
      (let [opts (assoc opts :lib/uuid (str (random-uuid)))]
@@ -698,11 +698,11 @@
                                   (-> nested name u/->camelCaseEn u/capitalize-first-char)))
              :friendly true})
           (when (and (= expression-mode :expression)
-                     (lib.util.match/match-lite-recursive expr :offset true))
+                     (lib.util.match/match-lite expr :offset true))
             {:message  (i18n/tru "OFFSET is not supported in custom columns")
              :friendly true})
           (when (and (= expression-mode :filter)
-                     (lib.util.match/match-lite-recursive expr :offset true))
+                     (lib.util.match/match-lite expr :offset true))
             {:message  (i18n/tru "OFFSET is not supported in custom filters")
              :friendly true})
           (when (and (lib.schema.common/is-clause? :value expr)

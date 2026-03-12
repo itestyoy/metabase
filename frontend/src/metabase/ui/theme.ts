@@ -2,6 +2,7 @@ import type { MantineThemeOverride } from "@mantine/core";
 import { rem } from "@mantine/core";
 
 import { DEFAULT_METABASE_COMPONENT_THEME } from "metabase/embedding-sdk/theme";
+import type { ColorSettings } from "metabase-types/api";
 
 import Styles from "./Theme.module.css";
 import {
@@ -37,6 +38,7 @@ import {
   numberInputOverrides,
   overlayOverrides,
   paperOverrides,
+  passwordInputOverrides,
   pillOverrides,
   pillsInputOverrides,
   popoverOverrides,
@@ -57,7 +59,7 @@ import {
   titleOverrides,
   tooltipOverrides,
 } from "./components";
-import { getThemeColors } from "./utils/colors";
+import { getMantineThemeColors } from "./utils/colors";
 
 export const breakpoints = {
   xs: "23em",
@@ -70,10 +72,11 @@ export type BreakpointName = keyof typeof breakpoints;
 
 export const getThemeOverrides = (
   colorScheme: "light" | "dark" = "light",
+  whitelabelColors?: ColorSettings | null,
 ): MantineThemeOverride => ({
   focusClassName: Styles.focus,
   breakpoints,
-  colors: getThemeColors(colorScheme),
+  colors: getMantineThemeColors(colorScheme, whitelabelColors),
   primaryColor: "brand",
   primaryShade: 0,
   // Store colorScheme in other property for access later
@@ -173,6 +176,7 @@ export const getThemeOverrides = (
     ...multiSelectOverrides,
     ...navLinkOverrides,
     ...numberInputOverrides,
+    ...passwordInputOverrides,
     ...radioOverrides,
     ...overlayOverrides,
     ...paperOverrides,

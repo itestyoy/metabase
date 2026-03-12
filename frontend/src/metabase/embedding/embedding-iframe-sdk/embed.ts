@@ -9,6 +9,7 @@ import { debouncedReportAnalytics } from "./analytics";
 import {
   ALLOWED_EMBED_SETTING_KEYS_MAP,
   DISABLE_UPDATE_FOR_KEYS,
+  EMBED_JS_IFRAME_IDENTIFIER_QUERY_PARAMETER_NAME,
   METABASE_CONFIG_IS_PROXY_FIELD_NAME,
 } from "./constants";
 import type {
@@ -28,6 +29,9 @@ const EMBEDDING_ROUTE = "embed/sdk/v1";
 
 /** list of active embeds, used to know which embeds to update when the global config changes */
 const _activeEmbeds: Set<MetabaseEmbedElement> = new Set();
+
+/** counter used as a parameter in the iframe src to force parallel loading */
+let _iframeCounter = 0;
 
 // Setup a proxy to watch for changes to window.metabaseConfig and update all
 // active embeds when the config changes. It also setups a setter for
@@ -339,7 +343,10 @@ export abstract class MetabaseEmbedElement
       : null;
 
     this._iframe = document.createElement("iframe");
-    this._iframe.src = `${this.globalSettings.instanceUrl}/${EMBEDDING_ROUTE}`;
+    // Random query param is needed to allow parallel EmbedJS iframes loading.
+    // Without it multiple EmbedJS iframes on a page loaded sequentially.
+    // We don't cache the iframe content, so random query parameter does not break caching.
+    this._iframe.src = `${this.globalSettings.instanceUrl}/${EMBEDDING_ROUTE}?${EMBED_JS_IFRAME_IDENTIFIER_QUERY_PARAMETER_NAME}=${_iframeCounter++}`;
     this._iframe.style.width = "100%";
     this._iframe.style.height = "100%";
     this._iframe.style.border = "none";
@@ -370,7 +377,11 @@ export abstract class MetabaseEmbedElement
       console.error("unable to construct the URL:", error);
     }
 
-    return hostname === "localhost" || hostname === "127.0.0.1";
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "[::1]"
+    );
   }
 
   private _validateEmbedSettings(settings: SdkIframeEmbedElementSettings) {

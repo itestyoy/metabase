@@ -265,7 +265,6 @@ export const PulseApi = {
   update: PUT("/api/pulse/:id"),
   test: POST("/api/pulse/test"),
   form_input: GET("/api/pulse/form_input"),
-  preview_card: GET("/api/pulse/preview_card_info/:id"),
   unsubscribe: DELETE("/api/pulse/:id/subscription"),
 };
 
@@ -415,11 +414,4 @@ export const ActionsApi = {
   executeDashcardAction: POST(
     "/api/dashboard/:dashboardId/dashcard/:dashcardId/execute",
   ),
-};
-
-export const CacheConfigApi = {
-  list: GET("/api/cache"),
-  update: PUT("/api/cache"),
-  delete: DELETE("/api/cache"),
-  invalidate: POST("/api/cache/invalidate"),
 };

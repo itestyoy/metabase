@@ -7,6 +7,7 @@
    [metabase.lib.common :as lib.common]
    [metabase.lib.dispatch :as lib.dispatch]
    [metabase.lib.equality :as lib.equality]
+   [metabase.lib.expression :as lib.expression]
    [metabase.lib.filter.operator :as lib.filter.operator]
    [metabase.lib.hierarchy :as lib.hierarchy]
    [metabase.lib.metadata.calculation :as lib.metadata.calculation]
@@ -188,7 +189,10 @@
       (if (clojure.core/= (count args) 1)
         (let [y (first args)]
           (i18n/tru "{0} does not contain {1}" (->display-name x) (if (string? y) y (->display-name y))))
-        (i18n/tru "{0} does not contain {1} selections" (->display-name x) (count args))))))
+        (i18n/tru "{0} does not contain {1} selections" (->display-name x) (count args)))
+
+      ;; do not match inner clauses
+      _ nil)))
 
 (defmethod lib.metadata.calculation/display-name-method ::binary
   [query stage-number expr style]
@@ -212,7 +216,10 @@
       (i18n/tru "{0} is greater than {1}"             (->display-name x) (->display-name y))
 
       [:>= _ x y]
-      (i18n/tru "{0} is greater than or equal to {1}" (->display-name x) (->display-name y)))))
+      (i18n/tru "{0} is greater than or equal to {1}" (->display-name x) (->display-name y))
+
+      ;; do not match inner clauses
+      _ nil)))
 
 (defmethod lib.metadata.calculation/display-name-method :between
   [query stage-number expr style]
@@ -248,7 +255,10 @@
       (i18n/tru "{0} is between {1} and {2}"
                 (->display-name x)
                 (->display-name y)
-                (->display-name z)))))
+                (->display-name z))
+
+      ;; do not match inner clauses
+      _ nil)))
 
 (defmethod lib.metadata.calculation/display-name-method :during
   [query stage-number [_tag _opts expr value unit] style]
@@ -352,7 +362,8 @@
   "Add a new filter clause to a `stage`, ignoring it if it is a duplicate clause (ignoring :lib/uuid)."
   [stage      :- ::lib.schema/stage
    new-filter :- [:maybe ::lib.schema.expression/boolean]]
-  (if-not new-filter
+  ;; Use nil? instead of if-not because `false` is a valid boolean filter literal
+  (if (nil? new-filter)
     stage
     (let [existing-filter? (some (fn [existing-filter]
                                    (lib.equality/= existing-filter new-filter))
@@ -407,12 +418,17 @@
    (if (clojure.core/= (lib.dispatch/dispatch-value boolean-expression) :metadata/segment)
      (recur query stage-number (lib.ref/ref boolean-expression))
      (let [stage-number (clojure.core/or stage-number -1)
-           new-filter (lib.common/->op-arg boolean-expression)]
+           new-filter   (let [op-arg (lib.common/->op-arg boolean-expression)]
+                          ;; Raw booleans like `false` need wrapping in a :value clause so they have
+                          ;; a :lib/uuid and can be properly identified for removal/replacement.
+                          (if (boolean? op-arg)
+                            (lib.expression/value op-arg)
+                            op-arg))]
        (lib.util/update-query-stage query stage-number add-filter-to-stage new-filter)))))
 
 (mu/defn filters :- [:maybe [:ref ::lib.schema/filters]]
   "Returns the current filters in stage with `stage-number` of `query`.
-  If `stage-number` is omitted, the last stage is used. Logicaly, the
+  If `stage-number` is omitted, the last stage is used. Logically, the
   filter attached to the query is the conjunction of the expressions
   in the returned list. If the returned list is empty, then there is no
   filter attached to the query.
@@ -468,10 +484,15 @@
 
   ([query        :- ::lib.schema/query
     stage-number :- :int]
+   (filterable-columns query stage-number nil))
+
+  ([query        :- ::lib.schema/query
+    stage-number :- :int
+    options      :- [:maybe ::lib.metadata.calculation/visible-columns.options]]
    (let [columns (sequence
                   (comp (map add-column-operators)
                         (clojure.core/filter :operators))
-                  (lib.metadata.calculation/visible-columns query stage-number))
+                  (lib.metadata.calculation/visible-columns query stage-number options))
          existing-filters (filters query stage-number)]
      (cond
        (empty? columns)
@@ -530,7 +551,7 @@
 
 (mu/defn filter-parts :- FilterParts
   "Return the parts of the filter clause `a-filter-clause` in query `query` at stage `stage-number`.
-  Might obsolate [[filter-operator]]."
+  Might obsolete [[filter-operator]]."
   ([query a-filter-clause]
    (filter-parts query -1 a-filter-clause))
 
