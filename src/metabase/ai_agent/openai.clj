@@ -65,6 +65,8 @@ You MUST return your final answer as a JSON object with two keys:
 - `suggestions` — an array of 2-4 short follow-up prompts the user might want to try next (required)
 
 Suggestions should be concise (under 60 chars), actionable, and relevant to the current conversation.
+Only suggest actions you can actually perform with your available tools — never propose something
+you cannot do (e.g. don't suggest editing dashboards if you have no tool for that).
 Do NOT wrap the JSON in markdown code fences.
 
 Available block types:
