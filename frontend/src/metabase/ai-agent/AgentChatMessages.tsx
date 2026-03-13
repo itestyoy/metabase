@@ -3,7 +3,9 @@ import { Link } from "react-router";
 import { t } from "ttag";
 
 import Markdown from "metabase/common/components/Markdown";
+import { Table, type BaseRow } from "metabase/common/components/Table";
 import {
+  Box,
   Code,
   Flex,
   Group,
@@ -63,13 +65,31 @@ function SqlBlock({ block }: { block: Extract<ContentBlock, { type: "sql" }> }) 
 }
 
 function TableBlock({ block }: { block: Extract<ContentBlock, { type: "table" }> }) {
-  const esc = (v: unknown) => String(v ?? "").replace(/\|/g, "\\|");
-  const header = `| ${block.columns.map(esc).join(" | ")} |`;
-  const divider = `| ${block.columns.map(() => "---").join(" | ")} |`;
-  const rows = block.rows
-    .map(r => `| ${r.map(esc).join(" | ")} |`)
-    .join("\n");
-  return <Markdown>{`${header}\n${divider}\n${rows}`}</Markdown>;
+  const columns = block.columns.map(col => ({ name: col, key: col }));
+  const rows: BaseRow[] = block.rows.map((row, ri) => {
+    const obj: Record<string, unknown> = { id: ri };
+    block.columns.forEach((col, ci) => {
+      obj[col] = row[ci];
+    });
+    return obj as BaseRow;
+  });
+
+  return (
+    <Table
+      className={S.agentTable}
+      columns={columns}
+      rows={rows}
+      rowRenderer={(row: BaseRow) => (
+        <Box component="tr" key={row.id}>
+          {block.columns.map(col => (
+            <Box component="td" key={col}>
+              <Text size="xs">{row[col] == null ? "" : String(row[col])}</Text>
+            </Box>
+          ))}
+        </Box>
+      )}
+    />
+  );
 }
 
 function ContentBlockRenderer({ block }: { block: ContentBlock }) {
