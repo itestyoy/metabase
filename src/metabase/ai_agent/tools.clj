@@ -121,6 +121,18 @@ or needs to understand how its filters work."
                   :additionalProperties false}}
 
    {:type        "function"
+    :name        "get_table_details"
+    :description "Get detailed information about a specific table or model: its columns (names, types),
+the database it belongs to, and its schema. Use this when the context references a table or model,
+or when you need column details for a single table without fetching the entire database schema."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:table_id {:type        "integer"
+                                                    :description "ID of the table to inspect."}}
+                  :required             ["table_id"]
+                  :additionalProperties false}}
+
+   {:type        "function"
     :name        "create_question"
     :description "Create and save a new question (saved query) in Metabase.
 After creating, always provide the URL /question/<id> to the user."
@@ -384,6 +396,36 @@ After creating, always provide the URL /question/<id> to the user."
                                    (or (:size_y dc) 4)))))
                      dashcards))))))
 
+(defn- get-table-details [table-id]
+  (let [tbl    (t2/select-one :model/Table :id table-id)
+        _      (api/check-404 tbl)
+        _      (api/check-403 (mi/can-read? tbl))
+        db     (t2/select-one :model/Database :id (:db_id tbl))
+        fields (t2/select :model/Field
+                           :table_id table-id
+                           :active true
+                           {:order-by [[:position :asc]]})]
+    (str (format "Table details (ID: %d):\n" table-id)
+         (format "- Name: %s%s\n"
+                 (if (:schema tbl) (str (:schema tbl) ".") "")
+                 (:name tbl))
+         (when (:description tbl)
+           (format "- Description: %s\n" (:description tbl)))
+         (format "- Database: \"%s\" (ID: %d)\n" (:name db) (:id db))
+         (format "- Engine: %s\n" (name (:engine db)))
+         (format "\nColumns (%d):\n" (count fields))
+         (clojure.string/join "\n"
+           (map (fn [f]
+                  (str (format "  - %s (%s)" (:name f) (name (:base_type f)))
+                       (when (:description f)
+                         (str " — " (:description f)))
+                       (when (:fk_target_field_id f)
+                         (let [fk-field (t2/select-one :model/Field :id (:fk_target_field_id f))
+                               fk-table (when fk-field (t2/select-one :model/Table :id (:table_id fk-field)))]
+                           (when (and fk-field fk-table)
+                             (format " → FK to %s.%s" (:name fk-table) (:name fk-field)))))))
+                fields)))))
+
 (defn- create-question [{:strs [name description database_id sql collection_id display]}]
   (let [card-data (cond-> {:name          name
                            :dataset_query {:database database_id
@@ -416,6 +458,7 @@ After creating, always provide the URL /question/<id> to the user."
       "execute_card"      (execute-card (get args "card_id"))
       "get_card_details"  (get-card-details (get args "card_id"))
       "get_dashboard_details" (get-dashboard-details (get args "dashboard_id"))
+      "get_table_details"  (get-table-details (get args "table_id"))
       "create_question"   (create-question args)
       (str "Unknown tool: " tool-name))
     (catch Exception e
