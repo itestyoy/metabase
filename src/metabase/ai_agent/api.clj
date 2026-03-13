@@ -7,6 +7,7 @@
   - Uses the Responses API `previous_response_id` for server-managed history"
   (:require
    [cheshire.core :as json]
+   [metabase.ai-agent.mcp :as ai.mcp]
    [metabase.ai-agent.openai :as ai.openai]
    [metabase.ai-agent.settings :as ai.settings]
    [metabase.ai-agent.tools :as ai.tools]
@@ -184,7 +185,7 @@
   "Validate a single content block. Returns error string or nil."
   [i block]
   (let [valid-types #{"text" "card_link" "card_preview" "dashboard_link"
-                       "notebook_link" "sql" "table"}
+                       "document_link" "notebook_link" "sql" "table"}
         btype       (:type block)]
     (cond
       (nil? btype)
@@ -320,7 +321,7 @@
       (let [response    (ai.openai/create-response (assoc opts
                                                           :api-key api-key
                                                           :model   model
-                                                          :tools   ai.tools/tool-definitions))
+                                                          :tools   (ai.tools/all-tool-definitions)))
             response-id (ai.openai/response-id response)
             _           (when (ai.openai/failed? response)
                           (throw (ex-info (str "OpenAI returned status: " (get response :status))
@@ -388,7 +389,7 @@
                                :model                model
                                :message              retry-msg
                                :previous-response-id current-resp-id
-                               :tools                ai.tools/tool-definitions})
+                               :tools                (ai.tools/all-tool-definitions)})
                   new-id     (ai.openai/response-id retry-resp)
                   new-text   (ai.openai/extract-text retry-resp)]
               (recur new-text
@@ -485,5 +486,29 @@
                       {:value "gpt-4.1"       :label "GPT-4.1 — 1M context, instruction following"   :group "GPT-4.1"}
                       {:value "gpt-4.1-mini"  :label "GPT-4.1 Mini — faster, lower cost"             :group "GPT-4.1"}
                       {:value "gpt-4.1-nano"  :label "GPT-4.1 Nano — lightest, cheapest"             :group "GPT-4.1"}]})
+
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :get "/mcp-servers"
+  "Return status of connected MCP servers and their available tools."
+  []
+  (api/check-superuser)
+  (let [registry @ai.mcp/server-registry]
+    {:servers (mapv (fn [[name server]]
+                      (let [tools (try (ai.mcp/list-tools server) (catch Exception _ []))]
+                        {:name              name
+                         :sse_url           (:sse-url server)
+                         :message_endpoint  (:message-endpoint server)
+                         :tools             (mapv (fn [t] {:name (:name t) :description (:description t)})
+                                                  tools)}))
+                    registry)}))
+
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :post "/mcp-servers/reconnect"
+  "Force reconnect all MCP servers. Superuser only."
+  []
+  (api/check-superuser)
+  (let [registry (ai.mcp/reconnect!)]
+    {:reconnected (count registry)
+     :servers     (keys registry)}))
 
 (def routes (api.macros/ns-handler))

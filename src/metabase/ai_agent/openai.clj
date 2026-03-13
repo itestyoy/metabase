@@ -120,6 +120,11 @@ Every message includes the user's personal collection ID in a [User's personal c
 ALWAYS pass this as `collection_id` when calling create_question, create_notebook_question,
 create_dashboard, or create_document. Never save to root or other collections unless the user asks.
 
+## External tools (MCP servers)
+You may have access to additional tools from external MCP servers (e.g. Slack, GitHub, etc.).
+These tools have names prefixed with the server name and '__', like 'slack__send_message'.
+Use them when the user's request involves external services. Treat them like any other tool.
+
 ## Error handling
 - If a tool call fails, read the error message carefully. Common issues:
   - Wrong field ID → re-check with get_table_details.

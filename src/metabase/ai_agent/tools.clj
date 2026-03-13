@@ -5,6 +5,7 @@
    is allowed to see."
   (:require
    [cheshire.core :as json]
+   [metabase.ai-agent.mcp :as mcp]
    [metabase.api.common :as api]
    [metabase.models.interface :as mi]
    [metabase.permissions.core :as perms]
@@ -1582,41 +1583,56 @@ Save all key queries as questions, then build a Metabase Document with:
 ;;; Dispatcher
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
+(defn all-tool-definitions
+  "Return built-in tool definitions combined with MCP server tools.
+   MCP tools are discovered from configured external MCP servers."
+  []
+  (let [mcp-tools (try (mcp/mcp-tool-definitions) (catch Exception _ nil))]
+    (if (seq mcp-tools)
+      (into tool-definitions mcp-tools)
+      tool-definitions)))
+
 (defn execute-tool
   "Execute a tool call and return its string result.
+   Routes MCP tools (containing '__') to the MCP client,
+   built-in tools to the local dispatcher.
    Runs under the current user's bound identity/permissions."
   [tool-name args]
   (try
-    (case tool-name
-      "list_databases"    (list-databases)
-      "get_database_schema" (get-database-schema (get args "database_id"))
-      "list_questions"    (list-questions (get args "search"))
-      "search_items"      (search-items (get args "query") (get args "type"))
-      "run_query"         (run-query (get args "database_id") (get args "sql"))
-      "execute_card"      (execute-card (get args "card_id"))
-      "get_card_details"  (get-card-details (get args "card_id"))
-      "get_dashboard_details" (get-dashboard-details (get args "dashboard_id"))
-      "get_table_details"  (get-table-details (get args "table_id"))
-      "list_collections"   (list-collections (get args "parent_id"))
-      "get_collection_contents" (get-collection-contents (get args "collection_id"))
-      "create_question"   (create-question args)
-      "update_question"   (update-question args)
-      "create_dashboard"  (create-dashboard args)
-      "add_card_to_dashboard" (add-card-to-dashboard args)
-      "archive_item"      (archive-item (get args "item_type") (get args "item_id"))
-      "move_item"         (move-item (get args "item_type") (get args "item_id") (get args "collection_id"))
-      "get_database_tables" (get-database-tables (get args "database_id"))
-      "list_metrics"       (list-metrics (get args "database_id") (get args "table_id"))
-      "create_notebook_question" (create-notebook-question args)
-      "get_sql_guide"  (get-sql-guide (get args "database_id"))
-      "get_mbql_guide" (get-mbql-guide)
-      "get_document_guide" (get-document-guide)
-      "get_analytical_guide" (get-analytical-guide)
-      "run_mbql_query"  (run-mbql-query (get args "database_id") (get args "dataset_query"))
-      "create_document" (create-document args)
-      "get_document"    (get-document-details (get args "document_id"))
-      "update_document" (update-document args)
-      (str "Unknown tool: " tool-name))
+    (if (mcp/mcp-tool? tool-name)
+      ;; MCP tool — delegate to external server
+      (mcp/execute-mcp-tool tool-name args)
+      ;; Built-in tool
+      (case tool-name
+        "list_databases"    (list-databases)
+        "get_database_schema" (get-database-schema (get args "database_id"))
+        "list_questions"    (list-questions (get args "search"))
+        "search_items"      (search-items (get args "query") (get args "type"))
+        "run_query"         (run-query (get args "database_id") (get args "sql"))
+        "execute_card"      (execute-card (get args "card_id"))
+        "get_card_details"  (get-card-details (get args "card_id"))
+        "get_dashboard_details" (get-dashboard-details (get args "dashboard_id"))
+        "get_table_details"  (get-table-details (get args "table_id"))
+        "list_collections"   (list-collections (get args "parent_id"))
+        "get_collection_contents" (get-collection-contents (get args "collection_id"))
+        "create_question"   (create-question args)
+        "update_question"   (update-question args)
+        "create_dashboard"  (create-dashboard args)
+        "add_card_to_dashboard" (add-card-to-dashboard args)
+        "archive_item"      (archive-item (get args "item_type") (get args "item_id"))
+        "move_item"         (move-item (get args "item_type") (get args "item_id") (get args "collection_id"))
+        "get_database_tables" (get-database-tables (get args "database_id"))
+        "list_metrics"       (list-metrics (get args "database_id") (get args "table_id"))
+        "create_notebook_question" (create-notebook-question args)
+        "get_sql_guide"  (get-sql-guide (get args "database_id"))
+        "get_mbql_guide" (get-mbql-guide)
+        "get_document_guide" (get-document-guide)
+        "get_analytical_guide" (get-analytical-guide)
+        "run_mbql_query"  (run-mbql-query (get args "database_id") (get args "dataset_query"))
+        "create_document" (create-document args)
+        "get_document"    (get-document-details (get args "document_id"))
+        "update_document" (update-document args)
+        (str "Unknown tool: " tool-name)))
     (catch Exception e
       (log/warn e "AI Agent tool execution failed" {:tool tool-name})
       (str "Error executing " tool-name ": " (.getMessage e)))))
