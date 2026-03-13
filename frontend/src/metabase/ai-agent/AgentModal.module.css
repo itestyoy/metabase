@@ -364,6 +364,8 @@
   border: 1px solid var(--mb-color-border) !important;
   border-left: none !important;
   width: 32px;
+  height: auto !important;
+  min-height: 0 !important;
   background: var(--mb-color-background-secondary) !important;
   transition: background 0.12s, color 0.12s;
 }
