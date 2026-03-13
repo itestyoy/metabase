@@ -121,6 +121,28 @@ or needs to understand how its filters work."
                   :additionalProperties false}}
 
    {:type        "function"
+    :name        "list_collections"
+    :description "List Metabase collections the current user has access to.
+Use this to help the user navigate their content or find where items are saved."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:parent_id {:type        ["integer" "null"]
+                                                     :description "Parent collection ID. Pass null to list root-level collections."}}
+                  :required             ["parent_id"]
+                  :additionalProperties false}}
+
+   {:type        "function"
+    :name        "get_collection_contents"
+    :description "List the items (questions, dashboards, sub-collections) inside a specific collection.
+Use this when the user asks what is inside a collection or wants to browse its content."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:collection_id {:type        "integer"
+                                                         :description "ID of the collection to list contents for."}}
+                  :required             ["collection_id"]
+                  :additionalProperties false}}
+
+   {:type        "function"
     :name        "get_table_details"
     :description "Get detailed information about a specific table or model: its columns (names, types),
 the database it belongs to, and its schema. Use this when the context references a table or model,
@@ -396,6 +418,85 @@ After creating, always provide the URL /question/<id> to the user."
                                    (or (:size_y dc) 4)))))
                      dashcards))))))
 
+(defn- list-collections [parent-id]
+  (let [colls (->> (if parent-id
+                     (t2/select :model/Collection
+                                :location (format "/%d/" parent-id)
+                                :archived false
+                                {:order-by [[:name :asc]]
+                                 :limit    50})
+                     (t2/select :model/Collection
+                                :location "/"
+                                :archived false
+                                {:order-by [[:name :asc]]
+                                 :limit    50}))
+                   (filter mi/can-read?)
+                   (take 30))]
+    (if (empty? colls)
+      (if parent-id
+        (format "No sub-collections found in collection %d." parent-id)
+        "No collections found.")
+      (str (if parent-id
+             (format "Sub-collections of collection %d:\n" parent-id)
+             "Root collections:\n")
+           (clojure.string/join "\n"
+             (map (fn [c]
+                    (format "- ID: %d, Name: \"%s\"%s%s"
+                            (:id c) (:name c)
+                            (if (:personal_owner_id c) " [Personal]" "")
+                            (if (:description c) (str ", Desc: " (:description c)) "")))
+                  colls))))))
+
+(defn- get-collection-contents [collection-id]
+  (let [coll   (t2/select-one :model/Collection :id collection-id)
+        _      (api/check-404 coll)
+        _      (api/check-403 (mi/can-read? coll))
+        ;; Sub-collections
+        sub-colls (->> (t2/select :model/Collection
+                                  :location (format "/%d/" collection-id)
+                                  :archived false
+                                  {:order-by [[:name :asc]]})
+                       (filter mi/can-read?))
+        ;; Cards (questions, models, metrics)
+        cards  (->> (t2/select :model/Card
+                               :collection_id collection-id
+                               :archived false
+                               {:order-by [[:name :asc]]
+                                :limit    50})
+                    (filter mi/can-read?))
+        ;; Dashboards
+        dashes (->> (t2/select :model/Dashboard
+                               :collection_id collection-id
+                               :archived false
+                               {:order-by [[:name :asc]]
+                                :limit    50})
+                    (filter mi/can-read?))]
+    (str (format "Collection \"%s\" (ID: %d) contents:\n\n" (:name coll) collection-id)
+         (when (seq sub-colls)
+           (str "Sub-collections:\n"
+                (clojure.string/join "\n"
+                  (map (fn [c] (format "  - [collection] ID: %d, Name: \"%s\"" (:id c) (:name c)))
+                       sub-colls))
+                "\n\n"))
+         (when (seq cards)
+           (str "Questions/Models:\n"
+                (clojure.string/join "\n"
+                  (map (fn [c]
+                         (format "  - [%s] ID: %d, Name: \"%s\", Display: %s"
+                                 (name (or (:type c) :question))
+                                 (:id c) (:name c)
+                                 (name (or (:display c) :table))))
+                       cards))
+                "\n\n"))
+         (when (seq dashes)
+           (str "Dashboards:\n"
+                (clojure.string/join "\n"
+                  (map (fn [d] (format "  - [dashboard] ID: %d, Name: \"%s\"" (:id d) (:name d)))
+                       dashes))
+                "\n"))
+         (when (and (empty? sub-colls) (empty? cards) (empty? dashes))
+           "This collection is empty."))))
+
 (defn- get-table-details [table-id]
   (let [tbl    (t2/select-one :model/Table :id table-id)
         _      (api/check-404 tbl)
@@ -459,6 +560,8 @@ After creating, always provide the URL /question/<id> to the user."
       "get_card_details"  (get-card-details (get args "card_id"))
       "get_dashboard_details" (get-dashboard-details (get args "dashboard_id"))
       "get_table_details"  (get-table-details (get args "table_id"))
+      "list_collections"   (list-collections (get args "parent_id"))
+      "get_collection_contents" (get-collection-contents (get args "collection_id"))
       "create_question"   (create-question args)
       (str "Unknown tool: " tool-name))
     (catch Exception e

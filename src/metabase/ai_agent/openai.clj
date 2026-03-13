@@ -60,8 +60,12 @@ Never save to the root collection or any other collection unless the user explic
 
 ## Response format
 
-You MUST return your final answer as a JSON object with a single key `blocks` — an array of content blocks.
-Each block has a `type` and type-specific fields.  Do NOT wrap the JSON in markdown code fences.
+You MUST return your final answer as a JSON object with two keys:
+- `blocks` — an array of content blocks (required)
+- `suggestions` — an array of 2-4 short follow-up prompts the user might want to try next (required)
+
+Suggestions should be concise (under 60 chars), actionable, and relevant to the current conversation.
+Do NOT wrap the JSON in markdown code fences.
 
 Available block types:
 
@@ -93,6 +97,11 @@ Example response:
   {\"type\": \"card_link\", \"card_id\": 123, \"name\": \"Monthly Revenue\"},
   {\"type\": \"text\", \"content\": \"Here is the SQL I used:\"},
   {\"type\": \"sql\", \"content\": \"SELECT date_trunc('month', created_at) AS month, SUM(total) AS revenue FROM orders GROUP BY 1 ORDER BY 1\"}
+],
+\"suggestions\": [
+  \"Break down revenue by product category\",
+  \"Add a filter for last 12 months\",
+  \"Create a dashboard with this question\"
 ]}")
 
 ;;; ─────────────────────────────────────────────────────────────────────────────

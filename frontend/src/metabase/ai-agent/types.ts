@@ -14,6 +14,8 @@ export interface ChatMessage {
   content: string | null;
   /** Parsed structured blocks from JSON response (assistant only). */
   blocks?: ContentBlock[];
+  /** Follow-up suggestions from the AI (assistant only). */
+  suggestions?: string[];
   /** UI-only: tool execution status */
   toolStatus?: "done" | "error";
   toolName?: string;

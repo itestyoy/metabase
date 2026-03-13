@@ -22,8 +22,7 @@ import S from "./AgentModal.module.css";
 import type { ChatMessage, ContentBlock } from "./types";
 
 const EXAMPLE_PROMPTS = [
-  t`Show total orders per day for the last 30 days`,
-  t`List all databases I have access to`,
+  t`List all tables I have access to`,
   t`Find dashboards related to revenue`,
   t`Create a question showing monthly active users`,
 ];
@@ -258,6 +257,13 @@ export function AgentChatMessages({
     );
   }
 
+  // Get suggestions from the last assistant message
+  const lastMsg = messages[messages.length - 1];
+  const suggestions =
+    !isLoading && lastMsg?.role === "assistant" && lastMsg.suggestions?.length
+      ? lastMsg.suggestions
+      : null;
+
   return (
     <ScrollArea
       className={S.messagesScroll}
@@ -273,6 +279,19 @@ export function AgentChatMessages({
             <Paper className={S.loadingBubble} radius="xl">
               <Loader size="xs" />
             </Paper>
+          </Flex>
+        )}
+        {suggestions && onSelectPrompt && (
+          <Flex gap={6} wrap="wrap" mt={4}>
+            {suggestions.map(s => (
+              <UnstyledButton
+                key={s}
+                className={S.suggestionChip}
+                onClick={() => onSelectPrompt(s)}
+              >
+                {s}
+              </UnstyledButton>
+            ))}
           </Flex>
         )}
       </Stack>
