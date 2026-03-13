@@ -228,15 +228,21 @@ export function AgentModal({ onClose }: AgentModalProps) {
                       {t`Enter to send · Shift+Enter for new line`}
                     </Text>
                     <ActionIcon
-                      variant="filled"
-                      color="brand"
+                      variant="transparent"
                       size="sm"
-                      radius="xl"
                       onClick={handleSend}
                       disabled={isLoading || !inputText.trim()}
                       aria-label={t`Send message`}
                     >
-                      <Icon name="send" size={13} />
+                      <Icon
+                        name="send"
+                        size={14}
+                        color={
+                          isLoading || !inputText.trim()
+                            ? "var(--mb-color-text-tertiary)"
+                            : "var(--mb-color-brand)"
+                        }
+                      />
                     </ActionIcon>
                   </div>
                 </div>

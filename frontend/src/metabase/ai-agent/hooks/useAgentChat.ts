@@ -21,6 +21,10 @@ function isValidBlock(b: unknown): b is ContentBlock {
       return typeof block.content === "string";
     case "card_link":
       return typeof block.card_id === "number" && typeof block.name === "string";
+    case "card_preview":
+      return typeof block.card_id === "number" && typeof block.name === "string" && typeof block.display === "string";
+    case "notebook_link":
+      return typeof block.name === "string" && typeof block.display === "string" && block.dataset_query != null && typeof block.dataset_query === "object";
     case "dashboard_link":
       return typeof block.dashboard_id === "number" && typeof block.name === "string";
     case "table":

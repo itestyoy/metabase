@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { t } from "ttag";
 
 import Markdown from "metabase/common/components/Markdown";
-import { Table, type BaseRow } from "metabase/common/components/Table";
+import { serializeCardForUrl } from "metabase/lib/card";
 import {
   ActionIcon,
   Box,
@@ -44,6 +44,58 @@ function CardLinkBlock({ block }: { block: Extract<ContentBlock, { type: "card_l
   );
 }
 
+function CardPreviewBlock({ block }: { block: Extract<ContentBlock, { type: "card_preview" }> }) {
+  const [showPreview, setShowPreview] = useState(false);
+  const displayIcon = block.display === "line" || block.display === "area"
+    ? "line"
+    : block.display === "bar" || block.display === "row"
+      ? "bar"
+      : block.display === "pie"
+        ? "pie"
+        : "table2";
+
+  return (
+    <Box>
+      <Group gap={0} wrap="nowrap" className={S.cardPreviewRow}>
+        <Link to={`/question/${block.card_id}`} className={S.blockLink} style={{ flex: 1, minWidth: 0 }}>
+          <Group gap={8} wrap="nowrap">
+            <Icon name={displayIcon} size={16} color="var(--mb-color-brand)" />
+            <Text size="sm" fw={500} truncate>
+              {block.name}
+            </Text>
+          </Group>
+        </Link>
+        <Tooltip label={showPreview ? t`Hide preview` : t`Preview`}>
+          <ActionIcon
+            variant="subtle"
+            size="sm"
+            onClick={() => setShowPreview(v => !v)}
+            aria-label={showPreview ? t`Hide preview` : t`Preview`}
+            className={S.previewButton}
+          >
+            <Icon
+              name={showPreview ? "chevronup" : "eye_outline"}
+              size={14}
+              color={showPreview ? "var(--mb-color-brand)" : "var(--mb-color-text-tertiary)"}
+            />
+          </ActionIcon>
+        </Tooltip>
+      </Group>
+      {showPreview && (
+        <Box className={S.cardPreviewFrame}>
+          <Box
+            component="iframe"
+            src={`/question/${block.card_id}#hide_parameters=true&hide_download_button=true`}
+            className={S.cardPreviewIframe}
+            title={block.name}
+          />
+          <Box className={S.cardPreviewOverlay} />
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 function DashboardLinkBlock({ block }: { block: Extract<ContentBlock, { type: "dashboard_link" }> }) {
   return (
     <Link to={`/dashboard/${block.dashboard_id}`} className={S.blockLink}>
@@ -51,6 +103,43 @@ function DashboardLinkBlock({ block }: { block: Extract<ContentBlock, { type: "d
         <Icon name="dashboard" size={16} color="var(--mb-color-brand)" />
         <Text size="sm" fw={500} truncate>
           {block.name}
+        </Text>
+      </Group>
+    </Link>
+  );
+}
+
+function NotebookLinkBlock({ block }: { block: Extract<ContentBlock, { type: "notebook_link" }> }) {
+  const notebookUrl = useMemo(() => {
+    const card = {
+      name: block.name,
+      display: block.display || "table",
+      visualization_settings: {},
+      dataset_query: block.dataset_query,
+    };
+    return `/question/notebook#${serializeCardForUrl(card)}`;
+  }, [block.name, block.display, block.dataset_query]);
+
+  const displayIcon = block.display === "line" || block.display === "area"
+    ? "line"
+    : block.display === "bar" || block.display === "row"
+      ? "bar"
+      : block.display === "pie"
+        ? "pie"
+        : "table2";
+
+  return (
+    <Link to={notebookUrl} className={S.blockLink}>
+      <Group gap={8} wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+        <Icon name={displayIcon} size={16} color="var(--mb-color-brand)" />
+        <Text size="sm" fw={500} truncate>
+          {block.name}
+        </Text>
+      </Group>
+      <Group gap={4} wrap="nowrap" style={{ flexShrink: 0, marginLeft: "auto" }}>
+        <Icon name="notebook" size={12} color="var(--mb-color-text-tertiary)" />
+        <Text size="xs" c="text-tertiary">
+          {t`Open in notebook`}
         </Text>
       </Group>
     </Link>
@@ -110,31 +199,101 @@ function SqlBlock({
   );
 }
 
+/** Detect the dominant type of a column from its values. */
+function detectColumnType(rows: unknown[][], ci: number): "number" | "date" | "text" {
+  let numCount = 0;
+  let dateCount = 0;
+  let total = 0;
+  for (const row of rows) {
+    const v = row[ci];
+    if (v == null || v === "") continue;
+    total++;
+    if (typeof v === "number") { numCount++; continue; }
+    const s = String(v);
+    if (/^-?\d+(\.\d+)?$/.test(s)) { numCount++; continue; }
+    // ISO date patterns: 2024-01-15, 2024-01-15T10:30:00, etc.
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) { dateCount++; continue; }
+  }
+  if (total === 0) return "text";
+  if (numCount / total > 0.7) return "number";
+  if (dateCount / total > 0.7) return "date";
+  return "text";
+}
+
+/** Format a cell value based on detected column type. */
+function formatCell(value: unknown, colType: "number" | "date" | "text"): string {
+  if (value == null) return "—";
+  if (colType === "number") {
+    const n = typeof value === "number" ? value : parseFloat(String(value));
+    if (isNaN(n)) return String(value);
+    // Integers stay as-is; floats get up to 2 decimal places
+    if (Number.isInteger(n)) return n.toLocaleString("en-US");
+    return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+  if (colType === "date") {
+    const s = String(value);
+    try {
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return s;
+      // Date only (no time component or midnight)
+      if (s.length <= 10 || /T00:00:00/.test(s)) {
+        return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+      }
+      // Date + time
+      return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+        + " " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    } catch {
+      return s;
+    }
+  }
+  return String(value);
+}
+
 function TableBlock({ block }: { block: Extract<ContentBlock, { type: "table" }> }) {
-  const columns = block.columns.map(col => ({ name: col, key: col }));
-  const rows: BaseRow[] = block.rows.map((row, ri) => {
-    const obj: Record<string, unknown> = { id: ri };
-    block.columns.forEach((col, ci) => {
-      obj[col] = row[ci];
-    });
-    return obj as BaseRow;
-  });
+  // Detect types once for all columns
+  const colTypes = block.columns.map((_, ci) => detectColumnType(block.rows, ci));
 
   return (
-    <Table
-      className={S.agentTable}
-      columns={columns}
-      rows={rows}
-      rowRenderer={(row: BaseRow) => (
-        <Box component="tr" key={row.id}>
-          {block.columns.map(col => (
-            <Box component="td" key={col}>
-              <Text size="xs">{row[col] == null ? "" : String(row[col])}</Text>
+    <ScrollArea className={S.tableScroll} scrollbarSize={4}>
+      <Box className={S.agentTable} component="table">
+        <Box component="thead">
+          <Box component="tr">
+            {block.columns.map((col, ci) => (
+              <Box
+                component="th"
+                key={col}
+                style={colTypes[ci] === "number" ? { textAlign: "right" } : undefined}
+              >
+                <Text size="xs" fw={600} c="text-secondary" tt="uppercase" style={{ letterSpacing: "0.03em" }}>
+                  {col}
+                </Text>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+        <Box component="tbody">
+          {block.rows.map((row, ri) => (
+            <Box component="tr" key={ri} className={S.agentTableRow}>
+              {block.columns.map((col, ci) => (
+                <Box
+                  component="td"
+                  key={col}
+                  style={colTypes[ci] === "number" ? { textAlign: "right", fontVariantNumeric: "tabular-nums" } : undefined}
+                >
+                  <Text
+                    size="xs"
+                    c={row[ci] == null ? "text-tertiary" : undefined}
+                    style={{ whiteSpace: "nowrap" }}
+                  >
+                    {formatCell(row[ci], colTypes[ci])}
+                  </Text>
+                </Box>
+              ))}
             </Box>
           ))}
         </Box>
-      )}
-    />
+      </Box>
+    </ScrollArea>
   );
 }
 
@@ -150,8 +309,12 @@ function ContentBlockRenderer({
       return <Markdown>{block.content}</Markdown>;
     case "card_link":
       return <CardLinkBlock block={block} />;
+    case "card_preview":
+      return <CardPreviewBlock block={block} />;
     case "dashboard_link":
       return <DashboardLinkBlock block={block} />;
+    case "notebook_link":
+      return <NotebookLinkBlock block={block} />;
     case "sql":
       return <SqlBlock block={block} onSaveAsQuestion={onSaveAsQuestion} />;
     case "table":
@@ -236,9 +399,7 @@ function MessageBubble({
     return (
       <Flex className={S.messageBubbleRow} justify="flex-end">
         <Paper className={S.userBubble} radius="xl">
-          <Text size="sm" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-            {message.content}
-          </Text>
+          <Markdown className={S.userMarkdown}>{message.content ?? ""}</Markdown>
         </Paper>
       </Flex>
     );
