@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -59,11 +59,19 @@ interface SetInteractingAction {
   value: boolean;
 }
 
+interface ViewportResizeAction {
+  type: "VIEWPORT_RESIZE";
+  vw: number;
+  vh: number;
+  constraints: PanelConstraints;
+}
+
 type PanelAction =
   | DragMoveAction
   | ResizeMoveAction
   | ToggleMinimizedAction
-  | SetInteractingAction;
+  | SetInteractingAction
+  | ViewportResizeAction;
 
 // ── Transient interaction data (not render-driving, stored in refs) ──────────
 
@@ -167,6 +175,19 @@ function panelReducer(state: PanelState, action: PanelAction): PanelState {
         ? state
         : { ...state, isInteracting: action.value };
 
+    case "VIEWPORT_RESIZE": {
+      const { vw, vh, constraints: cr } = action;
+      const renderedHeight = state.isMinimized ? cr.minimizedHeight : state.height;
+      const newWidth = clamp(state.width, cr.minWidth, Math.max(cr.minWidth, vw - 2 * cr.edgeBuffer));
+      const newHeight = clamp(state.height, cr.minHeight, Math.max(cr.minHeight, vh - cr.appbarHeight - 2 * cr.edgeBuffer));
+      const newRight = clamp(state.right, cr.edgeBuffer, Math.max(cr.edgeBuffer, vw - newWidth - cr.edgeBuffer));
+      const newBottom = clamp(state.bottom, cr.edgeBuffer, Math.max(cr.edgeBuffer, vh - renderedHeight - cr.appbarHeight - cr.edgeBuffer));
+      if (newWidth === state.width && newHeight === state.height && newRight === state.right && newBottom === state.bottom) {
+        return state;
+      }
+      return { ...state, width: newWidth, height: newHeight, right: newRight, bottom: newBottom };
+    }
+
     default:
       return state;
   }
@@ -177,6 +198,20 @@ function panelReducer(state: PanelState, action: PanelAction): PanelState {
 export function useFloatingPanel(constraints: PanelConstraints) {
   const c = constraints;
   const [state, dispatch] = useReducer(panelReducer, c, computeInitialState);
+
+  // Re-clamp position when the browser window is resized.
+  useEffect(() => {
+    const handleResize = () => {
+      dispatch({
+        type: "VIEWPORT_RESIZE",
+        vw: window.innerWidth,
+        vh: window.innerHeight,
+        constraints: c,
+      });
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [c]);
 
   // Transient interaction data — never drives rendering directly.
   const dragOffset = useRef<DragOffsetData | null>(null);
