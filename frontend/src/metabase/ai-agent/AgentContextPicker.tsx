@@ -12,7 +12,7 @@ import S from "./AgentContextPicker.module.css";
 export interface AgentContextValue {
   id: number;
   name: string;
-  /** "card" | "dataset" | "metric" | "table" | "dashboard" */
+  /** "card" | "dataset" | "metric" | "table" | "dashboard" | "document" */
   model: string;
   db_id?: number;
   /** Query-string parameters from the current URL, if any. */
@@ -32,6 +32,7 @@ const ICON: Record<string, string> = {
   metric: "metric",
   table: "database",
   dashboard: "dashboard",
+  document: "document",
 };
 
 const LABEL: () => Record<string, string> = () => ({
@@ -40,6 +41,7 @@ const LABEL: () => Record<string, string> = () => ({
   metric: t`Metric`,
   table: t`Table`,
   dashboard: t`Dashboard`,
+  document: t`Document`,
 });
 
 export function AgentContextPicker({ value, onChange }: AgentContextPickerProps) {
@@ -106,7 +108,7 @@ export function AgentContextPicker({ value, onChange }: AgentContextPickerProps)
           opened={isOpen}
           onClose={() => setIsOpen(false)}
           onChange={handleChange}
-          models={["card", "dataset", "metric", "table"]}
+          models={["card", "dataset", "metric", "table", "document"]}
           dropdownMt={4}
         />
       </Box>

@@ -7,6 +7,7 @@ export type ContentBlock =
   | { type: "card_preview"; card_id: number; name: string; display: string }
   | { type: "dashboard_link"; dashboard_id: number; name: string }
   | { type: "notebook_link"; name: string; dataset_query: Record<string, unknown>; display: string }
+  | { type: "document_link"; document_id: number; name: string }
   | { type: "sql"; content: string }
   | { type: "table"; columns: string[]; rows: unknown[][] };
 

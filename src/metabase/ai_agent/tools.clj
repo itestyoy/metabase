@@ -11,6 +11,7 @@
    [metabase.queries.models.card :as queries.card]
    [metabase.query-processor :as qp]
    [metabase.query-processor.util :as qp.util]
+   [metabase.documents.prose-mirror :as prose-mirror]
    [metabase.search.core :as search]
    [metabase.util.log :as log]
    [toucan2.core :as t2]))
@@ -313,6 +314,28 @@ to ensure correct syntax for the target database."
                   :additionalProperties false}}
 
    {:type        "function"
+    :name        "get_document_guide"
+    :description "Get the full Metabase Document authoring guide: ProseMirror AST node types, text formatting marks,
+embedded cards, smart links, and best practices. You MUST call this before creating or updating any document
+to ensure the AST structure is valid."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {}
+                  :required             []
+                  :additionalProperties false}}
+
+   {:type        "function"
+    :name        "get_analytical_guide"
+    :description "Get the analytical investigation methodology guide. You MUST call this before starting any
+data investigation, root-cause analysis, anomaly detection, or exploratory research task.
+Returns a structured framework for how to approach analytical problems like a senior data analyst."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {}
+                  :required             []
+                  :additionalProperties false}}
+
+   {:type        "function"
     :name        "create_notebook_question"
     :description "Create and save a new question using a structured MBQL query (notebook mode).
 Use this instead of create_question when you want to save a question with a structured query
@@ -346,6 +369,45 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                                          :dataset_query {:type        "string"
                                                          :description "The MBQL structured query as a JSON string. Must be a JSON object with keys: source-table (integer), and optionally: aggregation, breakout, filter, order-by, limit, joins, expressions. Example: {\"source-table\": 5, \"aggregation\": [[\"count\"]], \"breakout\": [[\"field\", 12, {\"temporal-unit\": \"month\"}]]}"}}
                   :required             ["database_id" "dataset_query"]
+                  :additionalProperties false}}
+   {:type        "function"
+    :name        "create_document"
+    :description "Create a new Metabase Document — a rich-text page that can embed questions (cards) and smart links. Use this when the user asks to create a report, writeup, analysis page, or document. The content is a ProseMirror AST as a JSON string."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:name          {:type        "string"
+                                                         :description "Document title."}
+                                         :content       {:type        "string"
+                                                         :description "The document body as a ProseMirror AST JSON string. Structure: {\"type\":\"doc\",\"content\":[...nodes]}. Supported node types: paragraph ({\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"...\"}]}), heading ({\"type\":\"heading\",\"attrs\":{\"level\":2},\"content\":[...]}), bulletList/orderedList with listItem children, codeBlock, blockquote, cardEmbed ({\"type\":\"cardEmbed\",\"attrs\":{\"id\":<card_id>}}). For simple text documents, wrap paragraphs in a doc node."}
+                                         :collection_id {:type        ["integer" "null"]
+                                                         :description "Collection ID to save the document into. Pass null for default."}}
+                  :required             ["name" "content" "collection_id"]
+                  :additionalProperties false}}
+   {:type        "function"
+    :name        "get_document"
+    :description "Get details of a Metabase Document by ID: name, content (ProseMirror AST), embedded cards, collection, creator."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:document_id {:type        "integer"
+                                                       :description "The document ID."}}
+                  :required             ["document_id"]
+                  :additionalProperties false}}
+   {:type        "function"
+    :name        "update_document"
+    :description "Update an existing Metabase Document. You can change the name, content, collection, or archive it."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:document_id   {:type        "integer"
+                                                         :description "The document ID to update."}
+                                         :name          {:type        ["string" "null"]
+                                                         :description "New document name. Pass null to keep unchanged."}
+                                         :content       {:type        ["string" "null"]
+                                                         :description "New ProseMirror AST JSON string. Pass null to keep unchanged."}
+                                         :collection_id {:type        ["integer" "null"]
+                                                         :description "New collection ID. Pass null to keep unchanged."}
+                                         :archived      {:type        ["boolean" "null"]
+                                                         :description "Set to true to archive, false to unarchive. Pass null to keep unchanged."}}
+                  :required             ["document_id" "name" "content" "collection_id" "archived"]
                   :additionalProperties false}}])
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
@@ -1267,6 +1329,159 @@ Choose display based on the data:
                  (:name db) (:id db) engine)
          (get sql-guides engine sql-guide-default))))
 
+(defn- get-document-guide []
+  "## Metabase Document Authoring Guide (ProseMirror AST)
+
+Documents use a ProseMirror AST: a JSON object with `type` and `content` fields.
+The top-level node is always `{\"type\": \"doc\", \"content\": [...]}`.
+
+### Block nodes (top-level children of \"doc\")
+
+1. **paragraph** — basic text block
+   {\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Hello world\"}]}
+   Empty paragraph (spacer): {\"type\": \"paragraph\"}
+
+2. **heading** — section title (levels 1-6)
+   {\"type\": \"heading\", \"attrs\": {\"level\": 2}, \"content\": [{\"type\": \"text\", \"text\": \"Section Title\"}]}
+
+3. **bulletList** — unordered list
+   {\"type\": \"bulletList\", \"content\": [
+     {\"type\": \"listItem\", \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Item 1\"}]}]},
+     {\"type\": \"listItem\", \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Item 2\"}]}]}
+   ]}
+
+4. **orderedList** — numbered list (same structure as bulletList but type is \"orderedList\")
+
+5. **codeBlock** — fenced code block
+   {\"type\": \"codeBlock\", \"content\": [{\"type\": \"text\", \"text\": \"SELECT * FROM orders\"}]}
+
+6. **blockquote** — quoted text
+   {\"type\": \"blockquote\", \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Important note\"}]}]}
+
+7. **horizontalRule** — divider line
+   {\"type\": \"horizontalRule\"}
+
+8. **cardEmbed** — embedded Metabase question/visualization (IMPORTANT)
+   Wrap in a resizeNode for proper rendering:
+   {\"type\": \"resizeNode\", \"content\": [{\"type\": \"cardEmbed\", \"attrs\": {\"id\": <card_id>, \"name\": null}}]}
+   The card_id must be a valid saved question ID. Create questions first, then embed them.
+
+9. **image** — inline image
+   {\"type\": \"image\", \"attrs\": {\"src\": \"https://...\", \"alt\": \"description\"}}
+
+### Inline marks (applied to text nodes)
+
+Text nodes can have a `marks` array with formatting:
+- **bold**: {\"type\": \"text\", \"text\": \"important\", \"marks\": [{\"type\": \"bold\"}]}
+- **italic**: {\"type\": \"text\", \"text\": \"emphasis\", \"marks\": [{\"type\": \"italic\"}]}
+- **strike**: {\"type\": \"text\", \"text\": \"deleted\", \"marks\": [{\"type\": \"strike\"}]}
+- **code**: {\"type\": \"text\", \"text\": \"inline code\", \"marks\": [{\"type\": \"code\"}]}
+- **link**: {\"type\": \"text\", \"text\": \"click here\", \"marks\": [{\"type\": \"link\", \"attrs\": {\"href\": \"https://...\"}}]}
+
+Multiple marks can be combined:
+{\"type\": \"text\", \"text\": \"bold link\", \"marks\": [{\"type\": \"bold\"}, {\"type\": \"link\", \"attrs\": {\"href\": \"...\"}}]}
+
+### Best practices
+
+1. **Always create questions before embedding them** — call create_notebook_question or create_question first,
+   then use the returned card_id in a cardEmbed node.
+
+2. **Structure your document logically** — use headings (level 2-3) to organize sections, embed relevant
+   charts after explanatory text, and use bullet/ordered lists for key findings.
+
+3. **Wrap cardEmbed in resizeNode** — this is required for the editor to properly render and resize the embed.
+
+4. **Use empty paragraphs as spacers** — add {\"type\": \"paragraph\"} between sections for visual breathing room.
+
+5. **Keep the AST valid** — every text must be inside a paragraph, heading, or listItem.
+   Never put text nodes directly inside \"doc\" or \"bulletList\".
+
+6. **Typical document structure**:
+   - Heading (level 1): document title
+   - Paragraph: introduction / summary
+   - Heading (level 2): section for each analysis area
+   - Paragraph: explanation
+   - resizeNode > cardEmbed: embedded chart
+   - Paragraph: interpretation of the chart
+   - bulletList: key takeaways
+   - Heading (level 2): conclusion
+
+### Complete example
+
+{\"type\": \"doc\", \"content\": [
+  {\"type\": \"heading\", \"attrs\": {\"level\": 1}, \"content\": [{\"type\": \"text\", \"text\": \"Q1 Revenue Report\"}]},
+  {\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"This report summarizes revenue trends for Q1 2025.\"}]},
+  {\"type\": \"heading\", \"attrs\": {\"level\": 2}, \"content\": [{\"type\": \"text\", \"text\": \"Monthly Revenue\"}]},
+  {\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Revenue grew steadily across all three months:\"}]},
+  {\"type\": \"resizeNode\", \"content\": [{\"type\": \"cardEmbed\", \"attrs\": {\"id\": 42, \"name\": null}}]},
+  {\"type\": \"paragraph\"},
+  {\"type\": \"heading\", \"attrs\": {\"level\": 2}, \"content\": [{\"type\": \"text\", \"text\": \"Key Findings\"}]},
+  {\"type\": \"bulletList\", \"content\": [
+    {\"type\": \"listItem\", \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Revenue up 15% vs Q4\"}]}]},
+    {\"type\": \"listItem\", \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Top category: Widgets (34% of total)\"}]}]}
+  ]}
+]}")
+
+(defn- get-analytical-guide []
+  "## Analytical Investigation Framework
+
+You are a senior data analyst. When investigating a problem, follow this structured methodology.
+
+### Phase 1: Understand the problem
+- Clarify what exactly happened: what metric changed, by how much, when did it start?
+- Identify the key metric(s) and the expected vs actual values.
+- Determine the time window of the anomaly — when did things start deviating?
+
+### Phase 2: Scope the data landscape
+- Identify which tables and databases are relevant (use get_database_tables, get_table_details).
+- Check available metrics (list_metrics) — they contain team-agreed definitions, prefer them.
+- Understand the data model: what joins exist, what are the key dimensions for slicing.
+
+### Phase 3: Establish baselines
+- Query the metric over a broader time range to see historical norms.
+- Compare the anomaly period to prior periods (week-over-week, month-over-month).
+- Save baseline queries as questions — you'll embed them in the final report.
+
+### Phase 4: Segment & drill down
+- Break the metric by key dimensions: geography, product, channel, user segment, platform, etc.
+- Look for which segment is driving the change — often one segment explains 80%+ of the shift.
+- Use filters to isolate segments and run targeted queries.
+- At each step, ask: does this segment explain the anomaly? If not, try another dimension.
+
+### Phase 5: Identify root cause
+- Once you find the responsible segment, dig deeper:
+  - Did something change upstream (e.g. a data pipeline issue, missing data)?
+  - Is there a business event (launch, outage, promotion, seasonality)?
+  - Did the definition or tracking change (new event schema, removed field)?
+- Cross-reference with other tables if needed (e.g. events vs transactions).
+
+### Phase 6: Quantify the impact
+- Calculate the exact impact: how much revenue/users/events were affected?
+- Compare against what the numbers would have been without the anomaly.
+- Express in both absolute and relative terms (e.g. -$12K, -8% vs prior week).
+
+### Phase 7: Compile the report
+Save all key queries as questions, then build a Metabase Document with:
+1. **Title**: clear description of the investigation
+2. **Executive summary**: 2-3 sentences with the headline finding
+3. **Background**: what triggered the investigation, the metric and time range
+4. **Analysis sections** (each with an embedded chart + written interpretation):
+   - Overall trend (baseline vs anomaly)
+   - Segment breakdown (which dimensions explain the change)
+   - Root cause deep-dive
+5. **Key findings**: bullet list of the most important facts
+6. **Impact**: quantified effect on the business
+7. **Recommendations**: actionable next steps
+
+### Analytical principles
+- **Always show your evidence** — every claim should have a query/chart backing it.
+- **Compare, don't just describe** — a number without context is meaningless. Always compare to a baseline.
+- **Start broad, then narrow** — don't jump to conclusions. Let the data guide you through progressive filtering.
+- **Check data quality first** — before blaming business factors, rule out data issues (NULL spikes, missing days, schema changes).
+- **Use percentages AND absolutes** — a 50% drop in a tiny segment matters less than a 5% drop in the biggest one.
+- **Be honest about uncertainty** — if the data is inconclusive, say so. Suggest what additional data would help.
+- **Think about the audience** — the report should be understandable by someone who wasn't part of the investigation.")
+
 (defn- create-notebook-question [{:strs [name description database_id dataset_query display collection_id]}]
   (let [query-map (if (string? dataset_query)
                     (json/parse-string dataset_query)
@@ -1282,6 +1497,59 @@ Choose display based on the data:
         card      (queries.card/create-card! card-data @api/*current-user*)]
     (format "Question created successfully!\n- ID: %d\n- Name: \"%s\"\n- Display: %s\n- URL: /question/%d"
             (:id card) (:name card) (clojure.core/name (or (:display card) :table)) (:id card))))
+
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;; Document tools
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+(defn- create-document [{:strs [name content collection_id]}]
+  (let [ast (json/parse-string content)
+        doc (t2/insert-returning-instance! :model/Document
+              {:name          name
+               :document      ast
+               :content_type  prose-mirror/prose-mirror-content-type
+               :collection_id collection_id
+               :creator_id    api/*current-user-id*})]
+    (format "Document created successfully!\n- ID: %d\n- Name: \"%s\"\n- URL: /document/%d"
+            (:id doc) (:name doc) (:id doc))))
+
+(defn- get-document-details [document-id]
+  (let [doc (t2/select-one :model/Document :id document-id)
+        _   (api/check-404 doc)
+        _   (api/check-403 (mi/can-read? doc))
+        ast (:document doc)
+        ;; Extract embedded card IDs from AST
+        card-ids (prose-mirror/card-ids {:document ast :content_type (:content_type doc)})
+        ;; Summarize content as plain text (collect text nodes)
+        text-summary (->> (tree-seq :content :content ast)
+                          (keep #(when (= "text" (:type %)) (:text %)))
+                          (clojure.string/join " ")
+                          (#(if (> (count %) 500) (str (subs % 0 500) "…") %)))]
+    (str (format "Document: \"%s\" (ID: %d)\n" (:name doc) (:id doc))
+         (format "- Collection ID: %s\n" (or (:collection_id doc) "root"))
+         (format "- Creator: user %d\n" (:creator_id doc))
+         (format "- Created: %s\n" (:created_at doc))
+         (format "- Updated: %s\n" (:updated_at doc))
+         (format "- Archived: %s\n" (:archived doc))
+         (when (seq card-ids)
+           (format "- Embedded card IDs: %s\n" (clojure.string/join ", " card-ids)))
+         (format "- Content preview: %s\n" (if (seq text-summary) text-summary "(no text content)"))
+         (format "- URL: /document/%d" (:id doc)))))
+
+(defn- update-document [{:strs [document_id name content collection_id archived]}]
+  (let [doc (t2/select-one :model/Document :id document_id)
+        _   (api/check-404 doc)
+        _   (api/check-403 (mi/can-write? doc))
+        updates (cond-> {}
+                  (some? name)          (assoc :name name)
+                  (some? content)       (assoc :document (json/parse-string content)
+                                               :content_type prose-mirror/prose-mirror-content-type)
+                  (some? collection_id) (assoc :collection_id collection_id)
+                  (some? archived)      (assoc :archived archived))]
+    (when (seq updates)
+      (t2/update! :model/Document :id document_id updates))
+    (format "Document updated successfully!\n- ID: %d\n- URL: /document/%d"
+            document_id document_id)))
 
 (defn- list-metrics [database-id table-id]
   (let [metrics (->> (cond-> {:archived false
@@ -1342,7 +1610,12 @@ Choose display based on the data:
       "create_notebook_question" (create-notebook-question args)
       "get_sql_guide"  (get-sql-guide (get args "database_id"))
       "get_mbql_guide" (get-mbql-guide)
+      "get_document_guide" (get-document-guide)
+      "get_analytical_guide" (get-analytical-guide)
       "run_mbql_query"  (run-mbql-query (get args "database_id") (get args "dataset_query"))
+      "create_document" (create-document args)
+      "get_document"    (get-document-details (get args "document_id"))
+      "update_document" (update-document args)
       (str "Unknown tool: " tool-name))
     (catch Exception e
       (log/warn e "AI Agent tool execution failed" {:tool tool-name})
