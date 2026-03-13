@@ -2,8 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { t } from "ttag";
 
+import { skipToken, useGetCardQuery, useGetCardQueryQuery } from "metabase/api";
 import Markdown from "metabase/common/components/Markdown";
+import { DataGrid, useDataGridInstance } from "metabase/data-grid";
+import type { ColumnOptions } from "metabase/data-grid";
 import { serializeCardForUrl } from "metabase/lib/card";
+import { useSelector } from "metabase/lib/redux";
+import { getMetadata } from "metabase/selectors/metadata";
 import {
   ActionIcon,
   Box,
@@ -19,6 +24,7 @@ import {
   Tooltip,
   UnstyledButton,
 } from "metabase/ui";
+import Visualization from "metabase/visualizations/components/Visualization";
 
 import S from "./AgentModal.module.css";
 import type { ChatMessage, ContentBlock } from "./types";
@@ -41,6 +47,44 @@ function CardLinkBlock({ block }: { block: Extract<ContentBlock, { type: "card_l
         </Text>
       </Group>
     </Link>
+  );
+}
+
+function CardPreviewVisualization({ cardId }: { cardId: number }) {
+  const { data: card, isLoading: isLoadingCard } = useGetCardQuery({ id: cardId });
+  const { data: dataset, isLoading: isLoadingDataset } = useGetCardQueryQuery(
+    card ? { cardId } : skipToken,
+  );
+  const metadata = useSelector(getMetadata);
+
+  if (isLoadingCard || isLoadingDataset) {
+    return (
+      <Flex align="center" justify="center" h={160}>
+        <Loader size="sm" />
+      </Flex>
+    );
+  }
+
+  if (!card || !dataset?.data) {
+    return (
+      <Flex align="center" justify="center" h={160}>
+        <Text size="xs" c="text-tertiary">{t`Could not load preview`}</Text>
+      </Flex>
+    );
+  }
+
+  const series = [{ card, data: dataset.data, started_at: dataset.started_at }];
+
+  return (
+    <Box h={200} style={{ pointerEvents: "none" }}>
+      <Visualization
+        rawSeries={series}
+        metadata={metadata}
+        isDashboard={false}
+        isQueryBuilder={false}
+        showTitle={false}
+      />
+    </Box>
   );
 }
 
@@ -83,13 +127,7 @@ function CardPreviewBlock({ block }: { block: Extract<ContentBlock, { type: "car
       </Group>
       {showPreview && (
         <Box className={S.cardPreviewFrame}>
-          <Box
-            component="iframe"
-            src={`/question/${block.card_id}#hide_parameters=true&hide_download_button=true`}
-            className={S.cardPreviewIframe}
-            title={block.name}
-          />
-          <Box className={S.cardPreviewOverlay} />
+          <CardPreviewVisualization cardId={block.card_id} />
         </Box>
       )}
     </Box>
@@ -249,51 +287,57 @@ function formatCell(value: unknown, colType: "number" | "date" | "text"): string
   return String(value);
 }
 
+type RowRecord = Record<string, unknown>;
+
 function TableBlock({ block }: { block: Extract<ContentBlock, { type: "table" }> }) {
-  // Detect types once for all columns
-  const colTypes = block.columns.map((_, ci) => detectColumnType(block.rows, ci));
+  const colTypes = useMemo(
+    () => block.columns.map((_, ci) => detectColumnType(block.rows, ci)),
+    [block.columns, block.rows],
+  );
+
+  const data: RowRecord[] = useMemo(
+    () => block.rows.map(row => {
+      const obj: RowRecord = {};
+      block.columns.forEach((col, ci) => { obj[col] = row[ci]; });
+      return obj;
+    }),
+    [block.columns, block.rows],
+  );
+
+  const columnsOptions: ColumnOptions<RowRecord>[] = useMemo(
+    () => block.columns.map((col, ci) => ({
+      id: col,
+      name: col,
+      accessorFn: (row: RowRecord) => row[col],
+      align: colTypes[ci] === "number" ? "right" as const : undefined,
+      formatter: (value: unknown) => formatCell(value, colTypes[ci]),
+    })),
+    [block.columns, colTypes],
+  );
+
+  const gridInstance = useDataGridInstance({
+    data,
+    columnsOptions,
+    rowId: { variant: "indexExpand", expandedIndex: undefined },
+  });
+
+  if (block.rows.length === 0) {
+    return (
+      <Flex align="center" justify="center" gap={8} p="md" className={S.tableEmpty}>
+        <Icon name="table2" size={16} color="var(--mb-color-text-tertiary)" />
+        <Text size="xs" c="text-tertiary">{t`No results`}</Text>
+      </Flex>
+    );
+  }
 
   return (
-    <ScrollArea className={S.tableScroll} scrollbarSize={4}>
-      <Box className={S.agentTable} component="table">
-        <Box component="thead">
-          <Box component="tr">
-            {block.columns.map((col, ci) => (
-              <Box
-                component="th"
-                key={col}
-                style={colTypes[ci] === "number" ? { textAlign: "right" } : undefined}
-              >
-                <Text size="xs" fw={600} c="text-secondary" tt="uppercase" style={{ letterSpacing: "0.03em" }}>
-                  {col}
-                </Text>
-              </Box>
-            ))}
-          </Box>
-        </Box>
-        <Box component="tbody">
-          {block.rows.map((row, ri) => (
-            <Box component="tr" key={ri} className={S.agentTableRow}>
-              {block.columns.map((col, ci) => (
-                <Box
-                  component="td"
-                  key={col}
-                  style={colTypes[ci] === "number" ? { textAlign: "right", fontVariantNumeric: "tabular-nums" } : undefined}
-                >
-                  <Text
-                    size="xs"
-                    c={row[ci] == null ? "text-tertiary" : undefined}
-                    style={{ whiteSpace: "nowrap" }}
-                  >
-                    {formatCell(row[ci], colTypes[ci])}
-                  </Text>
-                </Box>
-              ))}
-            </Box>
-          ))}
-        </Box>
-      </Box>
-    </ScrollArea>
+    <Box className={S.tableWrapper}>
+      <DataGrid
+        {...gridInstance}
+        showRowsCount
+        rowsTruncated={block.rows.length > 50 ? block.rows.length - 50 : undefined}
+      />
+    </Box>
   );
 }
 
