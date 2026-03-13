@@ -115,7 +115,8 @@
                                         [:maybe [:map
                                                  [:id    :int]
                                                  [:name  :string]
-                                                 [:model :string]]]]]]
+                                                 [:model :string]
+                                                 [:db_id {:optional true} [:maybe :int]]]]]]
   (api/check-403 (ai.settings/ai-agent-enabled))
   (api/check-403 (current-user-in-ai-group?))
   (let [api-key (ai.settings/ai-agent-openai-api-key)]
@@ -135,6 +136,8 @@
                                      (:name context)
                                      "\" (id="
                                      (:id context)
+                                     (when-let [db-id (:db_id context)]
+                                       (str ", db_id=" db-id))
                                      ")]\n"))
                               message)
           opts           (cond-> {:message effective-msg}
