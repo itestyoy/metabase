@@ -116,7 +116,7 @@
                                                  [:id    :int]
                                                  [:name  :string]
                                                  [:model :string]
-                                                 [:db_id {:optional true} [:maybe :int]]]]]]
+                                                 [:db_id {:optional true} [:maybe :int]]]]]]]
   (api/check-403 (ai.settings/ai-agent-enabled))
   (api/check-403 (current-user-in-ai-group?))
   (let [api-key (ai.settings/ai-agent-openai-api-key)]

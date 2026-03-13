@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { t } from "ttag";
 
 import Markdown from "metabase/common/components/Markdown";
 import { Table, type BaseRow } from "metabase/common/components/Table";
 import {
+  ActionIcon,
   Box,
   Code,
   Flex,
@@ -15,6 +16,7 @@ import {
   ScrollArea,
   Stack,
   Text,
+  Tooltip,
   UnstyledButton,
 } from "metabase/ui";
 
@@ -55,11 +57,56 @@ function DashboardLinkBlock({ block }: { block: Extract<ContentBlock, { type: "d
   );
 }
 
-function SqlBlock({ block }: { block: Extract<ContentBlock, { type: "sql" }> }) {
+function SqlBlock({
+  block,
+  onSaveAsQuestion,
+}: {
+  block: Extract<ContentBlock, { type: "sql" }>;
+  onSaveAsQuestion?: (sql: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(block.content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [block.content]);
+
   return (
-    <Code className={S.sqlBlock} block>
-      {block.content}
-    </Code>
+    <Box className={S.sqlBlockWrapper}>
+      <Group className={S.sqlBlockActions} gap={2}>
+        <Tooltip label={copied ? t`Copied!` : t`Copy SQL`}>
+          <ActionIcon
+            variant="subtle"
+            size="xs"
+            onClick={handleCopy}
+            aria-label={t`Copy SQL`}
+          >
+            <Icon
+              name={copied ? "check" : "copy"}
+              size={12}
+              color={copied ? "var(--mb-color-success)" : "var(--mb-color-text-tertiary)"}
+            />
+          </ActionIcon>
+        </Tooltip>
+        {onSaveAsQuestion && (
+          <Tooltip label={t`Save as question`}>
+            <ActionIcon
+              variant="subtle"
+              size="xs"
+              onClick={() => onSaveAsQuestion(block.content)}
+              aria-label={t`Save as question`}
+            >
+              <Icon name="add" size={12} color="var(--mb-color-text-tertiary)" />
+            </ActionIcon>
+          </Tooltip>
+        )}
+      </Group>
+      <Code className={S.sqlBlock} block>
+        {block.content}
+      </Code>
+    </Box>
   );
 }
 
@@ -91,7 +138,13 @@ function TableBlock({ block }: { block: Extract<ContentBlock, { type: "table" }>
   );
 }
 
-function ContentBlockRenderer({ block }: { block: ContentBlock }) {
+function ContentBlockRenderer({
+  block,
+  onSaveAsQuestion,
+}: {
+  block: ContentBlock;
+  onSaveAsQuestion?: (sql: string) => void;
+}) {
   switch (block.type) {
     case "text":
       return <Markdown>{block.content}</Markdown>;
@@ -100,7 +153,7 @@ function ContentBlockRenderer({ block }: { block: ContentBlock }) {
     case "dashboard_link":
       return <DashboardLinkBlock block={block} />;
     case "sql":
-      return <SqlBlock block={block} />;
+      return <SqlBlock block={block} onSaveAsQuestion={onSaveAsQuestion} />;
     case "table":
       return <TableBlock block={block} />;
     default:
@@ -161,7 +214,13 @@ function ToolCallMessage({ message }: { message: ChatMessage }) {
 
 /* ── Message bubble ──────────────────────────────────────────────────────── */
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({
+  message,
+  onSaveAsQuestion,
+}: {
+  message: ChatMessage;
+  onSaveAsQuestion?: (sql: string) => void;
+}) {
   if (message.role === "tool") {
     return <ToolCallMessage message={message} />;
   }
@@ -192,7 +251,11 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         <Paper className={S.assistantBubble} radius="xl">
           <Stack gap={8}>
             {message.blocks.map((block, idx) => (
-              <ContentBlockRenderer key={idx} block={block} />
+              <ContentBlockRenderer
+                key={idx}
+                block={block}
+                onSaveAsQuestion={onSaveAsQuestion}
+              />
             ))}
           </Stack>
         </Paper>
@@ -215,12 +278,14 @@ interface AgentChatMessagesProps {
   messages: ChatMessage[];
   isLoading: boolean;
   onSelectPrompt?: (prompt: string) => void;
+  onSaveAsQuestion?: (sql: string) => void;
 }
 
 export function AgentChatMessages({
   messages,
   isLoading,
   onSelectPrompt,
+  onSaveAsQuestion,
 }: AgentChatMessagesProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
 
@@ -272,12 +337,21 @@ export function AgentChatMessages({
     >
       <Stack className={S.messagesInner} gap={4} p="12px 16px">
         {messages.map(msg => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            onSaveAsQuestion={onSaveAsQuestion}
+          />
         ))}
         {isLoading && (
           <Flex justify="flex-start" className={S.messageBubbleRow}>
             <Paper className={S.loadingBubble} radius="xl">
-              <Loader size="xs" />
+              <Group gap={8} align="center" wrap="nowrap">
+                <Loader size="xs" />
+                <Text size="xs" c="text-tertiary" fs="italic">
+                  {t`Thinking…`}
+                </Text>
+              </Group>
             </Paper>
           </Flex>
         )}

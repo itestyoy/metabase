@@ -76,6 +76,17 @@ export function AgentModal({ onClose }: AgentModalProps) {
     [sendMessage, context],
   );
 
+  const handleSaveAsQuestion = useCallback(
+    (sql: string) => {
+      setInputText("");
+      sendMessage(
+        `Save this SQL as a new question in my personal collection:\n\`\`\`sql\n${sql}\n\`\`\``,
+        context,
+      );
+    },
+    [sendMessage, context],
+  );
+
   const { isMinimized, isInteracting } = panelState;
   const isNotConfigured = agentSettings !== null && !agentSettings.configured;
 
@@ -186,6 +197,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                 messages={messages}
                 isLoading={isLoading}
                 onSelectPrompt={handleSelectPrompt}
+                onSaveAsQuestion={handleSaveAsQuestion}
               />
 
               {error && (
