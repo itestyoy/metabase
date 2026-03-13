@@ -287,6 +287,31 @@ Returns metric IDs, names, descriptions, and their source tables."
                                          :table_id    {:type        ["integer" "null"]
                                                        :description "Filter metrics to this source table. Pass null to list all."}}
                   :required             ["database_id" "table_id"]
+                  :additionalProperties false}}
+
+   {:type        "function"
+    :name        "create_notebook_question"
+    :description "Create and save a new question using a structured MBQL query (notebook mode).
+Use this instead of create_question when you want to save a question with a structured query
+rather than raw SQL. The dataset_query must be a valid Metabase MBQL structured query object.
+This is the PREFERRED way to create questions — use create_question (SQL) only when the user explicitly asks for SQL."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:name          {:type        "string"
+                                                         :description "Question title."}
+                                         :database_id   {:type        "integer"
+                                                         :description "Database ID this question queries."}
+                                         :dataset_query {:type        "object"
+                                                         :description "The MBQL structured query object. Must have keys: source-table (integer), and optionally: aggregation, breakout, filter, order-by, limit, joins, expressions."}
+                                         :display       {:anyOf       [{:type "string"
+                                                                        :enum ["table" "bar" "line" "pie" "scalar" "area" "row" "progress" "funnel" "scatter"]}
+                                                                       {:type "null"}]
+                                                         :description "Visualization type. Pass null to use default (table)."}
+                                         :description   {:type        ["string" "null"]
+                                                         :description "Optional description of the question. Pass null if none."}
+                                         :collection_id {:type        ["integer" "null"]
+                                                         :description "Optional collection ID to save the question into. Pass null for default collection."}}
+                  :required             ["name" "database_id" "dataset_query" "display" "description" "collection_id"]
                   :additionalProperties false}}])
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
@@ -662,6 +687,7 @@ Returns metric IDs, names, descriptions, and their source tables."
 
 (defn- create-dashboard [{:strs [name description collection_id]}]
   (let [dash-data (cond-> {:name       name
+                            :creator_id api/*current-user-id*
                             :parameters []}
                     description   (assoc :description description)
                     collection_id (assoc :collection_id collection_id))
@@ -757,6 +783,19 @@ Returns metric IDs, names, descriptions, and their source tables."
                             (if (:description tbl) (str " — " (:description tbl)) "")))
                   tables))))))
 
+(defn- create-notebook-question [{:strs [name description database_id dataset_query display collection_id]}]
+  (let [card-data (cond-> {:name          name
+                           :dataset_query {:database database_id
+                                           :type     :query
+                                           :query    dataset_query}
+                           :display       (keyword (or display "table"))
+                           :visualization_settings {}}
+                    description   (assoc :description description)
+                    collection_id (assoc :collection_id collection_id))
+        card      (queries.card/create-card! card-data @api/*current-user*)]
+    (format "Question created successfully!\n- ID: %d\n- Name: \"%s\"\n- Display: %s\n- URL: /question/%d"
+            (:id card) (:name card) (clojure.core/name (or (:display card) :table)) (:id card))))
+
 (defn- list-metrics [database-id table-id]
   (let [metrics (->> (cond-> {:archived false
                               :type     :metric}
@@ -813,6 +852,7 @@ Returns metric IDs, names, descriptions, and their source tables."
       "move_item"         (move-item (get args "item_type") (get args "item_id") (get args "collection_id"))
       "get_database_tables" (get-database-tables (get args "database_id"))
       "list_metrics"       (list-metrics (get args "database_id") (get args "table_id"))
+      "create_notebook_question" (create-notebook-question args)
       (str "Unknown tool: " tool-name))
     (catch Exception e
       (log/warn e "AI Agent tool execution failed" {:tool tool-name})
