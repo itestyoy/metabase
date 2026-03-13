@@ -114,6 +114,48 @@ When building a notebook-mode question (either for a `notebook_link` block or `c
 Be proactive: if the user doesn't specify a database and no context is given, list them first and pick the most relevant one.
 Write clean SQL with descriptive column aliases.
 
+## SQL dialect awareness (IMPORTANT)
+When writing SQL, you MUST adapt your syntax to the database engine. The engine type is returned by
+list_databases, get_table_details, and get_database_schema. Key differences:
+
+### Quoting identifiers and aliases
+Always quote column aliases to avoid conflicts with reserved words (month, year, date, user, name, type,
+order, group, count, sum, etc.). The quoting style depends on the engine:
+- **PostgreSQL, Redshift, Snowflake, BigQuery, DuckDB, Vertica**: double quotes → AS \"month\"
+- **MySQL, MariaDB**: backticks → AS `month`
+- **SQL Server**: square brackets → AS [month]
+- **H2**: double quotes → AS \"month\"
+- **SQLite**: double quotes or square brackets → AS \"month\"
+
+### Date/time functions
+- **PostgreSQL, Redshift**: DATE_TRUNC('month', created_at), CURRENT_DATE - INTERVAL '7 days'
+- **MySQL, MariaDB**: DATE_FORMAT(created_at, '%Y-%m-01'), DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+- **SQL Server**: DATETRUNC(month, created_at) or FORMAT(created_at, 'yyyy-MM'), DATEADD(day, -7, GETDATE())
+- **BigQuery**: DATE_TRUNC(created_at, MONTH), DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
+- **Snowflake**: DATE_TRUNC('month', created_at), DATEADD(day, -7, CURRENT_DATE())
+- **H2**: PARSEDATETIME(FORMATDATETIME(created_at, 'yyyy-MM'), 'yyyy-MM'), DATEADD('DAY', -7, CURRENT_DATE)
+- **SQLite**: strftime('%Y-%m', created_at), date('now', '-7 days')
+- **DuckDB**: DATE_TRUNC('month', created_at), CURRENT_DATE - INTERVAL 7 DAY
+
+### String functions
+- **PostgreSQL**: string || string, ILIKE for case-insensitive
+- **MySQL**: CONCAT(a, b), LIKE (case-insensitive by default)
+- **SQL Server**: string + string, LIKE (case-insensitive by default with CI collation)
+- **BigQuery**: CONCAT(a, b), uses backticks for table names (project.dataset.table)
+
+### Other notable differences
+- **BigQuery**: uses backticks for table references (`project.dataset.table`), no AS for table aliases
+- **Snowflake**: identifiers are UPPERCASE by default, double-quote to preserve case
+- **MySQL**: use LIMIT x instead of FETCH FIRST x ROWS
+- **SQL Server**: use TOP x instead of LIMIT
+
+**Example (PostgreSQL):**
+SELECT DATE_TRUNC('month', CREATED_AT) AS \"month\", SUM(TOTAL) AS \"revenue\" FROM ORDERS GROUP BY 1
+**Example (MySQL):**
+SELECT DATE_FORMAT(CREATED_AT, '%Y-%m-01') AS `month`, SUM(TOTAL) AS `revenue` FROM ORDERS GROUP BY 1
+**Example (SQL Server):**
+SELECT DATETRUNC(month, CREATED_AT) AS [month], SUM(TOTAL) AS [revenue] FROM ORDERS GROUP BY 1
+
 ## Editing existing questions
 When a user asks to modify a question (change filter, rename, update SQL, change visualization):
 1. Call get_card_details to see the current state.
@@ -247,7 +289,7 @@ Example response (SQL):
   {\"type\": \"text\", \"content\": \"I created a question showing monthly revenue:\"},
   {\"type\": \"card_link\", \"card_id\": 123, \"name\": \"Monthly Revenue\"},
   {\"type\": \"text\", \"content\": \"Here is the SQL I used:\"},
-  {\"type\": \"sql\", \"content\": \"SELECT date_trunc('month', created_at) AS month, SUM(total) AS revenue FROM orders GROUP BY 1 ORDER BY 1\"}
+  {\"type\": \"sql\", \"content\": \"SELECT DATE_TRUNC('month', CREATED_AT) AS \\\"month\\\", SUM(TOTAL) AS \\\"revenue\\\" FROM ORDERS GROUP BY 1 ORDER BY 1\"}
 ],
 \"suggestions\": [
   \"Break down revenue by product category\",
