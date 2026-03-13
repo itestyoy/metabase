@@ -290,6 +290,29 @@ Returns metric IDs, names, descriptions, and their source tables."
                   :additionalProperties false}}
 
    {:type        "function"
+    :name        "get_mbql_guide"
+    :description "Get the full MBQL (Metabase Query Language) syntax reference for building structured queries.
+Returns field reference formats, aggregation types, filter operators, join syntax, order-by, expressions,
+and display types. You MUST call this before building any MBQL query for notebook_link or create_notebook_question."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {}
+                  :required             []
+                  :additionalProperties false}}
+
+   {:type        "function"
+    :name        "get_sql_guide"
+    :description "Get SQL syntax guide for a specific database engine. Returns quoting rules, date/time functions,
+string functions, and other dialect-specific best practices. You MUST call this before writing any SQL query
+to ensure correct syntax for the target database."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:database_id {:type        "integer"
+                                                       :description "ID of the database you will write SQL for."}}
+                  :required             ["database_id"]
+                  :additionalProperties false}}
+
+   {:type        "function"
     :name        "create_notebook_question"
     :description "Create and save a new question using a structured MBQL query (notebook mode).
 Use this instead of create_question when you want to save a question with a structured query
@@ -301,8 +324,8 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                                                          :description "Question title."}
                                          :database_id   {:type        "integer"
                                                          :description "Database ID this question queries."}
-                                         :dataset_query {:type        "object"
-                                                         :description "The MBQL structured query object. Must have keys: source-table (integer), and optionally: aggregation, breakout, filter, order-by, limit, joins, expressions."}
+                                         :dataset_query {:type        "string"
+                                                         :description "The MBQL structured query as a JSON string. Must be a JSON object with keys: source-table (integer), and optionally: aggregation, breakout, filter, order-by, limit, joins, expressions. Example: {\"source-table\": 5, \"aggregation\": [[\"count\"]], \"breakout\": [[\"field\", 12, {\"temporal-unit\": \"month\"}]]}"}
                                          :display       {:anyOf       [{:type "string"
                                                                         :enum ["table" "bar" "line" "pie" "scalar" "area" "row" "progress" "funnel" "scatter"]}
                                                                        {:type "null"}]
@@ -312,6 +335,17 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                                          :collection_id {:type        ["integer" "null"]
                                                          :description "Optional collection ID to save the question into. Pass null for default collection."}}
                   :required             ["name" "database_id" "dataset_query" "display" "description" "collection_id"]
+                  :additionalProperties false}}
+   {:type        "function"
+    :name        "run_mbql_query"
+    :description "Run a structured MBQL query and return the results without saving. Use this to preview notebook-mode query results before saving with create_notebook_question."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:database_id   {:type        "integer"
+                                                         :description "Database ID to run the query against."}
+                                         :dataset_query {:type        "string"
+                                                         :description "The MBQL structured query as a JSON string. Must be a JSON object with keys: source-table (integer), and optionally: aggregation, breakout, filter, order-by, limit, joins, expressions. Example: {\"source-table\": 5, \"aggregation\": [[\"count\"]], \"breakout\": [[\"field\", 12, {\"temporal-unit\": \"month\"}]]}"}}
+                  :required             ["database_id" "dataset_query"]
                   :additionalProperties false}}])
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
@@ -424,10 +458,10 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
               data-rows (map (fn [row]
                                (clojure.string/join " | "
                                  (map #(if (nil? %) "NULL" (str %)) row)))
-                             (take 10 rows))
+                             (take 50 rows))
               total     (count rows)
-              note      (when (> total 10)
-                          (format "\n... (%d total rows, showing first 10)" total))]
+              note      (when (> total 50)
+                          (format "\n... (%d total rows, showing first 50)" total))]
           (str "Results:\n" header "\n" separator "\n"
                (clojure.string/join "\n" data-rows)
                note))))))
@@ -436,6 +470,22 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
   (let [query  {:database database-id
                 :type     :native
                 :native   {:query sql}}
+        result (try
+                 (qp/process-query
+                  (assoc query :info {:executed-by api/*current-user-id*
+                                      :context     :ad-hoc
+                                      :query-hash  (qp.util/query-hash query)}))
+                 (catch Exception e
+                   {:error (.getMessage e)}))]
+    (format-qp-result result)))
+
+(defn- run-mbql-query [database-id dataset-query-str]
+  (let [query-map (if (string? dataset-query-str)
+                    (json/parse-string dataset-query-str)
+                    dataset-query-str)
+        query  {:database database-id
+                :type     :query
+                :query    query-map}
         result (try
                  (qp/process-query
                   (assoc query :info {:executed-by api/*current-user-id*
@@ -783,11 +833,448 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                             (if (:description tbl) (str " — " (:description tbl)) "")))
                   tables))))))
 
+(defn- get-mbql-guide []
+  "## MBQL Reference (Metabase Query Language)
+
+The `dataset_query` in a `notebook_link` block or `create_notebook_question` uses Metabase's structured query format.
+You MUST use real field IDs from get_table_details — never guess or use field names.
+
+### Structure
+{\"type\": \"query\", \"database\": <db_id>, \"query\": {
+  \"source-table\": <table_id>,
+  \"aggregation\": [...],  // optional
+  \"breakout\": [...],     // optional
+  \"filter\": [...],       // optional
+  \"order-by\": [...],     // optional
+  \"limit\": <number>,     // optional
+  \"joins\": [...],        // optional
+  \"expressions\": {...}   // optional
+}}
+
+### Field references
+- Simple: [\"field\", <field_id>, null]
+- With temporal binning: [\"field\", <field_id>, {\"temporal-unit\": \"month\"}]
+  Units: \"minute\", \"hour\", \"day\", \"week\", \"month\", \"quarter\", \"year\"
+- From joined table: [\"field\", <field_id>, {\"join-alias\": \"alias\"}]
+- Combined: [\"field\", <field_id>, {\"temporal-unit\": \"month\", \"join-alias\": \"T2\"}]
+
+### Aggregations (array of clauses)
+- [\"count\"]
+- [\"sum\", <field_ref>]
+- [\"avg\", <field_ref>]
+- [\"min\", <field_ref>], [\"max\", <field_ref>]
+- [\"distinct\", <field_ref>]
+- [\"metric\", <metric_card_id>] — use a saved metric (call list_metrics to find available ones)
+- [\"cum-sum\", <field_ref>] — cumulative sum
+- [\"cum-count\"] — cumulative count
+- [\"stddev\", <field_ref>] — standard deviation
+- [\"percentile\", <field_ref>, 0.95] — percentile (e.g. 95th)
+
+### Filters
+- [\"=\", <field_ref>, value]
+- [\"!=\", <field_ref>, value]
+- [\">\", <field_ref>, value], [\"<\", <field_ref>, value]
+- [\">=\", <field_ref>, value], [\"<=\", <field_ref>, value]
+- [\"between\", <field_ref>, val1, val2]
+- [\"contains\", <field_ref>, \"string\"]
+- [\"does-not-contain\", <field_ref>, \"string\"]
+- [\"starts-with\", <field_ref>, \"string\"]
+- [\"ends-with\", <field_ref>, \"string\"]
+- [\"is-null\", <field_ref>], [\"not-null\", <field_ref>]
+- [\"is-empty\", <field_ref>], [\"not-empty\", <field_ref>]
+- [\"time-interval\", <field_ref>, -7, \"day\"] — last 7 days
+- [\"time-interval\", <field_ref>, -30, \"day\"] — last 30 days
+- [\"time-interval\", <field_ref>, -12, \"month\"] — last 12 months
+- [\"time-interval\", <field_ref>, \"current\", \"month\"] — current month
+- [\"time-interval\", <field_ref>, -1, \"month\"] — last month
+- [\"and\", filter1, filter2, ...] — combine with AND
+- [\"or\", filter1, filter2, ...] — combine with OR
+- [\"not\", filter] — negate a filter
+
+### Order-by
+- [\"asc\", <field_ref>]
+- [\"desc\", <field_ref>]
+- Can also order by aggregation: [\"asc\", [\"aggregation\", 0]] — sort by first aggregation
+
+### Joins
+{\"source-table\": <table_id>,
+ \"alias\": \"T2\",
+ \"condition\": [\"=\", [\"field\", <fk_field_id>, null], [\"field\", <pk_field_id>, {\"join-alias\": \"T2\"}]],
+ \"strategy\": \"left-join\",  // \"left-join\", \"right-join\", \"inner-join\", \"full-join\"
+ \"fields\": \"all\"}          // \"all\", \"none\", or array of field refs
+
+### Expressions (calculated columns)
+{\"profit\": [\"-\", [\"field\", <revenue_id>, null], [\"field\", <cost_id>, null]],
+ \"full_name\": [\"concat\", [\"field\", <first_name_id>, null], \" \", [\"field\", <last_name_id>, null]]}
+- Arithmetic: [\"+\", a, b], [\"-\", a, b], [\"*\", a, b], [\"/\", a, b]
+- String: [\"concat\", ...], [\"substring\", str, start, length], [\"upper\", str], [\"lower\", str], [\"trim\", str], [\"length\", str]
+- Logic: [\"case\", [[condition1, result1], [condition2, result2]], {\"default\": default_val}]
+- Coalesce: [\"coalesce\", val1, val2]
+- Reference expression in aggregation/breakout: [\"expression\", \"profit\"]
+
+### Display types
+\"table\", \"bar\", \"line\", \"area\", \"pie\", \"row\", \"scalar\", \"progress\", \"funnel\", \"scatter\"
+
+Choose display based on the data:
+- Time series (date breakout + metric): \"line\" or \"area\"
+- Categorical comparison: \"bar\" or \"row\"
+- Part of whole: \"pie\"
+- Single number: \"scalar\"
+- Raw data / listing: \"table\"
+
+### Example: Monthly revenue with time filter
+{\"type\": \"query\", \"database\": 1, \"query\": {
+  \"source-table\": 5,
+  \"aggregation\": [[\"sum\", [\"field\", 10, null]]],
+  \"breakout\": [[\"field\", 12, {\"temporal-unit\": \"month\"}]],
+  \"filter\": [\"time-interval\", [\"field\", 12, null], -12, \"month\"],
+  \"order-by\": [[\"asc\", [\"field\", 12, {\"temporal-unit\": \"month\"}]]]
+}}
+
+### Example: Top 10 products by order count with join
+{\"type\": \"query\", \"database\": 1, \"query\": {
+  \"source-table\": 3,
+  \"joins\": [{\"source-table\": 5, \"alias\": \"Products\",
+              \"condition\": [\"=\", [\"field\", 15, null], [\"field\", 20, {\"join-alias\": \"Products\"}]],
+              \"strategy\": \"left-join\", \"fields\": \"all\"}],
+  \"aggregation\": [[\"count\"]],
+  \"breakout\": [[\"field\", 21, {\"join-alias\": \"Products\"}]],
+  \"order-by\": [[\"desc\", [\"aggregation\", 0]]],
+  \"limit\": 10
+}}")
+
+(def ^:private sql-guides
+  "Engine-specific SQL syntax guides."
+  {"postgres"
+   "## PostgreSQL SQL Guide
+
+### Quoting
+- ALWAYS quote column aliases with double quotes: AS \"month\", AS \"revenue\"
+- Table/column names: double quotes if mixed case or reserved word: \"Order\".\"userId\"
+- String literals: single quotes: 'hello'
+
+### Date/Time
+- DATE_TRUNC('month', created_at) — truncate to month/year/day/hour etc.
+- CURRENT_DATE, CURRENT_TIMESTAMP, NOW()
+- CURRENT_DATE - INTERVAL '7 days' — last 7 days
+- EXTRACT(MONTH FROM created_at) — extract part
+- TO_CHAR(created_at, 'YYYY-MM') — format as string
+- created_at::date — cast to date
+
+### Aggregation & Grouping
+- GROUP BY 1, 2 — positional grouping allowed
+- HAVING clause for filtering aggregates
+- FILTER (WHERE ...) clause: COUNT(*) FILTER (WHERE status = 'active')
+
+### Strings
+- Concatenation: string || string
+- ILIKE for case-insensitive matching (not LIKE)
+- LENGTH(), LOWER(), UPPER(), TRIM(), SUBSTRING()
+
+### Other
+- LIMIT x OFFSET y for pagination
+- COALESCE(val, default) for null handling
+- BOOLEAN type: TRUE/FALSE
+- Arrays: ARRAY[1,2,3], ANY(), ALL()
+- CTEs: WITH cte AS (SELECT ...) SELECT ... FROM cte"
+
+   "redshift"
+   "## Redshift SQL Guide
+
+### Quoting
+- ALWAYS quote column aliases with double quotes: AS \"month\", AS \"revenue\"
+- String literals: single quotes
+
+### Date/Time
+- DATE_TRUNC('month', created_at)
+- GETDATE() or CURRENT_DATE / CURRENT_TIMESTAMP
+- DATEADD(day, -7, GETDATE()) or CURRENT_DATE - INTERVAL '7 days'
+- EXTRACT(MONTH FROM created_at), DATE_PART('month', created_at)
+- TO_CHAR(created_at, 'YYYY-MM')
+
+### Strings
+- Concatenation: string || string
+- ILIKE for case-insensitive
+- LEN() instead of LENGTH()
+
+### Other
+- LIMIT x for pagination
+- No FILTER clause (use CASE WHEN inside aggregate)
+- APPROXIMATE COUNT(DISTINCT ...) available
+- LISTAGG() instead of STRING_AGG()"
+
+   "mysql"
+   "## MySQL SQL Guide
+
+### Quoting
+- ALWAYS quote column aliases with backticks: AS `month`, AS `revenue`
+- Table/column names: backticks: `order`.`user_id`
+- String literals: single quotes: 'hello'
+- Do NOT use double quotes for identifiers (they mean strings in default mode)
+
+### Date/Time
+- DATE_FORMAT(created_at, '%Y-%m-01') — format/truncate
+- CURDATE(), NOW(), CURRENT_TIMESTAMP
+- DATE_SUB(CURDATE(), INTERVAL 7 DAY) — last 7 days
+- DATE_ADD(created_at, INTERVAL 1 MONTH)
+- EXTRACT(MONTH FROM created_at), YEAR(), MONTH(), DAY()
+
+### Aggregation & Grouping
+- GROUP BY 1, 2 — positional grouping allowed
+- No FILTER clause — use SUM(CASE WHEN ... THEN 1 ELSE 0 END)
+
+### Strings
+- CONCAT(a, b, c) — multi-arg concat
+- LIKE is case-insensitive by default (depends on collation)
+- LENGTH(), LOWER(), UPPER(), TRIM(), SUBSTRING()
+
+### Other
+- LIMIT x OFFSET y for pagination
+- IFNULL(val, default) or COALESCE()
+- Use LIMIT x, not FETCH FIRST x ROWS
+- No BOOLEAN type — use TINYINT(1)
+- GROUP_CONCAT() for string aggregation"
+
+   "mariadb"
+   "## MariaDB SQL Guide
+(Same rules as MySQL)
+
+### Quoting
+- ALWAYS quote aliases with backticks: AS `month`, AS `revenue`
+
+### Date/Time
+- DATE_FORMAT(created_at, '%Y-%m-01'), CURDATE(), NOW()
+- DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+
+### Strings
+- CONCAT(a, b), LIKE (case-insensitive by default)
+
+### Other
+- LIMIT x OFFSET y, IFNULL(), GROUP_CONCAT()"
+
+   "sqlserver"
+   "## SQL Server Guide
+
+### Quoting
+- ALWAYS quote column aliases with square brackets: AS [month], AS [revenue]
+- Table/column names: [Order].[UserId]
+- String literals: single quotes: 'hello'
+- Do NOT use double quotes (they may mean identifiers but brackets are standard)
+
+### Date/Time
+- DATETRUNC(month, created_at) (SQL Server 2022+) or DATEFROMPARTS(YEAR(x),MONTH(x),1)
+- FORMAT(created_at, 'yyyy-MM') — format as string
+- GETDATE(), CURRENT_TIMESTAMP, SYSDATETIME()
+- DATEADD(day, -7, GETDATE()) — last 7 days
+- DATEDIFF(day, start, end), DATEPART(month, created_at)
+
+### Aggregation & Grouping
+- No positional GROUP BY — must repeat expressions
+- No FILTER clause — use SUM(CASE WHEN ... THEN 1 ELSE 0 END)
+
+### Strings
+- Concatenation: string + string or CONCAT(a, b)
+- LIKE is case-insensitive with CI collation (default)
+- LEN(), LOWER(), UPPER(), LTRIM(), RTRIM(), SUBSTRING()
+
+### Other
+- TOP x instead of LIMIT: SELECT TOP 10 * FROM ...
+- OFFSET x ROWS FETCH NEXT y ROWS ONLY (SQL Server 2012+)
+- ISNULL(val, default) or COALESCE()
+- STRING_AGG() for string aggregation (SQL Server 2017+)
+- No BOOLEAN — use BIT (0/1)"
+
+   "bigquery"
+   "## BigQuery SQL Guide
+
+### Quoting
+- ALWAYS quote column aliases with double quotes (backticks also work): AS \"month\" or AS `month`
+- Table references use backticks: `project.dataset.table`
+- String literals: single quotes
+
+### Date/Time
+- DATE_TRUNC(created_at, MONTH) — note: field first, then unit (no quotes around unit)
+- CURRENT_DATE(), CURRENT_TIMESTAMP()
+- DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
+- DATE_ADD(created_at, INTERVAL 1 MONTH)
+- EXTRACT(MONTH FROM created_at), FORMAT_DATE('%Y-%m', created_at)
+
+### Strings
+- CONCAT(a, b), string || string not supported
+- LIKE is case-sensitive; use LOWER() for case-insensitive
+- LENGTH(), LOWER(), UPPER(), TRIM(), SUBSTR()
+
+### Other
+- LIMIT x OFFSET y
+- IFNULL(), COALESCE()
+- No table alias AS keyword: FROM `table` t (not `table` AS t)
+- ARRAY_AGG(), STRING_AGG() available
+- Supports STRUCT, ARRAY types natively"
+
+   "snowflake"
+   "## Snowflake SQL Guide
+
+### Quoting
+- ALWAYS quote column aliases with double quotes: AS \"month\", AS \"revenue\"
+- Unquoted identifiers are UPPERCASE by default
+- Double-quote to preserve case: \"myColumn\"
+- String literals: single quotes
+
+### Date/Time
+- DATE_TRUNC('month', created_at)
+- CURRENT_DATE(), CURRENT_TIMESTAMP(), SYSDATE()
+- DATEADD(day, -7, CURRENT_DATE()) — last 7 days
+- DATEDIFF(day, start, end)
+- TO_CHAR(created_at, 'YYYY-MM'), TO_DATE(), TO_TIMESTAMP()
+
+### Strings
+- Concatenation: string || string or CONCAT()
+- ILIKE for case-insensitive matching
+- LENGTH(), LOWER(), UPPER(), TRIM(), SUBSTR()
+
+### Other
+- LIMIT x OFFSET y
+- NVL(val, default) or COALESCE() or IFNULL()
+- LISTAGG() or ARRAY_AGG() for aggregation
+- FLATTEN() for semi-structured data
+- VARIANT type for JSON: col:key::string"
+
+   "h2"
+   "## H2 SQL Guide
+
+### Quoting
+- ALWAYS quote column aliases with double quotes: AS \"month\", AS \"revenue\"
+- String literals: single quotes
+
+### Date/Time
+- PARSEDATETIME(FORMATDATETIME(created_at, 'yyyy-MM'), 'yyyy-MM') — truncate
+- FORMATDATETIME(created_at, 'yyyy-MM-dd') — format
+- CURRENT_DATE, CURRENT_TIMESTAMP
+- DATEADD('DAY', -7, CURRENT_DATE) — last 7 days
+- EXTRACT(MONTH FROM created_at), DAY_OF_WEEK()
+
+### Strings
+- Concatenation: string || string or CONCAT()
+- LIKE (case-sensitive), use LOWER() for insensitive
+- LENGTH(), LOWER(), UPPER(), TRIM(), SUBSTRING()
+
+### Other
+- LIMIT x OFFSET y
+- NVL(val, default) or COALESCE()
+- ARRAY_AGG(), LISTAGG() available"
+
+   "sqlite"
+   "## SQLite SQL Guide
+
+### Quoting
+- ALWAYS quote column aliases with double quotes: AS \"month\" (or square brackets: AS [month])
+- String literals: single quotes
+
+### Date/Time
+- strftime('%Y-%m', created_at) — format/truncate
+- date('now'), datetime('now'), strftime('%s','now')
+- date('now', '-7 days') — last 7 days
+- date(created_at, '+1 month')
+- No EXTRACT — use strftime('%m', created_at)
+
+### Strings
+- Concatenation: string || string
+- LIKE is case-insensitive for ASCII
+- LENGTH(), LOWER(), UPPER(), TRIM(), SUBSTR()
+
+### Other
+- LIMIT x OFFSET y
+- COALESCE(), IFNULL()
+- No BOOLEAN — use 0/1
+- GROUP_CONCAT() for string aggregation
+- No DATE type — dates are stored as TEXT or INTEGER"
+
+   "duckdb"
+   "## DuckDB SQL Guide
+
+### Quoting
+- ALWAYS quote column aliases with double quotes: AS \"month\", AS \"revenue\"
+- String literals: single quotes
+
+### Date/Time
+- DATE_TRUNC('month', created_at)
+- CURRENT_DATE, CURRENT_TIMESTAMP, NOW()
+- CURRENT_DATE - INTERVAL 7 DAY — last 7 days
+- DATE_ADD(created_at, INTERVAL 1 MONTH)
+- EXTRACT(MONTH FROM created_at), STRFTIME('%Y-%m', created_at)
+
+### Strings
+- Concatenation: string || string or CONCAT()
+- ILIKE for case-insensitive
+- LENGTH(), LOWER(), UPPER(), TRIM(), SUBSTRING()
+
+### Other
+- LIMIT x OFFSET y
+- COALESCE()
+- LIST_AGG(), STRING_AGG(), ARRAY_AGG()
+- Supports LIST, STRUCT, MAP types
+- FILTER (WHERE ...) clause supported"
+
+   "vertica"
+   "## Vertica SQL Guide
+
+### Quoting
+- ALWAYS quote column aliases with double quotes: AS \"month\", AS \"revenue\"
+- String literals: single quotes
+
+### Date/Time
+- DATE_TRUNC('month', created_at)
+- CURRENT_DATE, CURRENT_TIMESTAMP, NOW()
+- CURRENT_DATE - INTERVAL '7 days' or TIMESTAMPADD('DAY', -7, CURRENT_DATE)
+
+### Strings
+- Concatenation: string || string
+- ILIKE for case-insensitive
+- LENGTH(), LOWER(), UPPER(), TRIM(), SUBSTR()
+
+### Other
+- LIMIT x OFFSET y
+- NVL(), COALESCE()
+- LISTAGG() for string aggregation"})
+
+(def ^:private sql-guide-default
+  "## Generic SQL Guide
+
+### Quoting
+- ALWAYS quote column aliases with double quotes: AS \"month\", AS \"revenue\"
+- Many words are reserved (month, year, date, user, name, type, order, group, count, sum)
+- If you use them as aliases without quoting, the query WILL fail
+- String literals: single quotes
+
+### Date/Time
+- Check the engine type and use the appropriate date functions
+- Common: DATE_TRUNC, EXTRACT, CURRENT_DATE, DATEADD
+
+### Strings
+- Concatenation varies: || (most), CONCAT() (MySQL/BigQuery), + (SQL Server)
+
+### General rules
+- Always quote ALL aliases, not just reserved words — this prevents subtle bugs
+- Use COALESCE() for null handling
+- Use LIMIT for pagination (except SQL Server which uses TOP)")
+
+(defn- get-sql-guide [database-id]
+  (let [db (t2/select-one :model/Database :id database-id)
+        _  (api/check-404 db)
+        _  (api/check-403 (mi/can-read? db))
+        engine (name (:engine db))]
+    (str (format "SQL guide for database \"%s\" (ID: %d, Engine: %s):\n\n"
+                 (:name db) (:id db) engine)
+         (get sql-guides engine sql-guide-default))))
+
 (defn- create-notebook-question [{:strs [name description database_id dataset_query display collection_id]}]
-  (let [card-data (cond-> {:name          name
+  (let [query-map (if (string? dataset_query)
+                    (json/parse-string dataset_query)
+                    dataset_query)
+        card-data (cond-> {:name          name
                            :dataset_query {:database database_id
                                            :type     :query
-                                           :query    dataset_query}
+                                           :query    query-map}
                            :display       (keyword (or display "table"))
                            :visualization_settings {}}
                     description   (assoc :description description)
@@ -853,6 +1340,9 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
       "get_database_tables" (get-database-tables (get args "database_id"))
       "list_metrics"       (list-metrics (get args "database_id") (get args "table_id"))
       "create_notebook_question" (create-notebook-question args)
+      "get_sql_guide"  (get-sql-guide (get args "database_id"))
+      "get_mbql_guide" (get-mbql-guide)
+      "run_mbql_query"  (run-mbql-query (get args "database_id") (get args "dataset_query"))
       (str "Unknown tool: " tool-name))
     (catch Exception e
       (log/warn e "AI Agent tool execution failed" {:tool tool-name})

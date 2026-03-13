@@ -123,7 +123,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
         <div className={S.modalHeaderTitle}>
           <Icon name="ai" size={18} color="rgba(255,255,255,0.9)" />
           <Text size="sm" fw={600} c="white">
-            {t`AI Agent`}
+            {t`Chat with BI, supercharged by AI`}
           </Text>
           {agentSettings && (
             <Text size="xs" c="rgba(255,255,255,0.65)">
@@ -178,12 +178,12 @@ export function AgentModal({ onClose }: AgentModalProps) {
             <Stack align="center" justify="center" p="xl" gap="sm" style={{ flex: 1 }}>
               <Icon name="gear_settings_filled" size={32} color="var(--mb-color-text-tertiary)" />
               <Text size="sm" c="text-secondary" ta="center" fw={500}>
-                {t`AI Agent is not configured`}
+                {t`Chat with BI is not configured`}
               </Text>
               <Text size="xs" c="text-tertiary" ta="center">
                 {t`Set the OpenAI API key in`}{" "}
                 <Anchor href="/admin/settings/ai-agent" size="xs">
-                  {t`Admin › Settings › AI Agent`}
+                  {t`Admin › Settings › Chat with BI`}
                 </Anchor>
                 {t`, or via environment variable:`}
               </Text>
