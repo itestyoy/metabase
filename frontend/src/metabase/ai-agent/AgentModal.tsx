@@ -121,7 +121,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
       {/* ── Header ─────────────────────────────────── */}
       <div className={S.modalHeader} {...headerProps}>
         <div className={S.modalHeaderTitle}>
-          <Icon name="ai" size={18} color="rgba(255,255,255,0.9)" />
+          <Icon name="ai" size={18} c="white" />
           <Text size="sm" fw={600} c="white">
             {t`Chat with BI, supercharged by AI`}
           </Text>
