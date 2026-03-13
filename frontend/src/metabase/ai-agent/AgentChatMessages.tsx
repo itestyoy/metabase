@@ -130,8 +130,8 @@ function ToolCallMessage({ message }: { message: ChatMessage }) {
         className={S.toolHeader}
         gap={6}
         px={10}
-        pt={6}
-        pb={message.toolResult ? 2 : 6}
+        py={6}
+        align="center"
         style={message.toolResult ? { cursor: "pointer" } : undefined}
         onClick={message.toolResult ? () => setIsExpanded((v: boolean) => !v) : undefined}
       >
