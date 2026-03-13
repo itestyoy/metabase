@@ -76,6 +76,17 @@ export function AgentModal({ onClose }: AgentModalProps) {
     [sendMessage, context],
   );
 
+  const handleSaveAsQuestion = useCallback(
+    (sql: string) => {
+      setInputText("");
+      sendMessage(
+        `Save this SQL as a new question in my personal collection:\n\`\`\`sql\n${sql}\n\`\`\``,
+        context,
+      );
+    },
+    [sendMessage, context],
+  );
+
   const { isMinimized, isInteracting } = panelState;
   const isNotConfigured = agentSettings !== null && !agentSettings.configured;
 
@@ -186,6 +197,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                 messages={messages}
                 isLoading={isLoading}
                 onSelectPrompt={handleSelectPrompt}
+                onSaveAsQuestion={handleSaveAsQuestion}
               />
 
               {error && (
@@ -216,15 +228,21 @@ export function AgentModal({ onClose }: AgentModalProps) {
                       {t`Enter to send · Shift+Enter for new line`}
                     </Text>
                     <ActionIcon
-                      variant="filled"
-                      color="brand"
+                      variant="transparent"
                       size="sm"
-                      radius="xl"
                       onClick={handleSend}
                       disabled={isLoading || !inputText.trim()}
                       aria-label={t`Send message`}
                     >
-                      <Icon name="send" size={13} />
+                      <Icon
+                        name="send"
+                        size={14}
+                        color={
+                          isLoading || !inputText.trim()
+                            ? "var(--mb-color-text-tertiary)"
+                            : "var(--mb-color-brand)"
+                        }
+                      />
                     </ActionIcon>
                   </div>
                 </div>

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { t } from "ttag";
 
 import Markdown from "metabase/common/components/Markdown";
-import { Table, type BaseRow } from "metabase/common/components/Table";
+import { serializeCardForUrl } from "metabase/lib/card";
 import {
+  ActionIcon,
   Box,
   Code,
   Flex,
@@ -15,6 +16,7 @@ import {
   ScrollArea,
   Stack,
   Text,
+  Tooltip,
   UnstyledButton,
 } from "metabase/ui";
 
@@ -22,8 +24,7 @@ import S from "./AgentModal.module.css";
 import type { ChatMessage, ContentBlock } from "./types";
 
 const EXAMPLE_PROMPTS = [
-  t`Show total orders per day for the last 30 days`,
-  t`List all databases I have access to`,
+  t`List all tables I have access to`,
   t`Find dashboards related to revenue`,
   t`Create a question showing monthly active users`,
 ];
@@ -43,6 +44,58 @@ function CardLinkBlock({ block }: { block: Extract<ContentBlock, { type: "card_l
   );
 }
 
+function CardPreviewBlock({ block }: { block: Extract<ContentBlock, { type: "card_preview" }> }) {
+  const [showPreview, setShowPreview] = useState(false);
+  const displayIcon = block.display === "line" || block.display === "area"
+    ? "line"
+    : block.display === "bar" || block.display === "row"
+      ? "bar"
+      : block.display === "pie"
+        ? "pie"
+        : "table2";
+
+  return (
+    <Box>
+      <Group gap={0} wrap="nowrap" className={S.cardPreviewRow}>
+        <Link to={`/question/${block.card_id}`} className={S.blockLink} style={{ flex: 1, minWidth: 0 }}>
+          <Group gap={8} wrap="nowrap">
+            <Icon name={displayIcon} size={16} color="var(--mb-color-brand)" />
+            <Text size="sm" fw={500} truncate>
+              {block.name}
+            </Text>
+          </Group>
+        </Link>
+        <Tooltip label={showPreview ? t`Hide preview` : t`Preview`}>
+          <ActionIcon
+            variant="subtle"
+            size="sm"
+            onClick={() => setShowPreview(v => !v)}
+            aria-label={showPreview ? t`Hide preview` : t`Preview`}
+            className={S.previewButton}
+          >
+            <Icon
+              name={showPreview ? "chevronup" : "eye_outline"}
+              size={14}
+              color={showPreview ? "var(--mb-color-brand)" : "var(--mb-color-text-tertiary)"}
+            />
+          </ActionIcon>
+        </Tooltip>
+      </Group>
+      {showPreview && (
+        <Box className={S.cardPreviewFrame}>
+          <Box
+            component="iframe"
+            src={`/question/${block.card_id}#hide_parameters=true&hide_download_button=true`}
+            className={S.cardPreviewIframe}
+            title={block.name}
+          />
+          <Box className={S.cardPreviewOverlay} />
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 function DashboardLinkBlock({ block }: { block: Extract<ContentBlock, { type: "dashboard_link" }> }) {
   return (
     <Link to={`/dashboard/${block.dashboard_id}`} className={S.blockLink}>
@@ -56,52 +109,214 @@ function DashboardLinkBlock({ block }: { block: Extract<ContentBlock, { type: "d
   );
 }
 
-function SqlBlock({ block }: { block: Extract<ContentBlock, { type: "sql" }> }) {
+function NotebookLinkBlock({ block }: { block: Extract<ContentBlock, { type: "notebook_link" }> }) {
+  const notebookUrl = useMemo(() => {
+    const card = {
+      name: block.name,
+      display: block.display || "table",
+      visualization_settings: {},
+      dataset_query: block.dataset_query,
+    };
+    return `/question/notebook#${serializeCardForUrl(card)}`;
+  }, [block.name, block.display, block.dataset_query]);
+
+  const displayIcon = block.display === "line" || block.display === "area"
+    ? "line"
+    : block.display === "bar" || block.display === "row"
+      ? "bar"
+      : block.display === "pie"
+        ? "pie"
+        : "table2";
+
   return (
-    <Code className={S.sqlBlock} block>
-      {block.content}
-    </Code>
+    <Link to={notebookUrl} className={S.blockLink}>
+      <Group gap={8} wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+        <Icon name={displayIcon} size={16} color="var(--mb-color-brand)" />
+        <Text size="sm" fw={500} truncate>
+          {block.name}
+        </Text>
+      </Group>
+      <Group gap={4} wrap="nowrap" style={{ flexShrink: 0, marginLeft: "auto" }}>
+        <Icon name="notebook" size={12} color="var(--mb-color-text-tertiary)" />
+        <Text size="xs" c="text-tertiary">
+          {t`Open in notebook`}
+        </Text>
+      </Group>
+    </Link>
   );
+}
+
+function SqlBlock({
+  block,
+  onSaveAsQuestion,
+}: {
+  block: Extract<ContentBlock, { type: "sql" }>;
+  onSaveAsQuestion?: (sql: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(block.content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [block.content]);
+
+  return (
+    <Box className={S.sqlBlockWrapper}>
+      <Group className={S.sqlBlockActions} gap={2}>
+        <Tooltip label={copied ? t`Copied!` : t`Copy SQL`}>
+          <ActionIcon
+            variant="subtle"
+            size="xs"
+            onClick={handleCopy}
+            aria-label={t`Copy SQL`}
+          >
+            <Icon
+              name={copied ? "check" : "copy"}
+              size={12}
+              color={copied ? "var(--mb-color-success)" : "var(--mb-color-text-tertiary)"}
+            />
+          </ActionIcon>
+        </Tooltip>
+        {onSaveAsQuestion && (
+          <Tooltip label={t`Save as question`}>
+            <ActionIcon
+              variant="subtle"
+              size="xs"
+              onClick={() => onSaveAsQuestion(block.content)}
+              aria-label={t`Save as question`}
+            >
+              <Icon name="add" size={12} color="var(--mb-color-text-tertiary)" />
+            </ActionIcon>
+          </Tooltip>
+        )}
+      </Group>
+      <Code className={S.sqlBlock} block>
+        {block.content}
+      </Code>
+    </Box>
+  );
+}
+
+/** Detect the dominant type of a column from its values. */
+function detectColumnType(rows: unknown[][], ci: number): "number" | "date" | "text" {
+  let numCount = 0;
+  let dateCount = 0;
+  let total = 0;
+  for (const row of rows) {
+    const v = row[ci];
+    if (v == null || v === "") continue;
+    total++;
+    if (typeof v === "number") { numCount++; continue; }
+    const s = String(v);
+    if (/^-?\d+(\.\d+)?$/.test(s)) { numCount++; continue; }
+    // ISO date patterns: 2024-01-15, 2024-01-15T10:30:00, etc.
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) { dateCount++; continue; }
+  }
+  if (total === 0) return "text";
+  if (numCount / total > 0.7) return "number";
+  if (dateCount / total > 0.7) return "date";
+  return "text";
+}
+
+/** Format a cell value based on detected column type. */
+function formatCell(value: unknown, colType: "number" | "date" | "text"): string {
+  if (value == null) return "—";
+  if (colType === "number") {
+    const n = typeof value === "number" ? value : parseFloat(String(value));
+    if (isNaN(n)) return String(value);
+    // Integers stay as-is; floats get up to 2 decimal places
+    if (Number.isInteger(n)) return n.toLocaleString("en-US");
+    return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+  if (colType === "date") {
+    const s = String(value);
+    try {
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return s;
+      // Date only (no time component or midnight)
+      if (s.length <= 10 || /T00:00:00/.test(s)) {
+        return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+      }
+      // Date + time
+      return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+        + " " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    } catch {
+      return s;
+    }
+  }
+  return String(value);
 }
 
 function TableBlock({ block }: { block: Extract<ContentBlock, { type: "table" }> }) {
-  const columns = block.columns.map(col => ({ name: col, key: col }));
-  const rows: BaseRow[] = block.rows.map((row, ri) => {
-    const obj: Record<string, unknown> = { id: ri };
-    block.columns.forEach((col, ci) => {
-      obj[col] = row[ci];
-    });
-    return obj as BaseRow;
-  });
+  // Detect types once for all columns
+  const colTypes = block.columns.map((_, ci) => detectColumnType(block.rows, ci));
 
   return (
-    <Table
-      className={S.agentTable}
-      columns={columns}
-      rows={rows}
-      rowRenderer={(row: BaseRow) => (
-        <Box component="tr" key={row.id}>
-          {block.columns.map(col => (
-            <Box component="td" key={col}>
-              <Text size="xs">{row[col] == null ? "" : String(row[col])}</Text>
+    <ScrollArea className={S.tableScroll} scrollbarSize={4}>
+      <Box className={S.agentTable} component="table">
+        <Box component="thead">
+          <Box component="tr">
+            {block.columns.map((col, ci) => (
+              <Box
+                component="th"
+                key={col}
+                style={colTypes[ci] === "number" ? { textAlign: "right" } : undefined}
+              >
+                <Text size="xs" fw={600} c="text-secondary" tt="uppercase" style={{ letterSpacing: "0.03em" }}>
+                  {col}
+                </Text>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+        <Box component="tbody">
+          {block.rows.map((row, ri) => (
+            <Box component="tr" key={ri} className={S.agentTableRow}>
+              {block.columns.map((col, ci) => (
+                <Box
+                  component="td"
+                  key={col}
+                  style={colTypes[ci] === "number" ? { textAlign: "right", fontVariantNumeric: "tabular-nums" } : undefined}
+                >
+                  <Text
+                    size="xs"
+                    c={row[ci] == null ? "text-tertiary" : undefined}
+                    style={{ whiteSpace: "nowrap" }}
+                  >
+                    {formatCell(row[ci], colTypes[ci])}
+                  </Text>
+                </Box>
+              ))}
             </Box>
           ))}
         </Box>
-      )}
-    />
+      </Box>
+    </ScrollArea>
   );
 }
 
-function ContentBlockRenderer({ block }: { block: ContentBlock }) {
+function ContentBlockRenderer({
+  block,
+  onSaveAsQuestion,
+}: {
+  block: ContentBlock;
+  onSaveAsQuestion?: (sql: string) => void;
+}) {
   switch (block.type) {
     case "text":
       return <Markdown>{block.content}</Markdown>;
     case "card_link":
       return <CardLinkBlock block={block} />;
+    case "card_preview":
+      return <CardPreviewBlock block={block} />;
     case "dashboard_link":
       return <DashboardLinkBlock block={block} />;
+    case "notebook_link":
+      return <NotebookLinkBlock block={block} />;
     case "sql":
-      return <SqlBlock block={block} />;
+      return <SqlBlock block={block} onSaveAsQuestion={onSaveAsQuestion} />;
     case "table":
       return <TableBlock block={block} />;
     default:
@@ -162,7 +377,13 @@ function ToolCallMessage({ message }: { message: ChatMessage }) {
 
 /* ── Message bubble ──────────────────────────────────────────────────────── */
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({
+  message,
+  onSaveAsQuestion,
+}: {
+  message: ChatMessage;
+  onSaveAsQuestion?: (sql: string) => void;
+}) {
   if (message.role === "tool") {
     return <ToolCallMessage message={message} />;
   }
@@ -178,9 +399,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     return (
       <Flex className={S.messageBubbleRow} justify="flex-end">
         <Paper className={S.userBubble} radius="xl">
-          <Text size="sm" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-            {message.content}
-          </Text>
+          <Markdown className={S.userMarkdown}>{message.content ?? ""}</Markdown>
         </Paper>
       </Flex>
     );
@@ -193,7 +412,11 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         <Paper className={S.assistantBubble} radius="xl">
           <Stack gap={8}>
             {message.blocks.map((block, idx) => (
-              <ContentBlockRenderer key={idx} block={block} />
+              <ContentBlockRenderer
+                key={idx}
+                block={block}
+                onSaveAsQuestion={onSaveAsQuestion}
+              />
             ))}
           </Stack>
         </Paper>
@@ -216,12 +439,14 @@ interface AgentChatMessagesProps {
   messages: ChatMessage[];
   isLoading: boolean;
   onSelectPrompt?: (prompt: string) => void;
+  onSaveAsQuestion?: (sql: string) => void;
 }
 
 export function AgentChatMessages({
   messages,
   isLoading,
   onSelectPrompt,
+  onSaveAsQuestion,
 }: AgentChatMessagesProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
 
@@ -258,6 +483,13 @@ export function AgentChatMessages({
     );
   }
 
+  // Get suggestions from the last assistant message
+  const lastMsg = messages[messages.length - 1];
+  const suggestions =
+    !isLoading && lastMsg?.role === "assistant" && lastMsg.suggestions?.length
+      ? lastMsg.suggestions
+      : null;
+
   return (
     <ScrollArea
       className={S.messagesScroll}
@@ -266,13 +498,35 @@ export function AgentChatMessages({
     >
       <Stack className={S.messagesInner} gap={4} p="12px 16px">
         {messages.map(msg => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            onSaveAsQuestion={onSaveAsQuestion}
+          />
         ))}
         {isLoading && (
           <Flex justify="flex-start" className={S.messageBubbleRow}>
             <Paper className={S.loadingBubble} radius="xl">
-              <Loader size="xs" />
+              <Group gap={8} align="center" wrap="nowrap">
+                <Loader size="xs" />
+                <Text size="xs" c="text-tertiary" fs="italic">
+                  {t`Thinking…`}
+                </Text>
+              </Group>
             </Paper>
+          </Flex>
+        )}
+        {suggestions && onSelectPrompt && (
+          <Flex gap={6} wrap="wrap" mt={4}>
+            {suggestions.map(s => (
+              <UnstyledButton
+                key={s}
+                className={S.suggestionChip}
+                onClick={() => onSelectPrompt(s)}
+              >
+                {s}
+              </UnstyledButton>
+            ))}
           </Flex>
         )}
       </Stack>

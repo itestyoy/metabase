@@ -21,6 +21,10 @@ function isValidBlock(b: unknown): b is ContentBlock {
       return typeof block.content === "string";
     case "card_link":
       return typeof block.card_id === "number" && typeof block.name === "string";
+    case "card_preview":
+      return typeof block.card_id === "number" && typeof block.name === "string" && typeof block.display === "string";
+    case "notebook_link":
+      return typeof block.name === "string" && typeof block.display === "string" && block.dataset_query != null && typeof block.dataset_query === "object";
     case "dashboard_link":
       return typeof block.dashboard_id === "number" && typeof block.name === "string";
     case "table":
@@ -30,22 +34,33 @@ function isValidBlock(b: unknown): b is ContentBlock {
   }
 }
 
-/** Try to parse the AI response as structured JSON blocks.
+interface ParsedResponse {
+  blocks?: ContentBlock[];
+  suggestions?: string[];
+}
+
+/** Try to parse the AI response as structured JSON blocks + suggestions.
  *  Falls back to plain markdown if parsing or validation fails. */
-function parseBlocks(content: string): ContentBlock[] | undefined {
+function parseResponse(content: string): ParsedResponse {
   if (!content) {
-    return undefined;
+    return {};
   }
   try {
     const parsed = JSON.parse(content);
     if (parsed && Array.isArray(parsed.blocks) && parsed.blocks.length > 0) {
       const valid = parsed.blocks.filter(isValidBlock);
-      return valid.length > 0 ? valid : undefined;
+      const suggestions = Array.isArray(parsed.suggestions)
+        ? parsed.suggestions.filter((s: unknown) => typeof s === "string" && s.length > 0)
+        : undefined;
+      return {
+        blocks: valid.length > 0 ? valid : undefined,
+        suggestions: suggestions && suggestions.length > 0 ? suggestions : undefined,
+      };
     }
   } catch {
-    // Not JSON — return undefined so we render as plain markdown
+    // Not JSON — return empty so we render as plain markdown
   }
-  return undefined;
+  return {};
 }
 
 export interface AgentSettings {
@@ -163,14 +178,15 @@ export function useAgentChat() {
           setMessages(prev => [...prev, ...toolMsgs]);
         }
 
-        // Final assistant text — try to parse structured blocks
+        // Final assistant text — try to parse structured blocks + suggestions
         const rawContent = response.content ?? "";
-        const blocks = parseBlocks(rawContent);
+        const { blocks, suggestions } = parseResponse(rawContent);
         const assistantMsg: ChatMessage = {
           id: makeId(),
           role: "assistant",
           content: blocks ? null : rawContent,
           blocks,
+          suggestions,
         };
         setMessages(prev => [...prev, assistantMsg]);
 

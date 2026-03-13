@@ -121,6 +121,28 @@ or needs to understand how its filters work."
                   :additionalProperties false}}
 
    {:type        "function"
+    :name        "list_collections"
+    :description "List Metabase collections the current user has access to.
+Use this to help the user navigate their content or find where items are saved."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:parent_id {:type        ["integer" "null"]
+                                                     :description "Parent collection ID. Pass null to list root-level collections."}}
+                  :required             ["parent_id"]
+                  :additionalProperties false}}
+
+   {:type        "function"
+    :name        "get_collection_contents"
+    :description "List the items (questions, dashboards, sub-collections) inside a specific collection.
+Use this when the user asks what is inside a collection or wants to browse its content."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:collection_id {:type        "integer"
+                                                         :description "ID of the collection to list contents for."}}
+                  :required             ["collection_id"]
+                  :additionalProperties false}}
+
+   {:type        "function"
     :name        "get_table_details"
     :description "Get detailed information about a specific table or model: its columns (names, types),
 the database it belongs to, and its schema. Use this when the context references a table or model,
@@ -153,6 +175,118 @@ After creating, always provide the URL /question/<id> to the user."
                                                                        {:type "null"}]
                                                          :description "Visualization type. Pass null to use default (table)."}}
                   :required             ["name" "database_id" "sql" "description" "collection_id" "display"]
+                  :additionalProperties false}}
+
+   {:type        "function"
+    :name        "update_question"
+    :description "Update an existing saved question (card). You can change its name, description, SQL query,
+visualization type, or move it to another collection. Only pass the fields you want to change — omitted
+fields (null) stay unchanged. Use get_card_details first to see the current state."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:card_id        {:type        "integer"
+                                                          :description "ID of the question to update."}
+                                         :name           {:type        ["string" "null"]
+                                                          :description "New question title. Pass null to keep current."}
+                                         :description    {:type        ["string" "null"]
+                                                          :description "New description. Pass null to keep current."}
+                                         :sql            {:type        ["string" "null"]
+                                                          :description "New native SQL query. Pass null to keep current."}
+                                         :display        {:anyOf       [{:type "string"
+                                                                         :enum ["table" "bar" "line" "pie" "scalar" "area" "row"]}
+                                                                        {:type "null"}]
+                                                          :description "New visualization type. Pass null to keep current."}
+                                         :collection_id  {:type        ["integer" "null"]
+                                                          :description "Move to this collection. Pass null to keep current."}}
+                  :required             ["card_id" "name" "description" "sql" "display" "collection_id"]
+                  :additionalProperties false}}
+
+   {:type        "function"
+    :name        "create_dashboard"
+    :description "Create a new empty dashboard. After creating, use add_card_to_dashboard to add questions to it.
+Always provide the URL /dashboard/<id> to the user."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:name          {:type        "string"
+                                                         :description "Dashboard title."}
+                                         :description   {:type        ["string" "null"]
+                                                         :description "Optional description. Pass null if none."}
+                                         :collection_id {:type        ["integer" "null"]
+                                                         :description "Collection ID to save the dashboard into. Pass null for default."}}
+                  :required             ["name" "description" "collection_id"]
+                  :additionalProperties false}}
+
+   {:type        "function"
+    :name        "add_card_to_dashboard"
+    :description "Add an existing saved question (card) to a dashboard. The card will be placed automatically
+in the next available position. Use this after creating questions and a dashboard to assemble them together."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:dashboard_id {:type        "integer"
+                                                        :description "ID of the dashboard to add the card to."}
+                                         :card_id      {:type        "integer"
+                                                        :description "ID of the saved question to add."}
+                                         :size_x       {:type        ["integer" "null"]
+                                                        :description "Width in grid units (1-18). Pass null for default (6)."}
+                                         :size_y       {:type        ["integer" "null"]
+                                                        :description "Height in grid units (1-12). Pass null for default (4)."}}
+                  :required             ["dashboard_id" "card_id" "size_x" "size_y"]
+                  :additionalProperties false}}
+
+   {:type        "function"
+    :name        "archive_item"
+    :description "Archive (soft-delete) a question or dashboard. The item is not permanently deleted
+and can be restored from the trash. Use this when the user asks to delete, remove, or archive something."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:item_type {:type        "string"
+                                                     :enum        ["card" "dashboard"]
+                                                     :description "Type of item to archive."}
+                                         :item_id   {:type        "integer"
+                                                     :description "ID of the item to archive."}}
+                  :required             ["item_type" "item_id"]
+                  :additionalProperties false}}
+
+   {:type        "function"
+    :name        "move_item"
+    :description "Move a question or dashboard to a different collection.
+Use this when the user asks to move, reorganize, or relocate an item."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:item_type     {:type        "string"
+                                                         :enum        ["card" "dashboard"]
+                                                         :description "Type of item to move."}
+                                         :item_id       {:type        "integer"
+                                                         :description "ID of the item to move."}
+                                         :collection_id {:type        "integer"
+                                                         :description "Target collection ID."}}
+                  :required             ["item_type" "item_id" "collection_id"]
+                  :additionalProperties false}}
+
+   {:type        "function"
+    :name        "get_database_tables"
+    :description "List all tables in a database (names, schemas, IDs) without column details.
+Much faster than get_database_schema for large databases. Use this when you only need to know
+which tables exist, then call get_table_details for specific tables."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:database_id {:type        "integer"
+                                                       :description "ID of the database."}}
+                  :required             ["database_id"]
+                  :additionalProperties false}}
+
+   {:type        "function"
+    :name        "list_metrics"
+    :description "List available metrics (reusable aggregation definitions). Metrics can be used inside
+notebook-mode questions as aggregations via [\"metric\", metric_id]. Optionally filter by table or database.
+Returns metric IDs, names, descriptions, and their source tables."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:database_id {:type        ["integer" "null"]
+                                                       :description "Filter metrics to this database. Pass null to list all."}
+                                         :table_id    {:type        ["integer" "null"]
+                                                       :description "Filter metrics to this source table. Pass null to list all."}}
+                  :required             ["database_id" "table_id"]
                   :additionalProperties false}}])
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
@@ -396,6 +530,85 @@ After creating, always provide the URL /question/<id> to the user."
                                    (or (:size_y dc) 4)))))
                      dashcards))))))
 
+(defn- list-collections [parent-id]
+  (let [colls (->> (if parent-id
+                     (t2/select :model/Collection
+                                :location (format "/%d/" parent-id)
+                                :archived false
+                                {:order-by [[:name :asc]]
+                                 :limit    50})
+                     (t2/select :model/Collection
+                                :location "/"
+                                :archived false
+                                {:order-by [[:name :asc]]
+                                 :limit    50}))
+                   (filter mi/can-read?)
+                   (take 30))]
+    (if (empty? colls)
+      (if parent-id
+        (format "No sub-collections found in collection %d." parent-id)
+        "No collections found.")
+      (str (if parent-id
+             (format "Sub-collections of collection %d:\n" parent-id)
+             "Root collections:\n")
+           (clojure.string/join "\n"
+             (map (fn [c]
+                    (format "- ID: %d, Name: \"%s\"%s%s"
+                            (:id c) (:name c)
+                            (if (:personal_owner_id c) " [Personal]" "")
+                            (if (:description c) (str ", Desc: " (:description c)) "")))
+                  colls))))))
+
+(defn- get-collection-contents [collection-id]
+  (let [coll   (t2/select-one :model/Collection :id collection-id)
+        _      (api/check-404 coll)
+        _      (api/check-403 (mi/can-read? coll))
+        ;; Sub-collections
+        sub-colls (->> (t2/select :model/Collection
+                                  :location (format "/%d/" collection-id)
+                                  :archived false
+                                  {:order-by [[:name :asc]]})
+                       (filter mi/can-read?))
+        ;; Cards (questions, models, metrics)
+        cards  (->> (t2/select :model/Card
+                               :collection_id collection-id
+                               :archived false
+                               {:order-by [[:name :asc]]
+                                :limit    50})
+                    (filter mi/can-read?))
+        ;; Dashboards
+        dashes (->> (t2/select :model/Dashboard
+                               :collection_id collection-id
+                               :archived false
+                               {:order-by [[:name :asc]]
+                                :limit    50})
+                    (filter mi/can-read?))]
+    (str (format "Collection \"%s\" (ID: %d) contents:\n\n" (:name coll) collection-id)
+         (when (seq sub-colls)
+           (str "Sub-collections:\n"
+                (clojure.string/join "\n"
+                  (map (fn [c] (format "  - [collection] ID: %d, Name: \"%s\"" (:id c) (:name c)))
+                       sub-colls))
+                "\n\n"))
+         (when (seq cards)
+           (str "Questions/Models:\n"
+                (clojure.string/join "\n"
+                  (map (fn [c]
+                         (format "  - [%s] ID: %d, Name: \"%s\", Display: %s"
+                                 (name (or (:type c) :question))
+                                 (:id c) (:name c)
+                                 (name (or (:display c) :table))))
+                       cards))
+                "\n\n"))
+         (when (seq dashes)
+           (str "Dashboards:\n"
+                (clojure.string/join "\n"
+                  (map (fn [d] (format "  - [dashboard] ID: %d, Name: \"%s\"" (:id d) (:name d)))
+                       dashes))
+                "\n"))
+         (when (and (empty? sub-colls) (empty? cards) (empty? dashes))
+           "This collection is empty."))))
+
 (defn- get-table-details [table-id]
   (let [tbl    (t2/select-one :model/Table :id table-id)
         _      (api/check-404 tbl)
@@ -416,15 +629,72 @@ After creating, always provide the URL /question/<id> to the user."
          (format "\nColumns (%d):\n" (count fields))
          (clojure.string/join "\n"
            (map (fn [f]
-                  (str (format "  - %s (%s)" (:name f) (name (:base_type f)))
+                  (str (format "  - ID: %d, %s (%s%s)"
+                               (:id f) (:name f) (name (:base_type f))
+                               (if (:semantic_type f) (str ", " (name (:semantic_type f))) ""))
                        (when (:description f)
                          (str " — " (:description f)))
                        (when (:fk_target_field_id f)
                          (let [fk-field (t2/select-one :model/Field :id (:fk_target_field_id f))
                                fk-table (when fk-field (t2/select-one :model/Table :id (:table_id fk-field)))]
                            (when (and fk-field fk-table)
-                             (format " → FK to %s.%s" (:name fk-table) (:name fk-field)))))))
+                             (format " → FK to %s.%s (field ID: %d)" (:name fk-table) (:name fk-field) (:id fk-field)))))))
                 fields)))))
+
+(defn- update-question [{:strs [card_id name description sql display collection_id]}]
+  (let [card (t2/select-one :model/Card :id card_id)
+        _    (api/check-404 card)
+        _    (api/check-403 (mi/can-write? card))
+        updates (cond-> {}
+                  name          (assoc :name name)
+                  description   (assoc :description description)
+                  display       (assoc :display (keyword display))
+                  collection_id (assoc :collection_id collection_id)
+                  sql           (assoc :dataset_query
+                                       (assoc-in (:dataset_query card) [:native :query] sql)))]
+    (if (empty? updates)
+      (format "No changes specified for question %d." card_id)
+      (do
+        (t2/update! :model/Card card_id updates)
+        (let [updated (t2/select-one :model/Card :id card_id)]
+          (format "Question updated successfully!\n- ID: %d\n- Name: \"%s\"\n- URL: /question/%d"
+                  (:id updated) (:name updated) (:id updated)))))))
+
+(defn- create-dashboard [{:strs [name description collection_id]}]
+  (let [dash-data (cond-> {:name       name
+                            :parameters []}
+                    description   (assoc :description description)
+                    collection_id (assoc :collection_id collection_id))
+        dash (t2/insert-returning-instance! :model/Dashboard dash-data)]
+    (format "Dashboard created successfully!\n- ID: %d\n- Name: \"%s\"\n- URL: /dashboard/%d"
+            (:id dash) (:name dash) (:id dash))))
+
+(defn- add-card-to-dashboard [{:strs [dashboard_id card_id size_x size_y]}]
+  (let [dash (t2/select-one :model/Dashboard :id dashboard_id)
+        _    (api/check-404 dash)
+        _    (api/check-403 (mi/can-write? dash))
+        card (t2/select-one :model/Card :id card_id)
+        _    (api/check-404 card)
+        _    (api/check-403 (mi/can-read? card))
+        ;; Find next available row position
+        existing (t2/select :model/DashboardCard :dashboard_id dashboard_id)
+        next-row (if (empty? existing)
+                   0
+                   (apply max (map (fn [dc] (+ (or (:row dc) 0) (or (:size_y dc) 4)))
+                                   existing)))
+        sx (or size_x 6)
+        sy (or size_y 4)
+        dc (t2/insert-returning-instance! :model/DashboardCard
+                                          {:dashboard_id dashboard_id
+                                           :card_id      card_id
+                                           :row          next-row
+                                           :col          0
+                                           :size_x       sx
+                                           :size_y       sy})]
+    (format "Card added to dashboard!\n- Dashboard: \"%s\" (ID: %d)\n- Card: \"%s\" (ID: %d)\n- Position: row %d, col 0, size %dx%d"
+            (:name dash) dashboard_id
+            (:name card) card_id
+            next-row sx sy)))
 
 (defn- create-question [{:strs [name description database_id sql collection_id display]}]
   (let [card-data (cond-> {:name          name
@@ -439,6 +709,80 @@ After creating, always provide the URL /question/<id> to the user."
         card      (queries.card/create-card! card-data @api/*current-user*)]
     (format "Question created successfully!\n- ID: %d\n- Name: \"%s\"\n- URL: /question/%d"
             (:id card) (:name card) (:id card))))
+
+(defn- archive-item [item-type item-id]
+  (let [model (case item-type
+                "card"      :model/Card
+                "dashboard" :model/Dashboard)
+        item  (t2/select-one model :id item-id)
+        _     (api/check-404 item)
+        _     (api/check-403 (mi/can-write? item))]
+    (t2/update! model item-id {:archived true})
+    (format "%s \"%s\" (ID: %d) has been archived."
+            (clojure.string/capitalize item-type)
+            (:name item) item-id)))
+
+(defn- move-item [item-type item-id collection-id]
+  (let [model (case item-type
+                "card"      :model/Card
+                "dashboard" :model/Dashboard)
+        item  (t2/select-one model :id item-id)
+        _     (api/check-404 item)
+        _     (api/check-403 (mi/can-write? item))
+        coll  (t2/select-one :model/Collection :id collection-id)
+        _     (api/check-404 coll)
+        _     (api/check-403 (mi/can-read? coll))]
+    (t2/update! model item-id {:collection_id collection-id})
+    (format "%s \"%s\" (ID: %d) moved to collection \"%s\" (ID: %d)."
+            (clojure.string/capitalize item-type)
+            (:name item) item-id
+            (:name coll) collection-id)))
+
+(defn- get-database-tables [database-id]
+  (let [db     (t2/select-one :model/Database :id database-id)
+        _      (api/check-404 db)
+        _      (api/check-403 (mi/can-read? db))
+        tables (filter mi/can-read?
+                       (t2/select :model/Table :db_id database-id :active true
+                                  {:order-by [[:schema :asc] [:name :asc]]}))]
+    (if (empty? tables)
+      (format "Database \"%s\" has no accessible tables." (:name db))
+      (str (format "Tables in \"%s\" (%d total):\n" (:name db) (count tables))
+           (clojure.string/join "\n"
+             (map (fn [tbl]
+                    (format "- ID: %d, %s%s%s"
+                            (:id tbl)
+                            (if (:schema tbl) (str (:schema tbl) ".") "")
+                            (:name tbl)
+                            (if (:description tbl) (str " — " (:description tbl)) "")))
+                  tables))))))
+
+(defn- list-metrics [database-id table-id]
+  (let [metrics (->> (cond-> {:archived false
+                              :type     :metric}
+                       database-id (assoc :database_id database-id)
+                       table-id    (assoc :table_id table-id))
+                     (apply concat)
+                     (apply t2/select :model/Card)
+                     (filter mi/can-read?)
+                     (take 50))]
+    (if (empty? metrics)
+      (cond
+        (and database-id table-id) (format "No metrics found for table %d in database %d." table-id database-id)
+        database-id                (format "No metrics found in database %d." database-id)
+        table-id                   (format "No metrics found for table %d." table-id)
+        :else                      "No metrics found.")
+      (str (format "Available metrics (%d):\n" (count metrics))
+           (clojure.string/join "\n"
+             (map (fn [m]
+                    (let [tbl (when (:table_id m)
+                                (t2/select-one :model/Table :id (:table_id m)))]
+                      (str (format "- ID: %d, Name: \"%s\"" (:id m) (:name m))
+                           (when (:description m) (str ", Desc: " (:description m)))
+                           (when tbl (format ", Table: %s (ID: %d)" (:name tbl) (:id tbl)))
+                           (format ", Database ID: %d" (:database_id m))
+                           (format "\n  Use in MBQL aggregation: [\"metric\", %d]" (:id m)))))
+                  metrics))))))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Dispatcher
@@ -459,7 +803,16 @@ After creating, always provide the URL /question/<id> to the user."
       "get_card_details"  (get-card-details (get args "card_id"))
       "get_dashboard_details" (get-dashboard-details (get args "dashboard_id"))
       "get_table_details"  (get-table-details (get args "table_id"))
+      "list_collections"   (list-collections (get args "parent_id"))
+      "get_collection_contents" (get-collection-contents (get args "collection_id"))
       "create_question"   (create-question args)
+      "update_question"   (update-question args)
+      "create_dashboard"  (create-dashboard args)
+      "add_card_to_dashboard" (add-card-to-dashboard args)
+      "archive_item"      (archive-item (get args "item_type") (get args "item_id"))
+      "move_item"         (move-item (get args "item_type") (get args "item_id") (get args "collection_id"))
+      "get_database_tables" (get-database-tables (get args "database_id"))
+      "list_metrics"       (list-metrics (get args "database_id") (get args "table_id"))
       (str "Unknown tool: " tool-name))
     (catch Exception e
       (log/warn e "AI Agent tool execution failed" {:tool tool-name})

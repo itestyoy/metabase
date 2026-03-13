@@ -175,6 +175,25 @@
   color: var(--mb-color-brand);
 }
 
+/* ── Suggestion chips (follow-up prompts) ────────── */
+.suggestionChip {
+  padding: 5px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mb-color-brand);
+  background: color-mix(in srgb, var(--mb-color-brand) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mb-color-brand) 25%, transparent);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+
+.suggestionChip:hover {
+  background: color-mix(in srgb, var(--mb-color-brand) 18%, transparent);
+  border-color: var(--mb-color-brand);
+}
+
 /* ── Not configured — env var box ───────────────── */
 .envVarBox {
   padding: 6px 12px;
@@ -279,6 +298,37 @@
   color: var(--mb-color-text-secondary);
 }
 
+/* ── User markdown (inherits white text from userBubble) ── */
+.userMarkdown {
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.userMarkdown p {
+  margin: 0 0 4px;
+}
+
+.userMarkdown p:last-child {
+  margin-bottom: 0;
+}
+
+.userMarkdown code {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 12px;
+}
+
+.userMarkdown pre {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  font-size: 12px;
+  margin: 4px 0;
+}
+
 /* ── Structured content blocks ─────────────────── */
 .blockLink {
   display: flex;
@@ -300,6 +350,81 @@
   background: color-mix(in srgb, var(--mb-color-brand) 6%, transparent);
 }
 
+/* ── Card preview (link + toggle preview button) ── */
+.cardPreviewRow {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+/* Preview toggle button sits flush next to the link */
+.previewButton {
+  flex-shrink: 0;
+  border-radius: 0 8px 8px 0 !important;
+  border: 1px solid var(--mb-color-border) !important;
+  border-left: none !important;
+  height: 100%;
+  min-height: 38px;
+  width: 32px;
+  background: var(--mb-color-background-secondary) !important;
+  transition: background 0.12s, color 0.12s;
+}
+
+.previewButton:hover {
+  background: color-mix(in srgb, var(--mb-color-brand) 10%, transparent) !important;
+}
+
+/* When preview button is present, round only the left side of the link */
+.cardPreviewRow .blockLink {
+  border-radius: 8px 0 0 8px;
+}
+
+.cardPreviewFrame {
+  position: relative;
+  width: 100%;
+  height: 160px;
+  overflow: hidden;
+  background: var(--mb-color-background-primary);
+  border: 1px solid var(--mb-color-border);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+}
+
+.cardPreviewIframe {
+  width: 200%;
+  height: 200%;
+  border: none;
+  transform: scale(0.5);
+  transform-origin: top left;
+  pointer-events: none;
+}
+
+.cardPreviewOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+/* SQL block with action buttons */
+.sqlBlockWrapper {
+  position: relative;
+}
+
+.sqlBlockActions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.sqlBlockWrapper:hover .sqlBlockActions {
+  opacity: 1;
+}
+
 .sqlBlock {
   font-size: 12px !important;
   background: var(--mb-color-background-primary) !important;
@@ -310,10 +435,47 @@
   color: var(--mb-color-text-primary) !important;
 }
 
-/* ── Data table (AI response) — slim down Metabase Table for chat ── */
+/* ── Data table (AI response) — Metabase-style compact table ── */
+.tableScroll {
+  border: 1px solid var(--mb-color-border);
+  border-radius: 6px;
+  overflow: hidden;
+  max-height: 280px;
+}
+
 .agentTable {
-  margin-block: 0;
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
   font-size: 12px;
+}
+
+.agentTable thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.agentTable th {
+  padding: 6px 10px;
+  text-align: left;
+  background: color-mix(in srgb, var(--mb-color-brand) 8%, var(--mb-color-background-primary));
+  border-bottom: 1px solid var(--mb-color-border);
+  white-space: nowrap;
+}
+
+.agentTable td {
+  padding: 5px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--mb-color-border) 50%, transparent);
+  color: var(--mb-color-text-primary);
+}
+
+.agentTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.agentTableRow:hover {
+  background: var(--mb-color-background-hover);
 }
 
 /* ── Loading bubble ─────────────────────────────── */
