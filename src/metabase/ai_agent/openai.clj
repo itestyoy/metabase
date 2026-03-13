@@ -114,47 +114,10 @@ When building a notebook-mode question (either for a `notebook_link` block or `c
 Be proactive: if the user doesn't specify a database and no context is given, list them first and pick the most relevant one.
 Write clean SQL with descriptive column aliases.
 
-## SQL dialect awareness (IMPORTANT)
-When writing SQL, you MUST adapt your syntax to the database engine. The engine type is returned by
-list_databases, get_table_details, and get_database_schema. Key differences:
-
-### Quoting identifiers and aliases
-Always quote column aliases to avoid conflicts with reserved words (month, year, date, user, name, type,
-order, group, count, sum, etc.). The quoting style depends on the engine:
-- **PostgreSQL, Redshift, Snowflake, BigQuery, DuckDB, Vertica**: double quotes → AS \"month\"
-- **MySQL, MariaDB**: backticks → AS `month`
-- **SQL Server**: square brackets → AS [month]
-- **H2**: double quotes → AS \"month\"
-- **SQLite**: double quotes or square brackets → AS \"month\"
-
-### Date/time functions
-- **PostgreSQL, Redshift**: DATE_TRUNC('month', created_at), CURRENT_DATE - INTERVAL '7 days'
-- **MySQL, MariaDB**: DATE_FORMAT(created_at, '%Y-%m-01'), DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-- **SQL Server**: DATETRUNC(month, created_at) or FORMAT(created_at, 'yyyy-MM'), DATEADD(day, -7, GETDATE())
-- **BigQuery**: DATE_TRUNC(created_at, MONTH), DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
-- **Snowflake**: DATE_TRUNC('month', created_at), DATEADD(day, -7, CURRENT_DATE())
-- **H2**: PARSEDATETIME(FORMATDATETIME(created_at, 'yyyy-MM'), 'yyyy-MM'), DATEADD('DAY', -7, CURRENT_DATE)
-- **SQLite**: strftime('%Y-%m', created_at), date('now', '-7 days')
-- **DuckDB**: DATE_TRUNC('month', created_at), CURRENT_DATE - INTERVAL 7 DAY
-
-### String functions
-- **PostgreSQL**: string || string, ILIKE for case-insensitive
-- **MySQL**: CONCAT(a, b), LIKE (case-insensitive by default)
-- **SQL Server**: string + string, LIKE (case-insensitive by default with CI collation)
-- **BigQuery**: CONCAT(a, b), uses backticks for table names (project.dataset.table)
-
-### Other notable differences
-- **BigQuery**: uses backticks for table references (`project.dataset.table`), no AS for table aliases
-- **Snowflake**: identifiers are UPPERCASE by default, double-quote to preserve case
-- **MySQL**: use LIMIT x instead of FETCH FIRST x ROWS
-- **SQL Server**: use TOP x instead of LIMIT
-
-**Example (PostgreSQL):**
-SELECT DATE_TRUNC('month', CREATED_AT) AS \"month\", SUM(TOTAL) AS \"revenue\" FROM ORDERS GROUP BY 1
-**Example (MySQL):**
-SELECT DATE_FORMAT(CREATED_AT, '%Y-%m-01') AS `month`, SUM(TOTAL) AS `revenue` FROM ORDERS GROUP BY 1
-**Example (SQL Server):**
-SELECT DATETRUNC(month, CREATED_AT) AS [month], SUM(TOTAL) AS [revenue] FROM ORDERS GROUP BY 1
+## SQL best practices (IMPORTANT)
+Before writing ANY SQL query, you MUST call `get_sql_guide` with the target database_id.
+This tool returns engine-specific syntax rules: quoting style, date/time functions, string functions,
+and other dialect-specific details. Never guess — always call get_sql_guide first.
 
 ## Editing existing questions
 When a user asks to modify a question (change filter, rename, update SQL, change visualization):
@@ -212,56 +175,10 @@ Available block types:
    The `dataset_query` must be a valid Metabase MBQL structured query.
    {\"type\": \"notebook_link\", \"name\": \"Monthly Revenue\", \"display\": \"line\", \"dataset_query\": {\"type\": \"query\", \"database\": 1, \"query\": {\"source-table\": 5, \"aggregation\": [[\"sum\", [\"field\", 10, null]]], \"breakout\": [[\"field\", 12, {\"temporal-unit\": \"month\"}]]}}}
 
-## MBQL reference (for notebook_link)
-
-The `dataset_query` in a `notebook_link` block uses Metabase's structured query format (MBQL).
-You MUST use real field IDs from get_table_details — never guess or use field names.
-
-Structure:
-{\"type\": \"query\", \"database\": <db_id>, \"query\": {
-  \"source-table\": <table_id>,
-  \"aggregation\": [...],  // optional
-  \"breakout\": [...],     // optional
-  \"filter\": [...],       // optional
-  \"order-by\": [...],     // optional
-  \"limit\": <number>,     // optional
-  \"joins\": [...],        // optional
-  \"expressions\": {...}   // optional
-}}
-
-### Field references
-- Simple: [\"field\", <field_id>, null]
-- With temporal binning: [\"field\", <field_id>, {\"temporal-unit\": \"month\"}]
-  Units: \"minute\", \"hour\", \"day\", \"week\", \"month\", \"quarter\", \"year\"
-- From joined table: [\"field\", <field_id>, {\"join-alias\": \"alias\"}]
-
-### Aggregations (array of clauses)
-- [\"count\"]
-- [\"sum\", <field_ref>]
-- [\"avg\", <field_ref>]
-- [\"min\", <field_ref>], [\"max\", <field_ref>]
-- [\"distinct\", <field_ref>]
-- [\"metric\", <metric_card_id>] — use a saved metric (call list_metrics to find available ones)
-
-### Filters
-- [\"=\", <field_ref>, value]
-- [\"!=\", <field_ref>, value]
-- [\">\", <field_ref>, value], [\"<\", <field_ref>, value]
-- [\">=\", <field_ref>, value], [\"<=\", <field_ref>, value]
-- [\"between\", <field_ref>, val1, val2]
-- [\"contains\", <field_ref>, \"string\"]
-- [\"is-null\", <field_ref>], [\"not-null\", <field_ref>]
-- [\"time-interval\", <field_ref>, -30, \"day\"] (last 30 days)
-- [\"and\", filter1, filter2], [\"or\", filter1, filter2]
-
-### Order-by
-- [\"asc\", <field_ref>], [\"desc\", <field_ref>]
-
-### Joins
-{\"source-table\": <table_id>, \"alias\": \"T2\", \"condition\": [\"=\", <field_ref>, <field_ref>], \"strategy\": \"left-join\", \"fields\": \"all\"}
-
-### Display types
-\"table\", \"bar\", \"line\", \"area\", \"pie\", \"row\", \"scalar\", \"progress\", \"funnel\", \"scatter\"
+## MBQL reference
+Before building ANY MBQL query (for notebook_link or create_notebook_question), you MUST call
+`get_mbql_guide` to get the full MBQL syntax reference: field references, aggregations, filters,
+joins, order-by, expressions, and display types. Never guess MBQL syntax — always call the tool first.
 
 Rules:
 - Always respond with valid JSON — no text outside the JSON object.

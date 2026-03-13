@@ -10,7 +10,7 @@ import { useAgentModal } from "./hooks/useAgentModal";
 export function AgentButton() {
   const { hasAccess, isLoading } = useAgentAccess();
   const { isOpen, open, close } = useAgentModal();
-  const label = t`AI Agent`;
+  const label = t`Chat with BI, supercharged by AI`;
 
   if (isLoading || !hasAccess) {
     return null;
