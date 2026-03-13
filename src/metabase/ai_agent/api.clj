@@ -122,7 +122,7 @@
     (api/check-403 (some? api-key))
     (let [model          (or (ai.settings/ai-agent-openai-model) "gpt-5.4")
           personal-coll-id (try
-                             (collection/user->personal-collection-id api/*current-user-id*)
+                             (:id (collection/user->personal-collection api/*current-user-id*))
                              (catch Exception _ nil))
           ;; Prepend context hints: personal collection + optional entity context
           effective-msg  (str (when personal-coll-id
