@@ -125,11 +125,6 @@ export function AgentModal({ onClose }: AgentModalProps) {
           <Text size="sm" fw={600} c="white">
             {t`Chat with BI, supercharged by AI`}
           </Text>
-          {agentSettings && (
-            <Text size="xs" c="rgba(255,255,255,0.65)">
-              {agentSettings.model}
-            </Text>
-          )}
         </div>
 
         <div className={S.modalHeaderActions}>
