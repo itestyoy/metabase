@@ -290,6 +290,9 @@
   color: var(--mb-color-text-primary);
   text-decoration: none;
   transition: border-color 0.12s, background 0.12s;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .blockLink:hover {
@@ -305,6 +308,12 @@
   padding: 8px 10px !important;
   overflow-x: auto;
   color: var(--mb-color-text-primary) !important;
+}
+
+/* ── Data table (AI response) — slim down Metabase Table for chat ── */
+.agentTable {
+  margin-block: 0;
+  font-size: 12px;
 }
 
 /* ── Loading bubble ─────────────────────────────── */
