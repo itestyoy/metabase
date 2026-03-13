@@ -14,6 +14,7 @@ const ROUTES: Array<{ pattern: RegExp; model: string; apiPath: string }> = [
   // Slugs like "/model/123-some-name" — leading digits are the numeric ID
   { pattern: /^\/model\/(\d+)/, model: "dataset", apiPath: "/api/card" },
   { pattern: /^\/metric\/(\d+)/, model: "metric", apiPath: "/api/card" },
+  { pattern: /^\/document\/(\d+)/, model: "document", apiPath: "/api/document" },
 ];
 
 /** Parses the current query string into a plain object, or returns undefined if empty. */

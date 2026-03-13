@@ -30,9 +30,10 @@ import S from "./AgentModal.module.css";
 import type { ChatMessage, ContentBlock } from "./types";
 
 const EXAMPLE_PROMPTS = [
-  t`List all tables I have access to`,
-  t`Find dashboards related to revenue`,
-  t`Create a question showing monthly active users`,
+  t`Investigate why revenue dropped last week`,
+  t`Create a dashboard with key sales metrics`,
+  t`Build a report on monthly active users`,
+  t`Find all questions related to orders`,
 ];
 
 /* ── Block renderers ─────────────────────────────────────────────────────── */
@@ -139,6 +140,19 @@ function DashboardLinkBlock({ block }: { block: Extract<ContentBlock, { type: "d
     <Link to={`/dashboard/${block.dashboard_id}`} className={S.blockLink}>
       <Group gap={8} wrap="nowrap">
         <Icon name="dashboard" size={16} color="var(--mb-color-brand)" />
+        <Text size="sm" fw={500} truncate>
+          {block.name}
+        </Text>
+      </Group>
+    </Link>
+  );
+}
+
+function DocumentLinkBlock({ block }: { block: Extract<ContentBlock, { type: "document_link" }> }) {
+  return (
+    <Link to={`/document/${block.document_id}`} className={S.blockLink}>
+      <Group gap={8} wrap="nowrap">
+        <Icon name="document" size={16} color="var(--mb-color-brand)" />
         <Text size="sm" fw={500} truncate>
           {block.name}
         </Text>
@@ -357,6 +371,8 @@ function ContentBlockRenderer({
       return <CardPreviewBlock block={block} />;
     case "dashboard_link":
       return <DashboardLinkBlock block={block} />;
+    case "document_link":
+      return <DocumentLinkBlock block={block} />;
     case "notebook_link":
       return <NotebookLinkBlock block={block} />;
     case "sql":
