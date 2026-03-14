@@ -14,6 +14,7 @@
    [metabase.api.common :as api]
    [metabase.api.macros :as api.macros]
    [metabase.collections.models.collection :as collection]
+   [metabase.server.streaming-response :as streaming-response]
    [metabase.util.log :as log]
    [metabase.util.malli.schema :as ms]
    [toucan2.core :as t2]))
@@ -433,12 +434,14 @@
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
 (defn- sse-write!
-  "Write a single SSE event to a java.io.Writer. `event` is the event name,
-  `data` is a Clojure map that will be JSON-encoded."
-  [^java.io.Writer writer ^String event data]
-  (.write writer (str "event: " event "\n"))
-  (.write writer (str "data: " (json/generate-string data) "\n\n"))
-  (.flush writer))
+  "Write a single SSE event to an OutputStream and flush immediately.
+  `event` is the event name, `data` is a Clojure map that will be JSON-encoded."
+  [^java.io.OutputStream os ^String event data]
+  (let [payload (str "event: " event "\n"
+                     "data: " (json/generate-string data) "\n\n")
+        bytes   (.getBytes payload "UTF-8")]
+    (.write os bytes)
+    (.flush os)))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Shared chat preparation
@@ -594,41 +597,35 @@
                                      :context              context
                                      :safe-mode            safe-mode
                                      :chat-collection-id   chat-collection-id})]
-    ;; Return a Ring streaming response with text/event-stream content type.
-    ;; The body is a piped stream: we write SSE events on a background thread
-    ;; and the Ring adapter reads from the other end.
-    (let [pipe-in  (java.io.PipedInputStream. 8192)
-          pipe-out (java.io.PipedOutputStream. pipe-in)]
-      ;; Launch the work on a daemon thread so the response starts streaming immediately
-      (future
-        (let [writer (java.io.BufferedWriter. (java.io.OutputStreamWriter. pipe-out "UTF-8"))]
-          (try
-            (let [{:keys [api-key model opts safe-mode? ensure-chat-coll!
-                          chat-coll-id-atom chat-coll-name]} params
-                  emit!      (fn [event data] (sse-write! writer event data))
-                  raw-result (run-tool-loop api-key model opts
-                                            :safe-mode? safe-mode?
-                                            :ensure-chat-coll! ensure-chat-coll!
-                                            :emit! emit!)
-                  result     (validate-and-retry api-key model raw-result :safe-mode? safe-mode?)]
-              (sse-write! writer "done"
-                          {:response_id         (:response-id result)
-                           :content             (:content result)
-                           :chat_collection_id   @chat-coll-id-atom
-                           :chat_collection_name (when @chat-coll-id-atom chat-coll-name)
-                           :tool_calls           (mapv (fn [{:keys [name args result]}]
-                                                         {:name name :args args :result result})
-                                                       (:tool-calls result))}))
-            (catch Exception e
-              (log/error "SSE chat-stream error" (.getMessage e))
-              (try (sse-write! writer "error" {:message (.getMessage e)}) (catch Exception _)))
-            (finally
-              (.close writer)))))
-      {:status  200
-       :headers {"Content-Type"  "text/event-stream; charset=utf-8"
-                 "Cache-Control" "no-cache"
-                 "Connection"    "keep-alive"}
-       :body    pipe-in})))
+    ;; Use Metabase's streaming-response which writes directly to the Jetty
+    ;; servlet OutputStream — bypasses all buffering middleware (gzip, etc.)
+    ;; so SSE events are flushed to the client immediately.
+    (streaming-response/streaming-response
+      {:content-type "text/event-stream; charset=utf-8"
+       :headers      {"Cache-Control" "no-cache, no-transform"
+                      "Connection"    "keep-alive"
+                      "X-Accel-Buffering" "no"}}
+      [os _canceled-chan]
+      (try
+        (let [{:keys [api-key model opts safe-mode? ensure-chat-coll!
+                      chat-coll-id-atom chat-coll-name]} params
+              emit!      (fn [event data] (sse-write! os event data))
+              raw-result (run-tool-loop api-key model opts
+                                        :safe-mode? safe-mode?
+                                        :ensure-chat-coll! ensure-chat-coll!
+                                        :emit! emit!)
+              result     (validate-and-retry api-key model raw-result :safe-mode? safe-mode?)]
+          (sse-write! os "done"
+                      {:response_id         (:response-id result)
+                       :content             (:content result)
+                       :chat_collection_id   @chat-coll-id-atom
+                       :chat_collection_name (when @chat-coll-id-atom chat-coll-name)
+                       :tool_calls           (mapv (fn [{:keys [name args result]}]
+                                                     {:name name :args args :result result})
+                                                   (:tool-calls result))}))
+        (catch Exception e
+          (log/error "SSE chat-stream error" (.getMessage e))
+          (try (sse-write! os "error" {:message (.getMessage e)}) (catch Exception _)))))))
 
 #_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
 (api.macros/defendpoint :get "/settings"
