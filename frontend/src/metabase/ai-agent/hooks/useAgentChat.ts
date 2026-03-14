@@ -73,6 +73,8 @@ export interface AgentSettings {
 interface AgentResponse {
   response_id: string | null;
   content: string;
+  chat_collection_id: number | null;
+  chat_collection_name: string | null;
   tool_calls: Array<{
     name: string;
     args: Record<string, unknown>;
@@ -87,6 +89,8 @@ export function useAgentChat() {
   const [previousResponseId, setPreviousResponseId] = useState<string | null>(
     null,
   );
+  const [chatCollectionId, setChatCollectionId] = useState<number | null>(null);
+  const [chatCollectionName, setChatCollectionName] = useState<string | null>(null);
   const [agentSettings, setAgentSettings] = useState<AgentSettings | null>(
     null,
   );
@@ -119,10 +123,12 @@ export function useAgentChat() {
     setMessages([]);
     setError(null);
     setPreviousResponseId(null);
+    setChatCollectionId(null);
+    setChatCollectionName(null);
   }, []);
 
   const sendMessage = useCallback(
-    async (userText: string, context?: AgentContextValue | null) => {
+    async (userText: string, context?: AgentContextValue | null, safeMode?: boolean, targetCollectionId?: number | null) => {
       setError(null);
       setIsLoading(true);
 
@@ -154,6 +160,14 @@ export function useAgentChat() {
             ...(context.url_params ? { url_params: context.url_params } : {}),
             ...(context.dataset_query ? { dataset_query: context.dataset_query } : {}),
           };
+        }
+        if (safeMode) {
+          body.safe_mode = true;
+        }
+        // User-chosen collection takes priority over auto-created chat collection
+        const effectiveCollectionId = targetCollectionId ?? chatCollectionId;
+        if (effectiveCollectionId) {
+          body.chat_collection_id = effectiveCollectionId;
         }
 
         const response = (await api.POST("/api/ai-agent/chat")(
@@ -194,6 +208,13 @@ export function useAgentChat() {
         if (response.response_id) {
           setPreviousResponseId(response.response_id);
         }
+        // Persist the chat collection so subsequent turns reuse the same sub-collection
+        if (response.chat_collection_id) {
+          setChatCollectionId(response.chat_collection_id);
+          if (response.chat_collection_name) {
+            setChatCollectionName(response.chat_collection_name);
+          }
+        }
       } catch (err: unknown) {
         setMessages(prev => prev.filter(m => m.id !== loadingId));
         const errMsg =
@@ -211,7 +232,7 @@ export function useAgentChat() {
         setIsLoading(false);
       }
     },
-    [previousResponseId],
+    [previousResponseId, chatCollectionId],
   );
 
   return {
@@ -219,6 +240,8 @@ export function useAgentChat() {
     isLoading,
     error,
     agentSettings,
+    chatCollectionId,
+    chatCollectionName,
     sendMessage,
     clearMessages,
   };

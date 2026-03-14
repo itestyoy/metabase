@@ -467,9 +467,12 @@ function MessageBubble({
 
   // Assistant message — structured blocks or plain markdown fallback
   if (message.blocks && message.blocks.length > 0) {
+    const hasRichBlock = message.blocks.some(
+      b => b.type !== "text",
+    );
     return (
       <Flex className={S.messageBubbleRow} justify="flex-start">
-        <Paper className={S.assistantBubble} radius="xl">
+        <Paper className={`${S.assistantBubble} ${hasRichBlock ? S.assistantBubbleWide : ""}`} radius="xl">
           <Stack gap={8}>
             {message.blocks.map((block, idx) => (
               <ContentBlockRenderer

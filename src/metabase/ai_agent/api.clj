@@ -7,6 +7,7 @@
   - Uses the Responses API `previous_response_id` for server-managed history"
   (:require
    [cheshire.core :as json]
+   [metabase.ai-agent.mcp :as ai.mcp]
    [metabase.ai-agent.openai :as ai.openai]
    [metabase.ai-agent.settings :as ai.settings]
    [metabase.ai-agent.tools :as ai.tools]
@@ -184,7 +185,7 @@
   "Validate a single content block. Returns error string or nil."
   [i block]
   (let [valid-types #{"text" "card_link" "card_preview" "dashboard_link"
-                       "notebook_link" "sql" "table"}
+                       "document_link" "notebook_link" "sql" "table"}
         btype       (:type block)]
     (cond
       (nil? btype)
@@ -299,6 +300,21 @@
           {:error   (diagnose-json-syntax cleaned (.getMessage e))
            :cleaned cleaned})))))
 
+(def ^:private artifact-tool-names
+  "Tool names that create artifacts (questions, dashboards, documents) and accept collection_id.
+   When these are called we lazily create the chat sub-collection and inject its ID."
+  #{"create_question" "create_dashboard" "create_notebook_question" "create_document"})
+
+(defn- maybe-inject-collection-id
+  "If a tool creates an artifact, lazily ensure the chat collection exists
+   and override the collection_id in the tool arguments."
+  [tool-name arguments ensure-chat-coll!]
+  (if (and ensure-chat-coll! (artifact-tool-names tool-name))
+    (if-let [coll-id (ensure-chat-coll!)]
+      (assoc arguments "collection_id" coll-id)
+      arguments)
+    arguments))
+
 (defn- run-tool-loop
   "Execute the OpenAI → tool-call → tool-result loop until the model
   returns a plain text response (or we hit the iteration limit).
@@ -309,7 +325,7 @@
    :content      \"Final assistant text\"
    :tool-calls   [{:name … :args … :result …} …]}
   ```"
-  [api-key model initial-opts]
+  [api-key model initial-opts & {:keys [safe-mode? ensure-chat-coll!] :or {safe-mode? false}}]
   (loop [opts       initial-opts
          iterations 0
          all-calls  []]
@@ -320,7 +336,7 @@
       (let [response    (ai.openai/create-response (assoc opts
                                                           :api-key api-key
                                                           :model   model
-                                                          :tools   ai.tools/tool-definitions))
+                                                          :tools   (ai.tools/all-tool-definitions safe-mode?)))
             response-id (ai.openai/response-id response)
             _           (when (ai.openai/failed? response)
                           (throw (ex-info (str "OpenAI returned status: " (get response :status))
@@ -331,9 +347,10 @@
           (let [tool-calls (ai.openai/extract-tool-calls response)
                 _          (log/debug "AI Agent executing tools" {:tools (map :name tool-calls)})
                 results    (mapv (fn [{:keys [call-id name arguments]}]
-                                   (let [result (ai.tools/execute-tool name arguments)]
+                                   (let [args   (maybe-inject-collection-id name arguments ensure-chat-coll!)
+                                         result (ai.tools/execute-tool name args)]
                                      {:name    name
-                                      :args    arguments
+                                      :args    args
                                       :result  result
                                       :call-id call-id}))
                                  tool-calls)
@@ -356,7 +373,7 @@
 
   Also handles auto-cleanup: if the AI wraps JSON in markdown fences or adds
   surrounding text, the cleaned version is used without counting as a retry."
-  [api-key model {:keys [response-id content tool-calls] :as result}]
+  [api-key model {:keys [response-id content tool-calls] :as result} & {:keys [safe-mode?] :or {safe-mode? false}}]
   (loop [current-content  content
          current-resp-id  response-id
          attempt          0]
@@ -388,7 +405,7 @@
                                :model                model
                                :message              retry-msg
                                :previous-response-id current-resp-id
-                               :tools                ai.tools/tool-definitions})
+                               :tools                (ai.tools/all-tool-definitions safe-mode?)})
                   new-id     (ai.openai/response-id retry-resp)
                   new-text   (ai.openai/extract-text retry-resp)]
               (recur new-text
@@ -415,15 +432,19 @@
    _query-params
    {message              :message
     previous-response-id :previous_response_id
-    context              :context} :- [:map
-                                       [:message              ms/NonBlankString]
-                                       [:previous_response_id {:optional true} [:maybe :string]]
-                                       [:context              {:optional true}
-                                        [:maybe [:map
-                                                 [:id    :int]
-                                                 [:name  :string]
-                                                 [:model :string]
-                                                 [:db_id {:optional true} [:maybe :int]]]]]]]
+    context              :context
+    safe-mode            :safe_mode
+    chat-collection-id   :chat_collection_id} :- [:map
+                                                    [:message              ms/NonBlankString]
+                                                    [:previous_response_id {:optional true} [:maybe :string]]
+                                                    [:context              {:optional true}
+                                                     [:maybe [:map
+                                                              [:id    :int]
+                                                              [:name  :string]
+                                                              [:model :string]
+                                                              [:db_id {:optional true} [:maybe :int]]]]]
+                                                    [:safe_mode {:optional true} [:maybe :boolean]]
+                                                    [:chat_collection_id {:optional true} [:maybe :int]]]]
   (api/check-403 (ai.settings/ai-agent-enabled))
   (api/check-403 (current-user-in-ai-group?))
   (let [api-key (ai.settings/ai-agent-openai-api-key)]
@@ -432,10 +453,37 @@
           personal-coll-id (try
                              (:id (collection/user->personal-collection api/*current-user-id*))
                              (catch Exception _ nil))
-          ;; Prepend context hints: personal collection + optional entity context
-          effective-msg  (str (when personal-coll-id
-                                (format "[User's personal collection ID: %d — ALWAYS use this as collection_id when creating questions or dashboards]\n"
-                                        personal-coll-id))
+          ;; If the frontend already has a chat collection from a previous turn, reuse it.
+          ;; Otherwise, we'll create one lazily when the first write tool executes.
+          chat-coll-id-atom (atom chat-collection-id)
+          chat-coll-name    (str "AI: "
+                                 (let [trimmed (clojure.string/trim message)]
+                                   (if (> (count trimmed) 60)
+                                     (str (subs trimmed 0 57) "...")
+                                     trimmed)))
+          ;; Function that lazily creates the chat sub-collection on first write tool call.
+          ;; Returns the collection ID (existing or newly created).
+          ensure-chat-coll! (fn []
+                              (or @chat-coll-id-atom
+                                  (when personal-coll-id
+                                    (try
+                                      (let [coll (t2/insert-returning-instance! :model/Collection
+                                                   {:name       chat-coll-name
+                                                    :location   (format "/%d/" personal-coll-id)
+                                                    :namespace  nil})
+                                            cid  (:id coll)]
+                                        (reset! chat-coll-id-atom cid)
+                                        cid)
+                                      (catch Exception e
+                                        (log/warn "Failed to create chat collection" (.getMessage e))
+                                        nil)))))
+          ;; Prepend context hints
+          effective-msg  (str (if @chat-coll-id-atom
+                                (format "[Chat collection ID: %d — ALWAYS use this as collection_id when creating questions, dashboards, or documents. This keeps all items from this conversation organized together.]\n"
+                                        @chat-coll-id-atom)
+                                (when personal-coll-id
+                                  (format "[User's personal collection ID: %d — when creating items, use this as collection_id. A dedicated sub-collection will be auto-created for this chat.]\n"
+                                          personal-coll-id)))
                               (when context
                                 (str "[Context: "
                                      (name (:model context))
@@ -447,18 +495,27 @@
                                        (str ", db_id=" db-id))
                                      ")]\n"))
                               message)
+          safe-mode?     (boolean safe-mode)
+          effective-msg  (if safe-mode?
+                           (str "[SAFE MODE: All write/modify tools are disabled. You can only read and analyze data, not create or modify anything. If the user asks to create or modify something, explain that safe mode is on and they need to disable it.]\n"
+                                effective-msg)
+                           effective-msg)
           opts           (cond-> {:message effective-msg}
                            previous-response-id
                            (assoc :previous-response-id previous-response-id))
-          raw-result (run-tool-loop api-key model opts)
-          result     (validate-and-retry api-key model raw-result)]
-      {:response_id (:response-id result)
-       :content     (:content result)
-       :tool_calls  (mapv (fn [{:keys [name args result]}]
-                            {:name   name
-                             :args   args
-                             :result result})
-                          (:tool-calls result))})))
+          raw-result (run-tool-loop api-key model opts
+                                    :safe-mode? safe-mode?
+                                    :ensure-chat-coll! ensure-chat-coll!)
+          result     (validate-and-retry api-key model raw-result :safe-mode? safe-mode?)]
+      {:response_id         (:response-id result)
+       :content             (:content result)
+       :chat_collection_id   @chat-coll-id-atom
+       :chat_collection_name (when @chat-coll-id-atom chat-coll-name)
+       :tool_calls           (mapv (fn [{:keys [name args result]}]
+                                     {:name   name
+                                      :args   args
+                                      :result result})
+                                   (:tool-calls result))})))
 
 #_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
 (api.macros/defendpoint :get "/settings"
@@ -485,5 +542,29 @@
                       {:value "gpt-4.1"       :label "GPT-4.1 — 1M context, instruction following"   :group "GPT-4.1"}
                       {:value "gpt-4.1-mini"  :label "GPT-4.1 Mini — faster, lower cost"             :group "GPT-4.1"}
                       {:value "gpt-4.1-nano"  :label "GPT-4.1 Nano — lightest, cheapest"             :group "GPT-4.1"}]})
+
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :get "/mcp-servers"
+  "Return status of connected MCP servers and their available tools."
+  []
+  (api/check-superuser)
+  (let [registry @ai.mcp/server-registry]
+    {:servers (mapv (fn [[name server]]
+                      (let [tools (try (ai.mcp/list-tools server) (catch Exception _ []))]
+                        {:name              name
+                         :sse_url           (:sse-url server)
+                         :message_endpoint  (:message-endpoint server)
+                         :tools             (mapv (fn [t] {:name (:name t) :description (:description t)})
+                                                  tools)}))
+                    registry)}))
+
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :post "/mcp-servers/reconnect"
+  "Force reconnect all MCP servers. Superuser only."
+  []
+  (api/check-superuser)
+  (let [registry (ai.mcp/reconnect!)]
+    {:reconnected (count registry)
+     :servers     (keys registry)}))
 
 (def routes (api.macros/ns-handler))
