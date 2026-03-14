@@ -1583,14 +1583,29 @@ Save all key queries as questions, then build a Metabase Document with:
 ;;; Dispatcher
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
+(def ^:private write-tool-names
+  "Tool names that create, modify, or delete data. Disabled in safe mode."
+  #{"create_question" "update_question" "create_dashboard" "add_card_to_dashboard"
+    "archive_item" "move_item" "create_notebook_question" "create_document" "update_document"})
+
+(defn- read-only-tools
+  "Filter tool definitions to only include read-only tools."
+  [tools]
+  (vec (remove #(write-tool-names (:name %)) tools)))
+
 (defn all-tool-definitions
   "Return built-in tool definitions combined with MCP server tools.
-   MCP tools are discovered from configured external MCP servers."
-  []
-  (let [mcp-tools (try (mcp/mcp-tool-definitions) (catch Exception _ nil))]
-    (if (seq mcp-tools)
-      (into tool-definitions mcp-tools)
-      tool-definitions)))
+   MCP tools are discovered from configured external MCP servers.
+   When safe-mode? is true, all write/modify tools are excluded."
+  ([] (all-tool-definitions false))
+  ([safe-mode?]
+   (let [built-in (if safe-mode? (read-only-tools tool-definitions) tool-definitions)
+         mcp-tools (try (mcp/mcp-tool-definitions) (catch Exception _ nil))
+         ;; In safe mode, also exclude MCP tools (external tools may write data)
+         all-tools (if (seq mcp-tools)
+                     (into built-in (if safe-mode? [] mcp-tools))
+                     built-in)]
+     all-tools)))
 
 (defn execute-tool
   "Execute a tool call and return its string result.

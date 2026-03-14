@@ -64,7 +64,6 @@ export function AgentContextPicker({ value, onChange }: AgentContextPickerProps)
 
   return (
     <Box className={S.contextBar}>
-      <Icon name="layers" size={12} className={S.contextIcon} />
       <Text size="xs" c="text-tertiary" className={S.contextLabel}>
         {t`Context:`}
       </Text>

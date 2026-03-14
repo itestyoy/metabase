@@ -32,6 +32,8 @@ export const AppContent = styled.main`
   height: 100%;
   overflow: auto;
   scroll-margin-top: ${APP_BAR_HEIGHT};
+  margin-right: var(--agent-dock-width, 0px);
+  transition: margin-right 0.2s ease;
 
   @media print {
     overflow: visible !important;

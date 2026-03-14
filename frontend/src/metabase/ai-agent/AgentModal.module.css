@@ -19,6 +19,18 @@
   overflow: hidden;
 }
 
+/* Docked to right edge: below app bar, headers aligned */
+.floatingModalDocked {
+  top: 0; /* sits beside the app bar, not below it */
+  right: 0;
+  bottom: 0;
+  border-radius: 0;
+  border-right: none;
+  border-top: none;
+  border-bottom: none;
+  transition: width 0.2s ease;
+}
+
 .floatingModalMinimized {
   /* Override the inline height from JS — 52px includes border thanks to
      box-sizing: border-box inherited from .floatingModal */
@@ -238,6 +250,12 @@
   word-break: break-word;
   box-shadow: none !important;
   color: var(--mb-color-text-primary);
+}
+
+/* Assistant bubble with rich blocks (cards, tables, previews) — stretch to fill */
+.assistantBubbleWide {
+  width: 90%;
+  max-width: 90%;
 }
 
 /* Markdown inside assistant bubble */
@@ -501,4 +519,31 @@
 .inputHint {
   line-height: 1;
   font-size: 11px;
+}
+
+/* ── Bottom bar: context, save location, safe mode toggle ── */
+.bottomBar {
+  display: flex;
+  align-items: center;
+  background: var(--mb-color-background-primary);
+  flex-shrink: 0;
+  border-top: 1px solid var(--mb-color-border);
+}
+
+.bottomBarRow {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.safeModeButton {
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+/* Header in docked mode: no drag cursor */
+.modalHeaderDocked {
+  cursor: default;
 }
