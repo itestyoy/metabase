@@ -94,19 +94,61 @@ function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
 }
 
+const PANEL_STORAGE_KEY = "bi-agent-panel";
+
+function readSavedPanel(): Partial<PanelState> | null {
+  try {
+    const raw = localStorage.getItem(PANEL_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as Partial<PanelState>;
+  } catch {
+    return null;
+  }
+}
+
+function savePanelState(s: PanelState) {
+  try {
+    const { isInteracting: _, ...rest } = s;
+    localStorage.setItem(PANEL_STORAGE_KEY, JSON.stringify(rest));
+  } catch {
+    // storage unavailable
+  }
+}
+
 /** Compute initial panel geometry that always fits within the viewport. */
 function computeInitialState(c: PanelConstraints): PanelState {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const width = Math.min(c.minWidth, vw - 2 * c.edgeBuffer);
-  const height = Math.min(c.minHeight, vh - c.appbarHeight - 2 * c.edgeBuffer);
-  const bottom = Math.max(c.edgeBuffer, vh - c.appbarHeight - height - c.edgeBuffer);
+  const saved = readSavedPanel();
+
+  const width = clamp(
+    saved?.width ?? c.minWidth,
+    c.minWidth,
+    Math.max(c.minWidth, vw - 2 * c.edgeBuffer),
+  );
+  const height = clamp(
+    saved?.height ?? c.minHeight,
+    c.minHeight,
+    Math.max(c.minHeight, vh - c.appbarHeight - 2 * c.edgeBuffer),
+  );
+  const right = clamp(
+    saved?.right ?? c.edgeBuffer + 20,
+    c.edgeBuffer,
+    Math.max(c.edgeBuffer, vw - width - c.edgeBuffer),
+  );
+  const renderedHeight = (saved?.isMinimized ?? false) ? c.minimizedHeight : height;
+  const bottom = clamp(
+    saved?.bottom ?? Math.max(c.edgeBuffer, vh - c.appbarHeight - height - c.edgeBuffer),
+    c.edgeBuffer,
+    Math.max(c.edgeBuffer, vh - renderedHeight - c.appbarHeight - c.edgeBuffer),
+  );
+
   return {
-    right: c.edgeBuffer + 20,
+    right,
     bottom,
     width,
     height,
-    isMinimized: false,
+    isMinimized: saved?.isMinimized ?? false,
     isInteracting: false,
   };
 }
@@ -198,6 +240,13 @@ function panelReducer(state: PanelState, action: PanelAction): PanelState {
 export function useFloatingPanel(constraints: PanelConstraints) {
   const c = constraints;
   const [state, dispatch] = useReducer(panelReducer, c, computeInitialState);
+
+  // Persist panel geometry to localStorage so it survives page reloads.
+  useEffect(() => {
+    if (!state.isInteracting) {
+      savePanelState(state);
+    }
+  }, [state]);
 
   // Re-clamp position when the browser window is resized.
   useEffect(() => {

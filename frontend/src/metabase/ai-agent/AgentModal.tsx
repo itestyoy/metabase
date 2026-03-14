@@ -28,6 +28,29 @@ const PANEL_CONSTRAINTS = {
 const DOCK_WIDTH_DEFAULT = 420;
 const DOCK_WIDTH_MIN = 320;
 const DOCK_WIDTH_MAX = 800;
+const DOCK_STORAGE_KEY = "bi-agent-dock";
+
+function readDockState(): { isDocked: boolean; width: number } {
+  try {
+    const raw = localStorage.getItem(DOCK_STORAGE_KEY);
+    if (!raw) return { isDocked: false, width: DOCK_WIDTH_DEFAULT };
+    const parsed = JSON.parse(raw);
+    return {
+      isDocked: !!parsed.isDocked,
+      width: typeof parsed.width === "number" ? parsed.width : DOCK_WIDTH_DEFAULT,
+    };
+  } catch {
+    return { isDocked: false, width: DOCK_WIDTH_DEFAULT };
+  }
+}
+
+function saveDockState(isDocked: boolean, width: number) {
+  try {
+    localStorage.setItem(DOCK_STORAGE_KEY, JSON.stringify({ isDocked, width }));
+  } catch {
+    // storage unavailable
+  }
+}
 
 interface AgentModalProps {
   onClose: () => void;
@@ -41,8 +64,8 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const [context, setContext] = useState<AgentContextValue | null>(null);
   const [safeMode, setSafeMode] = useState(false);
   const [saveLocation, setSaveLocation] = useState<SaveLocation | null>(null);
-  const [isDocked, setIsDocked] = useState(false);
-  const [dockedWidth, setDockedWidth] = useState(DOCK_WIDTH_DEFAULT);
+  const [isDocked, setIsDocked] = useState(() => readDockState().isDocked);
+  const [dockedWidth, setDockedWidth] = useState(() => readDockState().width);
   const isContextManual = useRef(false);
 
   const { messages, isLoading, error, agentSettings, chatCollectionId, chatCollectionName, sendMessage, clearMessages } =
@@ -66,6 +89,11 @@ export function AgentModal({ onClose }: AgentModalProps) {
       document.documentElement.style.removeProperty("--agent-dock-width");
     };
   }, [isDocked]);
+
+  // Persist dock state to localStorage
+  useEffect(() => {
+    saveDockState(isDocked, dockedWidth);
+  }, [isDocked, dockedWidth]);
 
   const toggleDocked = useCallback(() => {
     setIsDocked((d: boolean) => !d);
