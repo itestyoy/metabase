@@ -388,6 +388,7 @@ function ContentBlockRenderer({
 
 function ToolCallMessage({ message }: { message: ChatMessage }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const isRunning = message.toolStatus === "running";
   const isError = message.toolStatus === "error";
   const toolLabel =
     message.toolName
@@ -410,13 +411,17 @@ function ToolCallMessage({ message }: { message: ChatMessage }) {
         style={message.toolResult ? { cursor: "pointer" } : undefined}
         onClick={message.toolResult ? () => setIsExpanded((v: boolean) => !v) : undefined}
       >
-        <Icon
-          name={isError ? "warning" : "check"}
-          size={12}
-          color={isError ? "var(--mb-color-error)" : "var(--mb-color-success)"}
-        />
+        {isRunning ? (
+          <Loader size={12} />
+        ) : (
+          <Icon
+            name={isError ? "warning" : "check"}
+            size={12}
+            color={isError ? "var(--mb-color-error)" : "var(--mb-color-success)"}
+          />
+        )}
         <Text size="xs" c="text-secondary" fs="italic" style={{ flex: 1 }}>
-          {toolLabel}
+          {toolLabel}{isRunning ? "…" : ""}
         </Text>
         {message.toolResult && (
           <Icon
