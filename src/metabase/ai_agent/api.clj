@@ -247,6 +247,13 @@
            (nil? (:database (:dataset_query block))))
       (format "Block %d (notebook_link): `dataset_query.database` is required." i)
 
+      ;; ── document_link ──
+      (and (= btype "document_link") (not (number? (:document_id block))))
+      (format "Block %d (document_link): `document_id` must be a number." i)
+
+      (and (= btype "document_link") (not (string? (:name block))))
+      (format "Block %d (document_link): `name` must be a string." i)
+
       ;; ── sql ──
       (and (= btype "sql") (not (string? (:content block))))
       (format "Block %d (sql): `content` must be a string." i)
@@ -319,13 +326,17 @@
   "Execute the OpenAI → tool-call → tool-result loop until the model
   returns a plain text response (or we hit the iteration limit).
 
+  `emit!` is an optional callback `(fn [event-type data-map])` that streams
+  SSE events to the client in real time. When nil, the function behaves
+  exactly as before (batch mode).
+
   Returns:
   ```
   {:response-id  \"resp_...\"
    :content      \"Final assistant text\"
    :tool-calls   [{:name … :args … :result …} …]}
   ```"
-  [api-key model initial-opts & {:keys [safe-mode? ensure-chat-coll!] :or {safe-mode? false}}]
+  [api-key model initial-opts & {:keys [safe-mode? ensure-chat-coll! emit!] :or {safe-mode? false}}]
   (loop [opts       initial-opts
          iterations 0
          all-calls  []]
@@ -347,12 +358,17 @@
           (let [tool-calls (ai.openai/extract-tool-calls response)
                 _          (log/debug "AI Agent executing tools" {:tools (map :name tool-calls)})
                 results    (mapv (fn [{:keys [call-id name arguments]}]
-                                   (let [args   (maybe-inject-collection-id name arguments ensure-chat-coll!)
-                                         result (ai.tools/execute-tool name args)]
-                                     {:name    name
-                                      :args    args
-                                      :result  result
-                                      :call-id call-id}))
+                                   (let [args (maybe-inject-collection-id name arguments ensure-chat-coll!)]
+                                     ;; Emit tool_start event
+                                     (when emit! (emit! "tool_start" {:name name}))
+                                     (let [result (ai.tools/execute-tool name args)]
+                                       ;; Emit tool_result event
+                                       (when emit! (emit! "tool_result" {:name   name
+                                                                         :result result}))
+                                       {:name    name
+                                        :args    args
+                                        :result  result
+                                        :call-id call-id})))
                                  tool-calls)
                 tool-results (mapv (fn [{:keys [call-id result]}]
                                      {:call-id call-id :output result})
@@ -413,6 +429,84 @@
                      (inc attempt)))))))))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
+;;; SSE helpers
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+(defn- sse-write!
+  "Write a single SSE event to a java.io.Writer. `event` is the event name,
+  `data` is a Clojure map that will be JSON-encoded."
+  [^java.io.Writer writer ^String event data]
+  (.write writer (str "event: " event "\n"))
+  (.write writer (str "data: " (json/generate-string data) "\n\n"))
+  (.flush writer))
+
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;; Shared chat preparation
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+(defn- prepare-chat-params
+  "Build all the shared parameters needed by both /chat and /chat-stream."
+  [{:keys [message previous-response-id context safe-mode chat-collection-id]}]
+  (let [api-key          (ai.settings/ai-agent-openai-api-key)
+        _                (api/check-403 (some? api-key))
+        model            (or (ai.settings/ai-agent-openai-model) "gpt-5.4")
+        personal-coll-id (try
+                           (:id (collection/user->personal-collection api/*current-user-id*))
+                           (catch Exception _ nil))
+        chat-coll-id-atom (atom chat-collection-id)
+        chat-coll-name    (str "AI: "
+                               (let [trimmed (clojure.string/trim message)]
+                                 (if (> (count trimmed) 60)
+                                   (str (subs trimmed 0 57) "...")
+                                   trimmed)))
+        ensure-chat-coll! (fn []
+                            (or @chat-coll-id-atom
+                                (when personal-coll-id
+                                  (try
+                                    (let [coll (t2/insert-returning-instance! :model/Collection
+                                                 {:name       chat-coll-name
+                                                  :location   (format "/%d/" personal-coll-id)
+                                                  :namespace  nil})
+                                          cid  (:id coll)]
+                                      (reset! chat-coll-id-atom cid)
+                                      cid)
+                                    (catch Exception e
+                                      (log/warn "Failed to create chat collection" (.getMessage e))
+                                      nil)))))
+        effective-msg  (str (if @chat-coll-id-atom
+                              (format "[Chat collection ID: %d — ALWAYS use this as collection_id when creating questions, dashboards, or documents. This keeps all items from this conversation organized together.]\n"
+                                      @chat-coll-id-atom)
+                              (when personal-coll-id
+                                (format "[User's personal collection ID: %d — when creating items, use this as collection_id. A dedicated sub-collection will be auto-created for this chat.]\n"
+                                        personal-coll-id)))
+                            (when context
+                              (str "[Context: "
+                                   (name (:model context))
+                                   " \""
+                                   (:name context)
+                                   "\" (id="
+                                   (:id context)
+                                   (when-let [db-id (:db_id context)]
+                                     (str ", db_id=" db-id))
+                                   ")]\n"))
+                            message)
+        safe-mode?     (boolean safe-mode)
+        effective-msg  (if safe-mode?
+                         (str "[SAFE MODE: All write/modify tools are disabled. You can only read and analyze data, not create or modify anything. If the user asks to create or modify something, explain that safe mode is on and they need to disable it.]\n"
+                              effective-msg)
+                         effective-msg)
+        opts           (cond-> {:message effective-msg}
+                         previous-response-id
+                         (assoc :previous-response-id previous-response-id))]
+    {:api-key           api-key
+     :model             model
+     :opts              opts
+     :safe-mode?        safe-mode?
+     :ensure-chat-coll! ensure-chat-coll!
+     :chat-coll-id-atom chat-coll-id-atom
+     :chat-coll-name    chat-coll-name}))
+
+;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Endpoints
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
@@ -447,75 +541,94 @@
                                                     [:chat_collection_id {:optional true} [:maybe :int]]]]
   (api/check-403 (ai.settings/ai-agent-enabled))
   (api/check-403 (current-user-in-ai-group?))
-  (let [api-key (ai.settings/ai-agent-openai-api-key)]
-    (api/check-403 (some? api-key))
-    (let [model          (or (ai.settings/ai-agent-openai-model) "gpt-5.4")
-          personal-coll-id (try
-                             (:id (collection/user->personal-collection api/*current-user-id*))
-                             (catch Exception _ nil))
-          ;; If the frontend already has a chat collection from a previous turn, reuse it.
-          ;; Otherwise, we'll create one lazily when the first write tool executes.
-          chat-coll-id-atom (atom chat-collection-id)
-          chat-coll-name    (str "AI: "
-                                 (let [trimmed (clojure.string/trim message)]
-                                   (if (> (count trimmed) 60)
-                                     (str (subs trimmed 0 57) "...")
-                                     trimmed)))
-          ;; Function that lazily creates the chat sub-collection on first write tool call.
-          ;; Returns the collection ID (existing or newly created).
-          ensure-chat-coll! (fn []
-                              (or @chat-coll-id-atom
-                                  (when personal-coll-id
-                                    (try
-                                      (let [coll (t2/insert-returning-instance! :model/Collection
-                                                   {:name       chat-coll-name
-                                                    :location   (format "/%d/" personal-coll-id)
-                                                    :namespace  nil})
-                                            cid  (:id coll)]
-                                        (reset! chat-coll-id-atom cid)
-                                        cid)
-                                      (catch Exception e
-                                        (log/warn "Failed to create chat collection" (.getMessage e))
-                                        nil)))))
-          ;; Prepend context hints
-          effective-msg  (str (if @chat-coll-id-atom
-                                (format "[Chat collection ID: %d — ALWAYS use this as collection_id when creating questions, dashboards, or documents. This keeps all items from this conversation organized together.]\n"
-                                        @chat-coll-id-atom)
-                                (when personal-coll-id
-                                  (format "[User's personal collection ID: %d — when creating items, use this as collection_id. A dedicated sub-collection will be auto-created for this chat.]\n"
-                                          personal-coll-id)))
-                              (when context
-                                (str "[Context: "
-                                     (name (:model context))
-                                     " \""
-                                     (:name context)
-                                     "\" (id="
-                                     (:id context)
-                                     (when-let [db-id (:db_id context)]
-                                       (str ", db_id=" db-id))
-                                     ")]\n"))
-                              message)
-          safe-mode?     (boolean safe-mode)
-          effective-msg  (if safe-mode?
-                           (str "[SAFE MODE: All write/modify tools are disabled. You can only read and analyze data, not create or modify anything. If the user asks to create or modify something, explain that safe mode is on and they need to disable it.]\n"
-                                effective-msg)
-                           effective-msg)
-          opts           (cond-> {:message effective-msg}
-                           previous-response-id
-                           (assoc :previous-response-id previous-response-id))
-          raw-result (run-tool-loop api-key model opts
-                                    :safe-mode? safe-mode?
-                                    :ensure-chat-coll! ensure-chat-coll!)
-          result     (validate-and-retry api-key model raw-result :safe-mode? safe-mode?)]
-      {:response_id         (:response-id result)
-       :content             (:content result)
-       :chat_collection_id   @chat-coll-id-atom
-       :chat_collection_name (when @chat-coll-id-atom chat-coll-name)
-       :tool_calls           (mapv (fn [{:keys [name args result]}]
-                                     {:name   name
-                                      :args   args
-                                      :result result})
-                                   (:tool-calls result))})))
+  (let [{:keys [api-key model opts safe-mode? ensure-chat-coll!
+                chat-coll-id-atom chat-coll-name]}
+        (prepare-chat-params {:message              message
+                              :previous-response-id previous-response-id
+                              :context              context
+                              :safe-mode            safe-mode
+                              :chat-collection-id   chat-collection-id})
+        raw-result (run-tool-loop api-key model opts
+                                  :safe-mode? safe-mode?
+                                  :ensure-chat-coll! ensure-chat-coll!)
+        result     (validate-and-retry api-key model raw-result :safe-mode? safe-mode?)]
+    {:response_id         (:response-id result)
+     :content             (:content result)
+     :chat_collection_id   @chat-coll-id-atom
+     :chat_collection_name (when @chat-coll-id-atom chat-coll-name)
+     :tool_calls           (mapv (fn [{:keys [name args result]}]
+                                   {:name   name
+                                    :args   args
+                                    :result result})
+                                 (:tool-calls result))}))
+
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :post "/chat-stream"
+  "SSE streaming version of /chat. Sends real-time events as tools execute.
+
+  Events:
+  - `tool_start`  — `{\"name\": \"tool_name\"}`
+  - `tool_result` — `{\"name\": \"tool_name\", \"result\": \"...\"}`
+  - `done`        — final response with content, response_id, collection info"
+  [_route-params
+   _query-params
+   {message              :message
+    previous-response-id :previous_response_id
+    context              :context
+    safe-mode            :safe_mode
+    chat-collection-id   :chat_collection_id} :- [:map
+                                                    [:message              ms/NonBlankString]
+                                                    [:previous_response_id {:optional true} [:maybe :string]]
+                                                    [:context              {:optional true}
+                                                     [:maybe [:map
+                                                              [:id    :int]
+                                                              [:name  :string]
+                                                              [:model :string]
+                                                              [:db_id {:optional true} [:maybe :int]]]]]
+                                                    [:safe_mode {:optional true} [:maybe :boolean]]
+                                                    [:chat_collection_id {:optional true} [:maybe :int]]]]
+  (api/check-403 (ai.settings/ai-agent-enabled))
+  (api/check-403 (current-user-in-ai-group?))
+  (let [params (prepare-chat-params {:message              message
+                                     :previous-response-id previous-response-id
+                                     :context              context
+                                     :safe-mode            safe-mode
+                                     :chat-collection-id   chat-collection-id})]
+    ;; Return a Ring streaming response with text/event-stream content type.
+    ;; The body is a piped stream: we write SSE events on a background thread
+    ;; and the Ring adapter reads from the other end.
+    (let [pipe-in  (java.io.PipedInputStream. 8192)
+          pipe-out (java.io.PipedOutputStream. pipe-in)]
+      ;; Launch the work on a daemon thread so the response starts streaming immediately
+      (future
+        (let [writer (java.io.BufferedWriter. (java.io.OutputStreamWriter. pipe-out "UTF-8"))]
+          (try
+            (let [{:keys [api-key model opts safe-mode? ensure-chat-coll!
+                          chat-coll-id-atom chat-coll-name]} params
+                  emit!      (fn [event data] (sse-write! writer event data))
+                  raw-result (run-tool-loop api-key model opts
+                                            :safe-mode? safe-mode?
+                                            :ensure-chat-coll! ensure-chat-coll!
+                                            :emit! emit!)
+                  result     (validate-and-retry api-key model raw-result :safe-mode? safe-mode?)]
+              (sse-write! writer "done"
+                          {:response_id         (:response-id result)
+                           :content             (:content result)
+                           :chat_collection_id   @chat-coll-id-atom
+                           :chat_collection_name (when @chat-coll-id-atom chat-coll-name)
+                           :tool_calls           (mapv (fn [{:keys [name args result]}]
+                                                         {:name name :args args :result result})
+                                                       (:tool-calls result))}))
+            (catch Exception e
+              (log/error "SSE chat-stream error" (.getMessage e))
+              (try (sse-write! writer "error" {:message (.getMessage e)}) (catch Exception _)))
+            (finally
+              (.close writer)))))
+      {:status  200
+       :headers {"Content-Type"  "text/event-stream; charset=utf-8"
+                 "Cache-Control" "no-cache"
+                 "Connection"    "keep-alive"}
+       :body    pipe-in})))
 
 #_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
 (api.macros/defendpoint :get "/settings"

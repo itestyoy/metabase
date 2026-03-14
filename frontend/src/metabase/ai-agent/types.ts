@@ -20,7 +20,7 @@ export interface ChatMessage {
   /** Follow-up suggestions from the AI (assistant only). */
   suggestions?: string[];
   /** UI-only: tool execution status */
-  toolStatus?: "done" | "error";
+  toolStatus?: "running" | "done" | "error";
   toolName?: string;
   toolResult?: string;
 }

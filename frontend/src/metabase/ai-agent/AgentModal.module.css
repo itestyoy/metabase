@@ -543,7 +543,9 @@
   margin-left: 8px;
 }
 
-/* Header in docked mode: no drag cursor */
+/* Header in docked mode: match Metabase app bar appearance */
 .modalHeaderDocked {
   cursor: default;
+  background: var(--mb-color-background-primary);
+  border-bottom: 1px solid var(--mb-color-border);
 }

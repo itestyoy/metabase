@@ -200,8 +200,8 @@ export function AgentModal({ onClose }: AgentModalProps) {
       {/* ── Header ─────────────────────────────────── */}
       <div className={`${S.modalHeader} ${isDocked ? S.modalHeaderDocked : ""}`} {...(isDocked ? {} : headerProps)}>
         <div className={S.modalHeaderTitle}>
-          <Icon name="ai" size={18} c="white" />
-          <Text size="sm" fw={600} c="white">
+          <Icon name="ai" size={18} c={isDocked ? "var(--mb-color-text-primary)" : "white"} />
+          <Text size="sm" fw={600} c={isDocked ? "text-primary" : "white"}>
             {t`BI Agent`}
           </Text>
         </div>
@@ -211,7 +211,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
             <Tooltip label={t`Clear conversation`}>
               <ActionIcon
                 variant="transparent"
-                c="rgba(255,255,255,0.8)"
+                c={isDocked ? "var(--mb-color-text-secondary)" : "rgba(255,255,255,0.8)"}
                 size="sm"
                 onClick={handleClearMessages}
                 aria-label={t`Clear conversation`}
@@ -223,7 +223,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
           <Tooltip label={isDocked ? t`Undock` : t`Dock to right`}>
             <ActionIcon
               variant="transparent"
-              c="rgba(255,255,255,0.8)"
+              c={isDocked ? "var(--mb-color-text-secondary)" : "rgba(255,255,255,0.8)"}
               size="sm"
               onClick={toggleDocked}
               aria-label={isDocked ? t`Undock` : t`Dock to right`}
@@ -247,7 +247,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
           <Tooltip label={t`Close`}>
             <ActionIcon
               variant="transparent"
-              c="rgba(255,255,255,0.8)"
+              c={isDocked ? "var(--mb-color-text-secondary)" : "rgba(255,255,255,0.8)"}
               size="sm"
               onClick={onClose}
               aria-label={t`Close`}

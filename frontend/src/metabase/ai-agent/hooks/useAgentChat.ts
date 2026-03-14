@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import api from "metabase/lib/api";
 
@@ -27,6 +27,8 @@ function isValidBlock(b: unknown): b is ContentBlock {
       return typeof block.name === "string" && typeof block.display === "string" && block.dataset_query != null && typeof block.dataset_query === "object";
     case "dashboard_link":
       return typeof block.dashboard_id === "number" && typeof block.name === "string";
+    case "document_link":
+      return typeof block.document_id === "number" && typeof block.name === "string";
     case "table":
       return Array.isArray(block.columns) && Array.isArray(block.rows);
     default:
@@ -82,6 +84,28 @@ interface AgentResponse {
   }>;
 }
 
+/** Parse SSE text into events. Handles multi-line data fields. */
+function parseSSE(text: string): Array<{ event: string; data: string }> {
+  const events: Array<{ event: string; data: string }> = [];
+  const blocks = text.split("\n\n");
+  for (const block of blocks) {
+    if (!block.trim()) continue;
+    let event = "";
+    let data = "";
+    for (const line of block.split("\n")) {
+      if (line.startsWith("event: ")) {
+        event = line.slice(7);
+      } else if (line.startsWith("data: ")) {
+        data += line.slice(6);
+      }
+    }
+    if (event && data) {
+      events.push({ event, data });
+    }
+  }
+  return events;
+}
+
 export function useAgentChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -94,6 +118,7 @@ export function useAgentChat() {
   const [agentSettings, setAgentSettings] = useState<AgentSettings | null>(
     null,
   );
+  const abortRef = useRef<AbortController | null>(null);
 
   // Fetch agent settings from backend (is it configured, what model)
   useEffect(() => {
@@ -120,6 +145,10 @@ export function useAgentChat() {
   }, []);
 
   const clearMessages = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
     setMessages([]);
     setError(null);
     setPreviousResponseId(null);
@@ -139,96 +168,182 @@ export function useAgentChat() {
       };
       setMessages(prev => [...prev, userMsg]);
 
-      // Optimistic loading bubble while waiting for the backend
+      // Optimistic loading bubble while waiting for the first SSE event
       const loadingId = makeId();
       setMessages(prev => [
         ...prev,
         { id: loadingId, role: "assistant", content: null },
       ]);
 
-      try {
-        const body: Record<string, unknown> = { message: userText };
-        if (previousResponseId) {
-          body.previous_response_id = previousResponseId;
-        }
-        if (context) {
-          body.context = {
-            id: context.id,
-            name: context.name,
-            model: context.model,
-            ...(context.db_id != null ? { db_id: context.db_id } : {}),
-            ...(context.url_params ? { url_params: context.url_params } : {}),
-            ...(context.dataset_query ? { dataset_query: context.dataset_query } : {}),
-          };
-        }
-        if (safeMode) {
-          body.safe_mode = true;
-        }
-        // User-chosen collection takes priority over auto-created chat collection
-        const effectiveCollectionId = targetCollectionId ?? chatCollectionId;
-        if (effectiveCollectionId) {
-          body.chat_collection_id = effectiveCollectionId;
-        }
-
-        const response = (await api.POST("/api/ai-agent/chat")(
-          body,
-        )) as AgentResponse;
-
-        // Remove the loading bubble
-        setMessages(prev => prev.filter(m => m.id !== loadingId));
-
-        // Show tool call executions (returned by backend)
-        if (response.tool_calls?.length) {
-          const toolMsgs: ChatMessage[] = response.tool_calls.map(tc => ({
-            id: makeId(),
-            role: "tool" as const,
-            content: tc.result,
-            toolStatus: tc.result.startsWith("Error")
-              ? ("error" as const)
-              : ("done" as const),
-            toolName: tc.name,
-            toolResult: tc.result,
-          }));
-          setMessages(prev => [...prev, ...toolMsgs]);
-        }
-
-        // Final assistant text — try to parse structured blocks + suggestions
-        const rawContent = response.content ?? "";
-        const { blocks, suggestions } = parseResponse(rawContent);
-        const assistantMsg: ChatMessage = {
-          id: makeId(),
-          role: "assistant",
-          content: blocks ? null : rawContent,
-          blocks,
-          suggestions,
+      const body: Record<string, unknown> = { message: userText };
+      if (previousResponseId) {
+        body.previous_response_id = previousResponseId;
+      }
+      if (context) {
+        body.context = {
+          id: context.id,
+          name: context.name,
+          model: context.model,
+          ...(context.db_id != null ? { db_id: context.db_id } : {}),
+          ...(context.url_params ? { url_params: context.url_params } : {}),
+          ...(context.dataset_query ? { dataset_query: context.dataset_query } : {}),
         };
-        setMessages(prev => [...prev, assistantMsg]);
+      }
+      if (safeMode) {
+        body.safe_mode = true;
+      }
+      const effectiveCollectionId = targetCollectionId ?? chatCollectionId;
+      if (effectiveCollectionId) {
+        body.chat_collection_id = effectiveCollectionId;
+      }
 
-        // Persist the response_id so next turn continues the conversation
-        if (response.response_id) {
-          setPreviousResponseId(response.response_id);
+      // Map of tool_name → message_id for tracking running tools
+      const toolMsgIds = new Map<string, string>();
+      const abortController = new AbortController();
+      abortRef.current = abortController;
+
+      try {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (api.sessionToken) {
+          headers["X-Metabase-Session"] = api.sessionToken;
         }
-        // Persist the chat collection so subsequent turns reuse the same sub-collection
-        if (response.chat_collection_id) {
-          setChatCollectionId(response.chat_collection_id);
-          if (response.chat_collection_name) {
-            setChatCollectionName(response.chat_collection_name);
+
+        const response = await fetch("/api/ai-agent/chat-stream", {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+          signal: abortController.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server error: ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error("No response body");
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let loadingRemoved = false;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Process complete SSE events (separated by \n\n)
+          const events = parseSSE(buffer);
+          // Keep any incomplete trailing text in buffer
+          const lastDoubleNewline = buffer.lastIndexOf("\n\n");
+          if (lastDoubleNewline >= 0) {
+            buffer = buffer.slice(lastDoubleNewline + 2);
+          }
+
+          for (const evt of events) {
+            let parsed: Record<string, unknown>;
+            try {
+              parsed = JSON.parse(evt.data);
+            } catch {
+              continue;
+            }
+
+            if (evt.event === "tool_start") {
+              // Remove loading bubble on first tool event
+              if (!loadingRemoved) {
+                setMessages(prev => prev.filter(m => m.id !== loadingId));
+                loadingRemoved = true;
+              }
+              const toolName = parsed.name as string;
+              const msgId = makeId();
+              toolMsgIds.set(toolName, msgId);
+              setMessages(prev => [
+                ...prev,
+                {
+                  id: msgId,
+                  role: "tool" as const,
+                  content: null,
+                  toolStatus: "running" as const,
+                  toolName,
+                },
+              ]);
+            } else if (evt.event === "tool_result") {
+              const toolName = parsed.name as string;
+              const result = parsed.result as string;
+              const existingId = toolMsgIds.get(toolName);
+              if (existingId) {
+                // Update the running tool message to done/error
+                setMessages(prev =>
+                  prev.map(m =>
+                    m.id === existingId
+                      ? {
+                          ...m,
+                          content: result,
+                          toolStatus: result.startsWith("Error") ? "error" as const : "done" as const,
+                          toolResult: result,
+                        }
+                      : m,
+                  ),
+                );
+              }
+            } else if (evt.event === "done") {
+              // Remove loading bubble if no tools ran
+              if (!loadingRemoved) {
+                setMessages(prev => prev.filter(m => m.id !== loadingId));
+                loadingRemoved = true;
+              }
+
+              const doneData = parsed as unknown as AgentResponse;
+
+              // Final assistant text
+              const rawContent = doneData.content ?? "";
+              const { blocks, suggestions } = parseResponse(rawContent);
+              const assistantMsg: ChatMessage = {
+                id: makeId(),
+                role: "assistant",
+                content: blocks ? null : rawContent,
+                blocks,
+                suggestions,
+              };
+              setMessages(prev => [...prev, assistantMsg]);
+
+              if (doneData.response_id) {
+                setPreviousResponseId(doneData.response_id);
+              }
+              if (doneData.chat_collection_id) {
+                setChatCollectionId(doneData.chat_collection_id);
+                if (doneData.chat_collection_name) {
+                  setChatCollectionName(doneData.chat_collection_name);
+                }
+              }
+            } else if (evt.event === "error") {
+              throw new Error((parsed.message as string) || "Stream error");
+            }
           }
         }
       } catch (err: unknown) {
-        setMessages(prev => prev.filter(m => m.id !== loadingId));
-        const errMsg =
-          err instanceof Error ? err.message : "An unexpected error occurred";
-        setError(errMsg);
-        setMessages(prev => [
-          ...prev,
-          {
-            id: makeId(),
-            role: "assistant",
-            content: `Sorry, I encountered an error: ${errMsg}`,
-          },
-        ]);
+        if ((err as Error).name === "AbortError") {
+          // User cleared chat — ignore
+        } else {
+          setMessages(prev => prev.filter(m => m.id !== loadingId));
+          const errMsg =
+            err instanceof Error ? err.message : "An unexpected error occurred";
+          setError(errMsg);
+          setMessages(prev => [
+            ...prev,
+            {
+              id: makeId(),
+              role: "assistant",
+              content: `Sorry, I encountered an error: ${errMsg}`,
+            },
+          ]);
+        }
       } finally {
+        abortRef.current = null;
         setIsLoading(false);
       }
     },
