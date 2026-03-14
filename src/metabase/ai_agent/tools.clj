@@ -1504,7 +1504,13 @@ Save all key queries as questions, then build a Metabase Document with:
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
 (defn- create-document [{:strs [name content collection_id]}]
-  (let [ast (json/parse-string content)
+  (let [ast (try
+              (json/parse-string content)
+              (catch Exception e
+                (throw (ex-info (str "Error: the `content` parameter is not valid JSON. "
+                                     "Make sure the ProseMirror AST is a complete, well-formed JSON string. "
+                                     "Parse error: " (.getMessage e))
+                                {:content-preview (subs content 0 (min 200 (count content)))}))))
         doc (t2/insert-returning-instance! :model/Document
               {:name          name
                :document      ast

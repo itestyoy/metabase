@@ -254,11 +254,12 @@ Example (investigation):
 (defn- build-request-body
   "Build the complete POST body for /v1/responses."
   [{:keys [model tools previous-response-id] :as opts}]
-  (cond-> {:model        model
+  (cond-> {:model             model
            ;; System prompt via `instructions` (not inside `input`)
-           :instructions system-instructions
-           :input        (build-input opts)
-           :store        true}    ; store=true is required for previous_response_id to work
+           :instructions      system-instructions
+           :input             (build-input opts)
+           :store             true       ; store=true is required for previous_response_id to work
+           :max_output_tokens 16384}     ; generous limit so tool call arguments (e.g. ProseMirror AST) aren't truncated
     previous-response-id (assoc :previous_response_id previous-response-id)
     (seq tools)          (assoc :tools        tools
                                 :tool_choice  "auto")))
