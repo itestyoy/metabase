@@ -7,6 +7,7 @@ import { ActionIcon, Anchor, Icon, Stack, Text, Textarea, Tooltip } from "metaba
 import { AgentChatMessages } from "./AgentChatMessages";
 import type { AgentContextValue } from "./AgentContextPicker";
 import { AgentContextPicker } from "./AgentContextPicker";
+import { AgentMcpServers } from "./AgentMcpServers";
 import type { SaveLocation } from "./AgentSaveLocationPicker";
 import { AgentSaveLocationPicker } from "./AgentSaveLocationPicker";
 import { useAgentChat } from "./hooks/useAgentChat";
@@ -352,6 +353,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                 <div className={S.bottomBarRow}>
                   <AgentContextPicker value={context} onChange={handleContextChange} />
                   <AgentSaveLocationPicker value={saveLocation} onChange={setSaveLocation} />
+                  <AgentMcpServers />
                 </div>
               </div>
             </>

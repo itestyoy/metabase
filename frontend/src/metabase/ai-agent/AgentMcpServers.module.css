@@ -1,0 +1,55 @@
+/* MCP servers bar — sits in the bottom bar next to context/save pickers */
+.mcpBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: var(--mb-color-background-primary);
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mcpLabel {
+  flex-shrink: 0;
+}
+
+.mcpChips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mcpChip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 6px;
+  background: color-mix(in srgb, var(--mb-color-success) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mb-color-success) 30%, transparent);
+  border-radius: 12px;
+  color: var(--mb-color-success);
+  font-family: inherit;
+  font-size: inherit;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.mcpChipName {
+  color: var(--mb-color-success);
+  font-weight: 500;
+}
+
+.mcpChipCount {
+  color: color-mix(in srgb, var(--mb-color-success) 70%, transparent);
+}
+
+.mcpEmpty {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  color: var(--mb-color-text-tertiary);
+}

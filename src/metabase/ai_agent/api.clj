@@ -658,17 +658,20 @@
 
 #_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
 (api.macros/defendpoint :get "/mcp-servers"
-  "Return status of connected MCP servers and their available tools."
+  "Return status of connected MCP servers and their available tools.
+   AI-group users see server names and tool lists; superusers also see URLs."
   []
-  (api/check-superuser)
-  (let [registry @ai.mcp/server-registry]
+  (api/check-403 (ai.settings/ai-agent-enabled))
+  (api/check-403 (current-user-in-ai-group?))
+  (let [registry  @ai.mcp/server-registry
+        su?       api/*is-superuser?*]
     {:servers (mapv (fn [[name server]]
                       (let [tools (try (ai.mcp/list-tools server) (catch Exception _ []))]
-                        {:name              name
-                         :sse_url           (:sse-url server)
-                         :message_endpoint  (:message-endpoint server)
-                         :tools             (mapv (fn [t] {:name (:name t) :description (:description t)})
-                                                  tools)}))
+                        (cond-> {:name  name
+                                 :tools (mapv (fn [t] {:name (:name t) :description (:description t)})
+                                              tools)}
+                          su? (assoc :sse_url          (:sse-url server)
+                                     :message_endpoint (:message-endpoint server)))))
                     registry)}))
 
 #_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
