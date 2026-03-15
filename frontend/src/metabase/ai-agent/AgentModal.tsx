@@ -365,7 +365,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
               </div>
 
               {/* ── Bottom bar: safe mode, context, save location ── */}
-              <div className={S.bottomBar}>
+              <div className={`${S.bottomBar} ${isDocked ? S.bottomBarDocked : ""}`}>
                 <Tooltip label={safeMode ? t`Safe mode ON — write tools disabled` : t`Safe mode OFF — all tools enabled`}>
                   <ActionIcon
                     variant={safeMode ? "filled" : "subtle"}
