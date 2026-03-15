@@ -660,7 +660,7 @@
   []
   (api/check-403 (ai.settings/ai-agent-enabled))
   (api/check-403 (current-user-in-ai-group?))
-  (let [registry  @ai.mcp/server-registry
+  (let [registry  (ai.mcp/ensure-connected)
         su?       api/*is-superuser?*]
     {:servers (mapv (fn [[name server]]
                       (let [tools (try (ai.mcp/list-tools server) (catch Exception _ []))]
