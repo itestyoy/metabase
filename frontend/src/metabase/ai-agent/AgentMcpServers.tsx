@@ -40,17 +40,13 @@ export function AgentMcpServers() {
   return (
     <div className={S.mcpBar}>
       <Text size="xs" c="text-tertiary" className={S.mcpLabel}>
-        {t`MCP:`}
+        {t`Tools:`}
       </Text>
       <div className={S.mcpChips}>
         {servers.map(server => (
           <Tooltip
             key={server.name}
-            label={
-              server.tools.length > 0
-                ? server.tools.map(tool => tool.name).join(", ")
-                : t`No tools available`
-            }
+            label={server.name}
             multiline
             maw={300}
           >
@@ -58,9 +54,6 @@ export function AgentMcpServers() {
               <Icon name="bolt" size={10} />
               <Text size="xs" className={S.mcpChipName}>
                 {server.name}
-              </Text>
-              <Text size="xs" className={S.mcpChipCount}>
-                ({server.tools.length})
               </Text>
             </div>
           </Tooltip>
