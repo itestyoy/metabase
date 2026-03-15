@@ -443,6 +443,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
         _      (api/check-403 (mi/can-read? db))
         tables (filter mi/can-read?
                        (t2/select :model/Table :db_id database-id :active true
+                                  :visibility_type nil
                                   {:order-by [[:schema :asc] [:name :asc]]}))]
     (if (empty? tables)
       (format "Database \"%s\" has no accessible tables." (:name db))
@@ -451,6 +452,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                         (t2/select :model/Field
                                    :table_id [:in table-ids]
                                    :active true
+                                   :visibility_type :normal
                                    {:order-by [[:table_id :asc] [:position :asc]]}))
             by-table  (group-by :table_id fields)
             summaries (map (fn [tbl]
@@ -766,6 +768,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
         fields (t2/select :model/Field
                            :table_id table-id
                            :active true
+                           :visibility_type :normal
                            {:order-by [[:position :asc]]})]
     (str (format "Table details (ID: %d):\n" table-id)
          (format "- Name: %s%s\n"
@@ -894,6 +897,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
         _      (api/check-403 (mi/can-read? db))
         tables (filter mi/can-read?
                        (t2/select :model/Table :db_id database-id :active true
+                                  :visibility_type nil
                                   {:order-by [[:schema :asc] [:name :asc]]}))]
     (if (empty? tables)
       (format "Database \"%s\" has no accessible tables." (:name db))
@@ -1574,7 +1578,7 @@ Save all key queries as questions, then build a Metabase Document with:
         _         (api/check-404 doc)
         _         (api/check-403 (mi/can-write? doc))
         new-nodes (try
-                    (json/parse-string nodes)
+                    (json/parse-string nodes true)
                     (catch Exception e
                       (throw (ex-info (str "Error: `nodes` is not valid JSON array. Parse error: "
                                            (.getMessage e))
@@ -1582,7 +1586,7 @@ Save all key queries as questions, then build a Metabase Document with:
         _         (when-not (sequential? new-nodes)
                     (throw (ex-info "Error: `nodes` must be a JSON array of ProseMirror nodes." {})))
         current-ast (:document doc)
-        updated-ast (update current-ast "content"
+        updated-ast (update current-ast :content
                             (fn [existing] (into (vec existing) new-nodes)))]
     (t2/update! :model/Document :id document_id
                 {:document     updated-ast
