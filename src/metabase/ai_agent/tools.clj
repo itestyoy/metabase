@@ -409,6 +409,17 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                                          :archived      {:type        ["boolean" "null"]
                                                          :description "Set to true to archive, false to unarchive. Pass null to keep unchanged."}}
                   :required             ["document_id" "name" "content" "collection_id" "archived"]
+                  :additionalProperties false}}
+   {:type        "function"
+    :name        "append_to_document"
+    :description "Append new sections to the END of an existing Metabase Document. Use this to build documents incrementally — add 1-3 sections at a time without reading or rewriting the full document. Much more efficient than get_document + update_document for long documents."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:document_id {:type        "integer"
+                                                       :description "The document ID to append to."}
+                                         :nodes       {:type        "string"
+                                                       :description "A JSON array of ProseMirror nodes to append. Example: [{\"type\":\"heading\",\"attrs\":{\"level\":2},\"content\":[{\"type\":\"text\",\"text\":\"New Section\"}]},{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Some text.\"}]}]"}}
+                  :required             ["document_id" "nodes"]
                   :additionalProperties false}}])
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
@@ -1558,6 +1569,27 @@ Save all key queries as questions, then build a Metabase Document with:
     (format "Document updated successfully!\n- ID: %d\n- URL: /document/%d"
             document_id document_id)))
 
+(defn- append-to-document [{:strs [document_id nodes]}]
+  (let [doc       (t2/select-one :model/Document :id document_id)
+        _         (api/check-404 doc)
+        _         (api/check-403 (mi/can-write? doc))
+        new-nodes (try
+                    (json/parse-string nodes)
+                    (catch Exception e
+                      (throw (ex-info (str "Error: `nodes` is not valid JSON array. Parse error: "
+                                           (.getMessage e))
+                                      {}))))
+        _         (when-not (sequential? new-nodes)
+                    (throw (ex-info "Error: `nodes` must be a JSON array of ProseMirror nodes." {})))
+        current-ast (:document doc)
+        updated-ast (update current-ast "content"
+                            (fn [existing] (into (vec existing) new-nodes)))]
+    (t2/update! :model/Document :id document_id
+                {:document     updated-ast
+                 :content_type prose-mirror/prose-mirror-content-type})
+    (format "Appended %d node(s) to document.\n- ID: %d\n- URL: /document/%d"
+            (count new-nodes) document_id document_id)))
+
 (defn- list-metrics [database-id table-id]
   (let [metrics (->> (cond-> {:archived false
                               :type     :metric}
@@ -1592,7 +1624,7 @@ Save all key queries as questions, then build a Metabase Document with:
 (def ^:private write-tool-names
   "Tool names that create, modify, or delete data. Disabled in safe mode."
   #{"create_question" "update_question" "create_dashboard" "add_card_to_dashboard"
-    "archive_item" "move_item" "create_notebook_question" "create_document" "update_document"})
+    "archive_item" "move_item" "create_notebook_question" "create_document" "update_document" "append_to_document"})
 
 (defn- read-only-tools
   "Filter tool definitions to only include read-only tools."
@@ -1653,6 +1685,7 @@ Save all key queries as questions, then build a Metabase Document with:
         "create_document" (create-document args)
         "get_document"    (get-document-details (get args "document_id"))
         "update_document" (update-document args)
+        "append_to_document" (append-to-document args)
         (str "Unknown tool: " tool-name)))
     (catch Exception e
       (log/warn e "AI Agent tool execution failed" {:tool tool-name})
