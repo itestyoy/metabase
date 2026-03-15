@@ -543,6 +543,11 @@
   margin-left: 8px;
 }
 
+/* Bottom bar in docked mode: match header height */
+.bottomBarDocked {
+  height: 50px;
+}
+
 /* Header in docked mode: match Metabase app bar appearance */
 .modalHeaderDocked {
   cursor: default;
