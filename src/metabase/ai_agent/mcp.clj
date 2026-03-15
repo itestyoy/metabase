@@ -204,7 +204,7 @@
             :when (some? url)]
         {:name n :url url}))))
 
-(defn- ensure-connected
+(defn ensure-connected
   "Ensure all configured MCP servers are connected. Returns the current registry map."
   []
   (let [configs (parse-server-config)]
