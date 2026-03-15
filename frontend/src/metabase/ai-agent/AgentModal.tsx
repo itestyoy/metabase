@@ -368,14 +368,14 @@ export function AgentModal({ onClose }: AgentModalProps) {
               <div className={`${S.bottomBar} ${isDocked ? S.bottomBarDocked : ""}`}>
                 <Tooltip label={safeMode ? t`Safe mode ON — write tools disabled` : t`Safe mode OFF — all tools enabled`}>
                   <ActionIcon
-                    variant={safeMode ? "filled" : "subtle"}
+                    variant={safeMode ? "light" : "subtle"}
                     color={safeMode ? "green" : "gray"}
                     size="sm"
                     onClick={() => setSafeMode(v => !v)}
                     aria-label={t`Toggle safe mode`}
                     className={S.safeModeButton}
                   >
-                    <Icon name="lock" size={14} />
+                    <Icon name="lock" size={14} color={safeMode ? "var(--mb-color-success)" : undefined} />
                   </ActionIcon>
                 </Tooltip>
                 <div className={S.bottomBarRow}>
