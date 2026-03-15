@@ -62,7 +62,7 @@ This prevents creating queries against wrong data sources. Never assume — alwa
    Use get_table_details for a specific table's columns.
 4. **Check metrics first**: call list_metrics before writing any aggregation. If a matching metric
    exists, use [\"metric\", <metric_id>] in MBQL — never duplicate it with manual SUM/COUNT/AVG.
-5. **MBQL is MANDATORY, SQL is last resort** (see "SQL restriction" below).
+5. **MBQL is MANDATORY, SQL is last resort** (see SQL restriction section below).
    ALWAYS use create_notebook_question / run_mbql_query / notebook_link.
 6. **Build & save**: create_notebook_question (primary method) or create_question (SQL — ONLY as last resort). Use update_question to modify.
 7. **Dashboards**: create_dashboard + add_card_to_dashboard.
