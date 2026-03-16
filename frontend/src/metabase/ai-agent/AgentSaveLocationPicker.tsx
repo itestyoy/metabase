@@ -113,24 +113,31 @@ export function AgentSaveLocationPicker({ value, onChange }: AgentSaveLocationPi
       >
         <Menu.Target>
           {value ? (
-            <UnstyledButton
-              className={S.saveChip}
-              onClick={() => setIsOpen((o: boolean) => !o)}
+            <Tooltip
+              label={t`Save to: ` + value.name}
+              position="top"
+              withArrow
+              openDelay={400}
             >
-              <Icon name="folder" size={11} />
-              <Text size="xs" lh={1} className={S.saveChipText} title={value.name}>
-                {value.name}
-              </Text>
-              <ActionIcon
-                size={14}
-                variant="transparent"
-                className={S.saveChipClear}
-                onClick={handleClear}
-                aria-label={t`Reset to auto`}
+              <UnstyledButton
+                className={S.saveChip}
+                onClick={() => setIsOpen((o: boolean) => !o)}
               >
-                <Icon name="close" size={9} />
-              </ActionIcon>
-            </UnstyledButton>
+                <Icon name="folder" size={11} />
+                <Text size="xs" lh={1} component="span" className={S.saveChipText} title={value.name}>
+                  {value.name}
+                </Text>
+                <ActionIcon
+                  size={14}
+                  variant="transparent"
+                  className={S.saveChipClear}
+                  onClick={handleClear}
+                  aria-label={t`Reset to auto`}
+                >
+                  <Icon name="close" size={9} />
+                </ActionIcon>
+              </UnstyledButton>
+            </Tooltip>
           ) : (
             <Tooltip label={t`Save location — auto-creates a sub-collection`} position="top" withArrow>
               <UnstyledButton

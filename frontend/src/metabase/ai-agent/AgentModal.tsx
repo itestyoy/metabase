@@ -388,12 +388,6 @@ export function AgentModal({ onClose }: AgentModalProps) {
 
               {/* ── Bottom bar: context, save location, safe mode ── */}
               <div className={S.bottomBar}>
-                <AgentContextPicker value={context} onChange={handleContextChange} />
-                <AgentDatasourcePicker value={datasource} onChange={handleDatasourceChange} />
-                <AgentSaveLocationPicker value={saveLocation} onChange={setSaveLocation} />
-                <AgentMcpServers />
-                <div className={S.bottomBarSpacer} />
-                <div className={S.bottomBarDivider} />
                 <Tooltip label={safeMode ? t`Safe mode ON — write tools disabled` : t`Safe mode OFF — all tools enabled`}>
                   <ActionIcon
                     variant={safeMode ? "light" : "subtle"}
@@ -405,6 +399,11 @@ export function AgentModal({ onClose }: AgentModalProps) {
                     <Icon name="lock" size={14} color={safeMode ? "var(--mb-color-success)" : undefined} />
                   </ActionIcon>
                 </Tooltip>
+                <div className={S.bottomBarDivider} />
+                <AgentContextPicker value={context} onChange={handleContextChange} />
+                <AgentDatasourcePicker value={datasource} onChange={handleDatasourceChange} />
+                <AgentSaveLocationPicker value={saveLocation} onChange={setSaveLocation} />
+                <AgentMcpServers />
               </div>
             </>
           )}

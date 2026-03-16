@@ -66,24 +66,31 @@ export function AgentContextPicker({ value, onChange }: AgentContextPickerProps)
     <Box className={S.contextBar}>
       <Box className={S.contextAnchor}>
         {value ? (
-          <UnstyledButton
-            className={S.contextChip}
-            onClick={() => setIsOpen((o: boolean) => !o)}
+          <Tooltip
+            label={`${LABEL()[value.model] ?? value.model}: ${value.name}`}
+            position="top"
+            withArrow
+            openDelay={400}
           >
-            <Icon name={ICON[value.model] ?? "database"} size={11} />
-            <Text size="xs" lh={1} className={S.contextChipText} title={value.name}>
-              {value.name}
-            </Text>
-            <ActionIcon
-              size={14}
-              variant="transparent"
-              className={S.contextChipClear}
-              onClick={handleClear}
-              aria-label={t`Remove context`}
+            <UnstyledButton
+              className={S.contextChip}
+              onClick={() => setIsOpen((o: boolean) => !o)}
             >
-              <Icon name="close" size={9} />
-            </ActionIcon>
-          </UnstyledButton>
+              <Icon name={ICON[value.model] ?? "database"} size={11} />
+              <Text size="xs" lh={1} component="span" className={S.contextChipText} title={value.name}>
+                {value.name}
+              </Text>
+              <ActionIcon
+                size={14}
+                variant="transparent"
+                className={S.contextChipClear}
+                onClick={handleClear}
+                aria-label={t`Remove context`}
+              >
+                <Icon name="close" size={9} />
+              </ActionIcon>
+            </UnstyledButton>
+          </Tooltip>
         ) : (
           <Tooltip label={t`Add context (current page, question, dashboard…)`} position="top" withArrow>
             <UnstyledButton
