@@ -102,7 +102,7 @@ export function AgentDatasourcePicker({ value, onChange }: AgentDatasourcePicker
   return (
     <Box className={S.datasourceBar}>
       <Text size="xs" c="text-tertiary" lh={1} className={S.datasourceLabel}>
-        {t`DB:`}
+        {t`Database:`}
       </Text>
 
       <Menu
