@@ -1652,10 +1652,10 @@ Multiple marks can be combined:
             (count new-nodes) document_id document_id)))
 
 (defn- list-metrics [database-id table-id]
-  (let [base-where (cond-> {:type :metric :archived false}
-                     database-id (assoc :database_id database-id)
-                     table-id    (assoc :table_id table-id))
-        metrics    (->> (t2/select :model/Card base-where)
+  (let [conditions (cond-> [:type :metric :archived false]
+                     database-id (into [:database_id database-id])
+                     table-id    (into [:table_id    table-id]))
+        metrics    (->> (apply t2/select :model/Card conditions)
                         (filter mi/can-read?)
                         (take 50))]
     (if (empty? metrics)
