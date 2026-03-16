@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { t } from "ttag";
 
 import { skipToken, useGetCardQuery, useGetCardQueryQuery } from "metabase/api";
-import Markdown from "metabase/common/components/Markdown";
+import { Markdown } from "metabase/common/components/Markdown";
 import { DataGrid, useDataGridInstance } from "metabase/data-grid";
 import type { ColumnOptions } from "metabase/data-grid";
 import { serializeCardForUrl } from "metabase/lib/card";
