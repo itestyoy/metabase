@@ -568,24 +568,31 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                    {:error (.getMessage e)}))]
     (format-qp-result result)))
 
-(defn- extract-inner-query
-  "If the AI passed the full outer MBQL wrapper {type, database, query},
-   extract just the inner :query map so we don't double-nest.
-   If the AI correctly passed only the inner map, return it as-is."
-  [raw-map]
-  (if (contains? raw-map "query")
-    (get raw-map "query")
-    raw-map))
+(defn- parse-dataset-query
+  "Parse the dataset_query string the AI provides.
+   Returns {:query-map <inner-query-map> :database-id <id-or-nil>}.
 
-(defn- parse-dataset-query [dataset-query-str]
-  (-> (if (string? dataset-query-str)
-        (json/parse-string dataset-query-str)
-        dataset-query-str)
-      extract-inner-query))
+   Handles two shapes the AI may send:
+   1. Inner query only: {\"source-table\": 5, ...}
+      → query-map = that map, database-id = nil (caller must supply it)
+   2. Full outer wrapper: {\"type\":\"query\",\"database\":2,\"query\":{\"source-table\":5,...}}
+      → query-map = the inner :query value, database-id = 2 (extracted from wrapper)"
+  [dataset-query-str]
+  (let [raw (if (string? dataset-query-str)
+              (json/parse-string dataset-query-str)
+              dataset-query-str)]
+    (if (contains? raw "query")
+      {:query-map   (get raw "query")
+       :database-id (get raw "database")}
+      {:query-map   raw
+       :database-id nil})))
 
 (defn- run-mbql-query [database-id dataset-query-str]
-  (let [query-map (parse-dataset-query dataset-query-str)
-        query  {:database database-id
+  (let [{:keys [query-map] db-from-json :database-id} (parse-dataset-query dataset-query-str)
+        effective-db-id (or database-id db-from-json)
+        _  (when-not effective-db-id
+             (throw (ex-info "database_id is required: pass it as the database_id argument or include \"database\" in the outer query wrapper." {})))
+        query  {:database effective-db-id
                 :type     :query
                 :query    query-map}
         result (try
@@ -1517,9 +1524,12 @@ Multiple marks can be combined:
   (load-guide-file! "MB_AI_AGENT_ANALYTICAL_GUIDE_FILE"))
 
 (defn- create-notebook-question [{:strs [name description database_id dataset_query display collection_id]}]
-  (let [query-map (parse-dataset-query dataset_query)
+  (let [{:keys [query-map] db-from-json :database-id} (parse-dataset-query dataset_query)
+        effective-db-id (or database_id db-from-json)
+        _  (when-not effective-db-id
+             (throw (ex-info "database_id is required: pass it as the database_id argument or include \"database\" in the outer query wrapper." {})))
         card-data (cond-> {:name          name
-                           :dataset_query {:database database_id
+                           :dataset_query {:database effective-db-id
                                            :type     :query
                                            :query    query-map}
                            :display       (keyword (or display "table"))
