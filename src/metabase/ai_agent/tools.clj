@@ -1627,7 +1627,8 @@ Multiple marks can be combined:
         _         (api/check-404 doc)
         _         (api/check-403 (mi/can-write? doc))
         new-nodes (try
-                    (json/parse-string nodes)
+                    ;; Parse with keyword keys to match mi/transform-json keywordization
+                    (json/parse-string nodes true)
                     (catch Exception e
                       (throw (ex-info (str "Error: `nodes` is not valid JSON array. Parse error: "
                                            (.getMessage e))
@@ -1635,8 +1636,8 @@ Multiple marks can be combined:
         _         (when-not (sequential? new-nodes)
                     (throw (ex-info "Error: `nodes` must be a JSON array of ProseMirror nodes." {})))
         current-ast (:document doc)
-        ;; Use string key "content" to match the DB JSON deserialization format
-        updated-ast (update current-ast "content"
+        ;; Use keyword key :content — mi/transform-json deserializes with keywordization
+        updated-ast (update current-ast :content
                             (fn [existing] (into (vec existing) new-nodes)))]
     (t2/update! :model/Document :id document_id
                 {:document     updated-ast
