@@ -11,6 +11,7 @@ import { color } from "metabase/ui/utils/colors";
 import {
   SummarizeAggregationItemList,
   SummarizeBreakoutColumnList,
+  SummarizeMetricsPicker,
 } from "./SummarizeContent";
 import SummarizeSidebarS from "./SummarizeSidebar.module.css";
 
@@ -50,6 +51,13 @@ export function SummarizeSidebar({
       onDone={handleDoneClick}
     >
       <SummarizeAggregationItemList
+        px="lg"
+        query={query}
+        onQueryChange={onAggregationChange}
+        stageIndex={stageIndex}
+      />
+      <Divider my="lg" />
+      <SummarizeMetricsPicker
         px="lg"
         query={query}
         onQueryChange={onAggregationChange}

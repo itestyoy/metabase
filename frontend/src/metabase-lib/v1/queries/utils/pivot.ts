@@ -93,8 +93,8 @@ export function getPivotOptions(question: Question) {
     question.setting("pivot_table.column_split") ?? {};
 
   // Extract totals settings
-  const showRowTotals = question.setting("pivot.show_row_totals") ?? true;
-  const showColumnTotals = question.setting("pivot.show_column_totals") ?? true;
+  const showRowTotals = question.setting("pivot.show_row_totals") ?? false;
+  const showColumnTotals = question.setting("pivot.show_column_totals") ?? false;
 
   const pivotSplitOptions = isColumnNameColumnSplitSetting(setting)
     ? getColumnNamePivotOptions(query, stageIndex, setting)

@@ -32,6 +32,8 @@ export type MiniPickerProps = {
   closeOnClickOutside?: boolean;
   menuDropdownRef?: Ref<HTMLDivElement>;
   className?: string;
+  /** Margin-top of the dropdown. Defaults to "xl" to match the original spacing. */
+  dropdownMt?: string | number;
 };
 
 export function MiniPicker({
@@ -50,6 +52,7 @@ export function MiniPicker({
   closeOnClickOutside = true,
   menuDropdownRef,
   className,
+  dropdownMt = "xl",
 }: MiniPickerProps) {
   const { data: libraryCollection } = PLUGIN_LIBRARY.useGetLibraryCollection();
 
@@ -109,6 +112,8 @@ export function MiniPicker({
         <Menu.Target>{children}</Menu.Target>
 
         <Menu.Dropdown
+          mt={dropdownMt}
+          ml="-1rem"
           px={0}
           py="sm"
           data-testid="mini-picker"

@@ -28,7 +28,7 @@ import {
 import { getScrollBarSize } from "metabase/lib/dom";
 import { connect } from "metabase/lib/redux";
 import { getSetting } from "metabase/selectors/settings";
-import { useMantineTheme } from "metabase/ui";
+import { Icon, Tooltip, useMantineTheme } from "metabase/ui";
 import {
   getDefaultSize,
   getMinSize,
@@ -37,6 +37,9 @@ import type { VisualizationProps } from "metabase/visualizations/types";
 import type { State } from "metabase-types/store";
 
 import {
+  HiddenColumnButton,
+  HiddenColumnHotspot,
+  HiddenColumnsLayer,
   PivotTableRoot,
   PivotTableTopLeftCellsContainer,
 } from "./PivotTable.styled";
@@ -50,8 +53,11 @@ import { RowToggleIcon } from "./RowToggleIcon";
 import {
   CELL_HEIGHT,
   DEFAULT_CELL_WIDTH,
+  HIDDEN_COLUMN_RESTORE_WIDTH,
+  HIDDEN_COLUMN_TOGGLE_HOTSPOT,
   LEFT_HEADER_LEFT_SPACING,
   MIN_HEADER_CELL_WIDTH,
+  MIN_VALUE_COLUMN_WIDTH,
   PIVOT_TABLE_BODY_LABEL,
 } from "./constants";
 import {
@@ -64,6 +70,7 @@ import {
   checkRenderable,
   getCellWidthsForSection,
   getLeftHeaderWidths,
+  getWidthForRange,
   isSensible,
   leftHeaderCellSizeAndPositionGetter,
   topHeaderCellSizeAndPositionGetter,
@@ -287,7 +294,7 @@ const PivotTableInner = forwardRef<HTMLDivElement, VisualizationProps>(
         const newValueHeaderWidths = { ...(valueHeaderWidths ?? {}) };
         newValueHeaderWidths[columnIndex] = Math.max(
           newWidth,
-          MIN_HEADER_CELL_WIDTH,
+          MIN_VALUE_COLUMN_WIDTH,
         );
 
         newColumnWidths = {
@@ -330,6 +337,64 @@ const PivotTableInner = forwardRef<HTMLDivElement, VisualizationProps>(
       leftHeaderWidth,
     ]);
 
+    const leafColumnCount =
+      (pivoted?.valueIndexes?.length ?? 0) * (pivoted?.columnCount ?? 0);
+
+    const totalValueWidth = useMemo(() => {
+      if (!pivoted || leafColumnCount === 0) {
+        return 0;
+      }
+
+      return getWidthForRange(valueHeaderWidths, 0, leafColumnCount);
+    }, [pivoted, valueHeaderWidths, leafColumnCount]);
+
+    const hiddenColumnRuns = useMemo(() => {
+      if (!pivoted || leafColumnCount === 0) {
+        return [];
+      }
+
+      const runs: { start: number; end: number; left: number }[] = [];
+      let runStart: number | null = null;
+
+      for (let i = 0; i < leafColumnCount; i++) {
+        const width = valueHeaderWidths?.[i] ?? DEFAULT_CELL_WIDTH;
+        const isHidden = width <= MIN_VALUE_COLUMN_WIDTH;
+
+        if (isHidden && runStart === null) {
+          runStart = i;
+        } else if (!isHidden && runStart !== null) {
+          runs.push({
+            start: runStart,
+            end: i - 1,
+            left: getWidthForRange(valueHeaderWidths, 0, runStart),
+          });
+          runStart = null;
+        }
+      }
+
+      if (runStart !== null) {
+        runs.push({
+          start: runStart,
+          end: leafColumnCount - 1,
+          left: getWidthForRange(valueHeaderWidths, 0, runStart),
+        });
+      }
+
+      return runs;
+    }, [pivoted, leafColumnCount, valueHeaderWidths]);
+
+    const handleRestoreColumn = useCallback(
+      (columnIndex: number) => {
+        const newValueHeaderWidths = { ...(valueHeaderWidths ?? {}) };
+        newValueHeaderWidths[columnIndex] = HIDDEN_COLUMN_RESTORE_WIDTH;
+
+        updateHeaderWidths({
+          valueHeaderWidths: newValueHeaderWidths,
+        });
+      },
+      [updateHeaderWidths, valueHeaderWidths],
+    );
+
     if (
       pivoted === null ||
       !leftHeaderWidths ||
@@ -358,6 +423,22 @@ const PivotTableInner = forwardRef<HTMLDivElement, VisualizationProps>(
     const topHeaderHeight = topHeaderRows * CELL_HEIGHT;
     const bodyHeight = height - topHeaderHeight;
     const topHeaderWidth = viewPortWidth - leftHeaderWidth;
+    const hiddenColumnsOverlayWidth = Math.max(
+      totalValueWidth,
+      topHeaderWidth,
+    );
+
+    const getHiddenColumnLabel = (offset: number) => {
+      const leafHeader = topHeaderItems.find(
+        item => item.offset === offset && item.maxDepthBelow === 0,
+      );
+
+      if (leafHeader) {
+        return tc(leafHeader.value);
+      }
+
+      return tc(t`Column`);
+    };
 
     function getCellClickHandler(clicked: PivotTableClicked) {
       if (!clicked) {
@@ -460,40 +541,86 @@ const PivotTableInner = forwardRef<HTMLDivElement, VisualizationProps>(
                     ))}
                   </PivotTableTopLeftCellsContainer>
                   {/* top header */}
-                  <Collection
-                    style={{ minWidth: `${topHeaderWidth}px` }}
-                    ref={topHeaderRef}
-                    className={CS.scrollHideAll}
-                    width={topHeaderWidth}
-                    height={topHeaderHeight}
-                    cellCount={topHeaderItems.length}
-                    cellRenderer={({ index, style, key }) => (
-                      <TopHeaderCell
-                        key={key}
-                        style={style}
-                        item={topHeaderItems[index]}
-                        getCellClickHandler={getCellClickHandler}
-                        onResize={(newWidth: number) =>
-                          handleColumnResize(
-                            "value",
-                            topHeaderItems[index].offset,
-                            newWidth,
-                          )
-                        }
-                      />
+                  <div
+                    style={{
+                      position: "relative",
+                      minWidth: `${topHeaderWidth}px`,
+                      height: topHeaderHeight,
+                      overflow: "visible",
+                      zIndex: 200,
+                    }}
+                  >
+                    <Collection
+                      ref={topHeaderRef}
+                      className={CS.scrollHideAll}
+                      style={{ minWidth: `${topHeaderWidth}px` }}
+                      width={topHeaderWidth}
+                      height={topHeaderHeight}
+                      cellCount={topHeaderItems.length}
+                      cellRenderer={({ index, style, key }) => (
+                        <TopHeaderCell
+                          key={key}
+                          style={style}
+                          item={topHeaderItems[index]}
+                          getCellClickHandler={getCellClickHandler}
+                          onResize={(newWidth: number) =>
+                            handleColumnResize(
+                              "value",
+                              topHeaderItems[index].offset,
+                              newWidth,
+                            )
+                          }
+                        />
+                      )}
+                      cellSizeAndPositionGetter={({ index }) =>
+                        topHeaderCellSizeAndPositionGetter(
+                          topHeaderItems[index],
+                          topHeaderRows,
+                          valueHeaderWidths,
+                        )
+                      }
+                      onScroll={({ scrollLeft }) =>
+                        onScroll({ scrollLeft } as OnScrollParams)
+                      }
+                      scrollLeft={scrollLeft}
+                    />
+                    {hiddenColumnRuns.length > 0 && (
+                      <HiddenColumnsLayer
+                        style={{
+                          width:
+                            hiddenColumnsOverlayWidth +
+                            HIDDEN_COLUMN_TOGGLE_HOTSPOT,
+                          height: topHeaderHeight,
+                          transform: `translateX(-${scrollLeft}px)`,
+                          left: -HIDDEN_COLUMN_TOGGLE_HOTSPOT / 2,
+                        }}
+                      >
+                        {hiddenColumnRuns.map(({ start, left }) => {
+                          const hotspotLeft = left;
+                          return (
+                          <HiddenColumnHotspot
+                            key={`hidden-column-${start}`}
+                            style={{ left: hotspotLeft }}
+                          >
+                            <Tooltip
+                              label={`${t`Show column`}: ${getHiddenColumnLabel(start)}`}
+                              withinPortal
+                              position="top"
+                            >
+                              <HiddenColumnButton
+                                aria-label={t`Show column`}
+                                onClick={() => handleRestoreColumn(start)}
+                                type="button"
+                              >
+                                <Icon name="eye" size={12} />
+                              </HiddenColumnButton>
+                            </Tooltip>
+                          </HiddenColumnHotspot>
+                          );
+                        })}
+                      </HiddenColumnsLayer>
                     )}
-                    cellSizeAndPositionGetter={({ index }) =>
-                      topHeaderCellSizeAndPositionGetter(
-                        topHeaderItems[index],
-                        topHeaderRows,
-                        valueHeaderWidths,
-                      )
-                    }
-                    onScroll={({ scrollLeft }) =>
-                      onScroll({ scrollLeft } as OnScrollParams)
-                    }
-                    scrollLeft={scrollLeft}
-                  />
+                  </div>
                 </div>
                 <div className={cx(CS.flex, CS.flexFull)}>
                   {/* left header */}
