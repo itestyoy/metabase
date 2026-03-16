@@ -1590,14 +1590,7 @@ Multiple marks can be combined:
         _   (api/check-403 (mi/can-read? doc))
         ast (:document doc)
         ;; Extract embedded card IDs from AST
-        card-ids (prose-mirror/card-ids {:document ast :content_type (:content_type doc)})
-        ;; Summarize content as plain text (collect text nodes).
-        ;; AST nodes from the DB have string keys after JSON deserialization.
-        text-summary (->> (tree-seq #(seq (get % "content")) #(get % "content") ast)
-                          (keep #(when (= "text" (get % "type")) (get % "text")))
-                          (remove nil?)
-                          (str/join " ")
-                          (#(if (> (count %) 500) (str (subs % 0 500) "…") %)))]
+        card-ids (prose-mirror/card-ids {:document ast :content_type (:content_type doc)})]
     (str (format "Document: \"%s\" (ID: %d)\n" (:name doc) (:id doc))
          (format "- Collection ID: %s\n" (or (:collection_id doc) "root"))
          (format "- Creator: user %d\n" (:creator_id doc))
@@ -1606,8 +1599,8 @@ Multiple marks can be combined:
          (format "- Archived: %s\n" (:archived doc))
          (when (seq card-ids)
            (format "- Embedded card IDs: %s\n" (str/join ", " card-ids)))
-         (format "- Content preview: %s\n" (if (seq text-summary) text-summary "(no text content)"))
-         (format "- URL: /document/%d" (:id doc)))))
+         (format "- URL: /document/%d\n" (:id doc))
+         (format "- Content (ProseMirror AST JSON):\n%s" (json/generate-string ast)))))
 
 (defn- update-document [{:strs [document_id name content collection_id archived]}]
   (let [doc (t2/select-one :model/Document :id document_id)
