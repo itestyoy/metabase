@@ -6,7 +6,11 @@ import styled from "@emotion/styled";
 import { adjustBrightness, alpha, color } from "metabase/lib/colors";
 import type { MantineTheme } from "metabase/ui";
 
-import { CELL_HEIGHT, RESIZE_HANDLE_WIDTH } from "./constants";
+import {
+  CELL_HEIGHT,
+  HIDDEN_COLUMN_TOGGLE_HOTSPOT,
+  RESIZE_HANDLE_WIDTH,
+} from "./constants";
 
 export const RowToggleIconRoot = styled.div`
   display: flex;
@@ -40,6 +44,7 @@ interface PivotTableCellProps {
   isBorderedHeader?: boolean;
   hasTopBorder?: boolean;
   isTransparent?: boolean;
+  hideRightBorder?: boolean;
 }
 
 const getCellBackgroundColor = ({
@@ -95,16 +100,19 @@ const getColor = ({ theme }: PivotTableCellProps & { theme: MantineTheme }) => {
   return color(theme.other.table.cell.textColor);
 };
 
-const borderRight = css`
-  &:after {
-    content: " ";
-    position: absolute;
-    top: 0;
-    right: 0;
-    height: 100%;
-    border-right: 1px solid ${color("border-subtle")};
-  }
-`;
+const borderRight = (props: PivotTableCellProps & { theme: MantineTheme }) =>
+  props.hideRightBorder
+    ? null
+    : css`
+        &:after {
+          content: " ";
+          position: absolute;
+          top: 0;
+          right: 0;
+          height: 100%;
+          border-right: 1px solid ${color("border-subtle")};
+        }
+      `;
 
 export const PivotTableCell = styled.div<PivotTableCellProps>`
   flex: 1 0 auto;
@@ -208,5 +216,58 @@ export const ResizeHandle = styled.div`
 
   &:hover {
     background-color: var(--mb-color-brand);
+  }
+`;
+
+export const HiddenColumnsLayer = styled.div`
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 300;
+`;
+
+export const HiddenColumnHotspot = styled.div`
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: ${HIDDEN_COLUMN_TOGGLE_HOTSPOT}px;
+  transform: translateX(0%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  z-index: 310;
+`;
+
+export const HiddenColumnButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid ${color("border")};
+  background-color: var(--mb-color-bg-white);
+  color: var(--mb-color-text-primary);
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.95);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+  box-shadow: none;
+  z-index: 320;
+
+  ${HiddenColumnHotspot}:hover &,
+  &:focus-visible {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: none;
+  }
+
+  &:hover {
+    background-color: var(--mb-color-bg-white);
   }
 `;

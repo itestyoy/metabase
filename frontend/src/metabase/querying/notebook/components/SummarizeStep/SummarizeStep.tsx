@@ -6,6 +6,7 @@ import * as Lib from "metabase-lib";
 import type { NotebookStepProps } from "../../types";
 import { AggregateStep } from "../AggregateStep";
 import { BreakoutStep } from "../BreakoutStep";
+import { MetricsPickerStep } from "../MetricsPickerStep";
 
 export function SummarizeStep({
   step,
@@ -24,8 +25,9 @@ export function SummarizeStep({
       align={{ md: "center" }}
       direction={{ base: "column", md: "row" }}
       gap={{ base: "sm", md: isMetric ? "md" : "sm" }}
+      wrap="wrap"
     >
-      <Box w={{ base: "100%", md: "50%" }} flex="1 1 auto">
+      <Box flex="1 1 auto">
         <AggregateStep
           step={step}
           color={color}
@@ -34,6 +36,13 @@ export function SummarizeStep({
           {...props}
         />
       </Box>
+      <MetricsPickerStep
+        step={step}
+        color="text-tertiary"
+        isLastOpened={false}
+        readOnly={readOnly}
+        {...props}
+      />
       {isMetric ? (
         <Box display={{ md: "none" }} c={color} fw="bold">
           {t`Default time dimension`}
@@ -42,7 +51,7 @@ export function SummarizeStep({
         showBreakouts && <Box c={color} fw="bold">{t`by`}</Box>
       )}
       {showBreakouts && (
-        <Box w={{ base: "100%", md: "50%" }}>
+        <Box flex="1 1 auto">
           <BreakoutStep
             step={step}
             color={color}

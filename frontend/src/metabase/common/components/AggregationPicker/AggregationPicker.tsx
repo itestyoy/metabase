@@ -1,4 +1,9 @@
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useMemo,
+  useState,
+} from "react";
 import { t } from "ttag";
 
 import {
@@ -133,6 +138,11 @@ export function AggregationPicker({
     [query, stageIndex, operator],
   );
 
+  const metrics = useMemo(
+    () => Lib.availableMetrics(query, stageIndex),
+    [query, stageIndex],
+  );
+
   const onSelect = useCallback(
     function (aggregation: Lib.Aggregable) {
       const isUpdate = clause != null && clauseIndex != null;
@@ -172,6 +182,21 @@ export function AggregationPicker({
       "expression-aggregations",
     );
 
+    // Show metrics first
+    if (metrics.length > 0) {
+      const metricItems = metrics.map((metric) =>
+        getMetricListItem(query, stageIndex, metric, clauseIndex),
+      );
+
+      sections.push({
+        key: "metrics",
+        name: t`Metrics`,
+        items: metricItems,
+        icon: "metric",
+      });
+    }
+
+    // Basic functions after metrics
     if (operators.length > 0) {
       const operatorItems = operators.map((operator) =>
         getOperatorListItem(query, stageIndex, operator),
@@ -193,17 +218,6 @@ export function AggregationPicker({
           getMeasureListItem(query, stageIndex, measure, clauseIndex),
         ),
         icon: "ruler",
-      });
-    }
-
-    if (availableMetrics.length > 0) {
-      sections.push({
-        key: "metrics",
-        name: t`Metrics`,
-        items: availableMetrics.map((metric) =>
-          getMetricListItem(query, stageIndex, metric, clauseIndex),
-        ),
-        icon: "metric",
       });
     }
 
@@ -236,7 +250,7 @@ export function AggregationPicker({
     operators,
     allowCustomExpressions,
     isSearching,
-    availableMetrics,
+    metrics,
   ]);
 
   const checkIsItemSelected = useCallback(
@@ -443,7 +457,7 @@ export function AggregationPicker({
     );
   }
 
-  return (
+  const aggregationList = (
     <AccordionList<Item, Section>
       data-testid="aggregation-picker"
       style={{ color: "var(--mb-color-summarize)" }}
@@ -460,6 +474,12 @@ export function AggregationPicker({
       itemTestId="dimension-list-item"
       globalSearch
     />
+  );
+
+  return (
+    <Box className={className}>
+      {aggregationList}
+    </Box>
   );
 }
 
@@ -596,3 +616,4 @@ function getExpressionClauseListItem(
 function checkIsColumnSelected(columnInfo: Lib.ColumnDisplayInfo) {
   return !!columnInfo.selected;
 }
+

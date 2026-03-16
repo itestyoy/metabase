@@ -1,0 +1,116 @@
+import type { MouseEvent } from "react";
+import { useState } from "react";
+import { t } from "ttag";
+
+import { MiniPicker } from "metabase/common/components/Pickers/MiniPicker";
+import type { MiniPickerPickableItem } from "metabase/common/components/Pickers/MiniPicker/types";
+import { ActionIcon, Box, Icon, Text, Tooltip, UnstyledButton } from "metabase/ui";
+
+import S from "./AgentContextPicker.module.css";
+
+/** What the AI agent receives as context for the current conversation. */
+export interface AgentContextValue {
+  id: number;
+  name: string;
+  /** "card" | "dataset" | "metric" | "table" | "dashboard" | "document" */
+  model: string;
+  db_id?: number;
+  /** Query-string parameters from the current URL, if any. */
+  url_params?: Record<string, string>;
+  /** Raw dataset_query from an ad-hoc (unsaved) question — includes aggregations, breakouts, filters, etc. */
+  dataset_query?: Record<string, unknown>;
+}
+
+interface AgentContextPickerProps {
+  value: AgentContextValue | null;
+  onChange: (value: AgentContextValue | null) => void;
+}
+
+const ICON: Record<string, string> = {
+  card: "question",
+  dataset: "model",
+  metric: "metric",
+  table: "database",
+  dashboard: "dashboard",
+  document: "document",
+};
+
+const LABEL: () => Record<string, string> = () => ({
+  card: t`Question`,
+  dataset: t`Model`,
+  metric: t`Metric`,
+  table: t`Table`,
+  dashboard: t`Dashboard`,
+  document: t`Document`,
+});
+
+export function AgentContextPicker({ value, onChange }: AgentContextPickerProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const handleChange = (item: MiniPickerPickableItem) => {
+    onChange({
+      id: item.id as number,
+      name: item.name,
+      model: item.model,
+      db_id: item.model === "table" ? (item as { db_id?: number }).db_id : undefined,
+    });
+    setIsOpen(false);
+  };
+
+  const handleClear = (e: MouseEvent) => {
+    e.stopPropagation();
+    onChange(null);
+  };
+
+  return (
+    <Box className={S.contextBar}>
+      <Box className={S.contextAnchor}>
+        {value ? (
+          <Tooltip
+            label={`${LABEL()[value.model] ?? value.model}: ${value.name}`}
+            position="top"
+            withArrow
+            openDelay={400}
+          >
+            <UnstyledButton
+              className={S.contextChip}
+              onClick={() => setIsOpen((o: boolean) => !o)}
+            >
+              <Icon name={ICON[value.model] ?? "database"} size={11} />
+              <Text size="xs" lh={1} component="span" className={S.contextChipText} title={value.name}>
+                {value.name}
+              </Text>
+              <ActionIcon
+                size={14}
+                variant="transparent"
+                className={S.contextChipClear}
+                onClick={handleClear}
+                aria-label={t`Remove context`}
+              >
+                <Icon name="close" size={9} />
+              </ActionIcon>
+            </UnstyledButton>
+          </Tooltip>
+        ) : (
+          <Tooltip label={t`Add context (current page, question, dashboard…)`} position="top" withArrow>
+            <UnstyledButton
+              className={S.contextEmpty}
+              onClick={() => setIsOpen((o: boolean) => !o)}
+            >
+              <Icon name="add" size={10} className={S.contextAddIcon} />
+              <Text size="xs" c="text-tertiary" lh={1}>{t`Context`}</Text>
+            </UnstyledButton>
+          </Tooltip>
+        )}
+
+        <MiniPicker
+          opened={isOpen}
+          onClose={() => setIsOpen(false)}
+          onChange={handleChange}
+          models={["card", "dataset", "metric", "table", "document"]}
+          dropdownMt={4}
+        />
+      </Box>
+    </Box>
+  );
+}

@@ -14,11 +14,12 @@ export const AppBarRoot = styled.div<AppBarRootProps>`
   height: ${APP_BAR_HEIGHT};
   padding-left: 1.325rem;
   padding-right: 1rem;
+  margin-right: var(--agent-dock-width, 0px);
   border-bottom: 1px solid
     ${(props) =>
       props.hasSidebarOpen ? "var(--mb-color-border)" : "transparent"};
   background-color: var(--mb-color-background-primary);
-  transition: border-bottom-color 200ms ease;
+  transition: border-bottom-color 200ms ease, margin-right 0.2s ease;
 `;
 
 interface AppBarInfoContainerProps {

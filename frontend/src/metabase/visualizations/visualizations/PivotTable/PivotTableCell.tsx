@@ -26,6 +26,7 @@ interface CellProps {
   onClick?: ((e: React.MouseEvent) => void) | undefined;
   onResize?: (newWidth: number) => void;
   showTooltip?: boolean;
+  hideRightBorder?: boolean;
 }
 
 interface ResizableHandleProps {
@@ -50,15 +51,17 @@ function ResizableHandle({
     prevTransformRef.current = transform;
 
     if (prevTransform !== null && transform === null) {
-      const newWidth = Math.max(
-        RESIZE_HANDLE_WIDTH,
-        initialWidth + prevTransform.x,
-      );
-      onResizeEnd(newWidth);
+      const updatedWidth = Math.max(0, initialWidth + prevTransform.x);
+      const normalizedWidth =
+        updatedWidth < 1 ? 0 : Math.round(updatedWidth);
+      onResizeEnd(normalizedWidth);
     }
   }, [transform, initialWidth, onResizeEnd]);
 
-  const currentPosition = initialWidth + (transform ? transform.x : 0);
+  const currentPosition = Math.max(
+    0,
+    initialWidth + (transform ? transform.x : 0),
+  );
 
   return (
     <ResizeHandle
@@ -88,8 +91,16 @@ export function Cell({
   onClick,
   onResize,
   showTooltip = true,
+  hideRightBorder,
 }: CellProps) {
   const cellId = useId();
+  const width =
+    typeof style?.width === "number"
+      ? style.width
+      : typeof style?.flexBasis === "number"
+        ? style.flexBasis
+        : undefined;
+  const shouldHideRightBorder = hideRightBorder ?? (width !== undefined && width <= 1);
 
   return (
     <PivotTableCell
@@ -100,6 +111,7 @@ export function Cell({
       isBorderedHeader={isBorderedHeader}
       hasTopBorder={hasTopBorder}
       isTransparent={isTransparent}
+      hideRightBorder={shouldHideRightBorder}
       style={{
         ...style,
         ...(backgroundColor
@@ -231,16 +243,17 @@ export const BodyCell = ({
       {rowSection.map(
         ({ value, isSubtotal, clicked, backgroundColor }, index) => {
           return (
-            <Cell
-              key={index}
-              style={{
-                flexBasis: cellWidths[index],
-              }}
-              value={value}
-              isEmphasized={isSubtotal}
-              isBold={isSubtotal}
-              showTooltip={showTooltip}
-              isBody
+      <Cell
+        key={index}
+        style={{
+          flexBasis: cellWidths[index],
+        }}
+        hideRightBorder={cellWidths[index] <= 1}
+        value={value}
+        isEmphasized={isSubtotal}
+        isBold={isSubtotal}
+        showTooltip={showTooltip}
+        isBody
               onClick={getCellClickHandler(clicked)}
               backgroundColor={backgroundColor}
             />
