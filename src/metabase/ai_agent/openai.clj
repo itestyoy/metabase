@@ -146,6 +146,7 @@ These tools return reference docs. Call them BEFORE the corresponding action:
   get_sql_guide(db_id)  → before ANY SQL query (only when SQL is justified per Rule 2)
   get_document_guide    → before creating or updating any Document
   get_analytical_guide  → before starting any investigation or research task
+  get_metrics_guide     → before querying the Semantic Layer database (atomic vs semi-atomic metrics, LTV, retention, UA, A/B)
 
 These tools discover data. Call them to resolve unknowns:
   list_databases        → when you need to know which databases exist

@@ -338,6 +338,18 @@ Returns a structured framework for how to approach analytical problems like a se
                   :additionalProperties false}}
 
    {:type        "function"
+    :name        "get_metrics_guide"
+    :description "Get the metrics taxonomy and query guide for the Semantic Layer database.
+Call this before building any query that uses metrics — it explains the atomic vs semi-atomic
+metric distinction, available dimensions for each type, conversion rate formulas, and common
+use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {}
+                  :required             []
+                  :additionalProperties false}}
+
+   {:type        "function"
     :name        "create_notebook_question"
     :description "Create and save a new question using a structured MBQL query (notebook mode).
 Use this instead of create_question when you want to save a question with a structured query
@@ -1509,6 +1521,22 @@ Save all key queries as questions, then build a Metabase Document with:
 - **Be honest about uncertainty** — if the data is inconclusive, say so. Suggest what additional data would help.
 - **Think about the audience** — the report should be understandable by someone who wasn't part of the investigation.")
 
+(def ^:private metrics-guide-fallback
+  "## Metrics Guide — Semantic Layer
+
+See MB_AI_AGENT_METRICS_GUIDE_FILE for the full guide.
+No metrics guide file is currently configured.")
+
+(defn- get-metrics-guide []
+  (if-let [path (System/getenv "MB_AI_AGENT_METRICS_GUIDE_FILE")]
+    (let [f (io/file path)]
+      (if (.exists f)
+        (slurp f)
+        (do
+          (log/warnf "BI Agent: MB_AI_AGENT_METRICS_GUIDE_FILE points to non-existent file '%s'; using built-in fallback" path)
+          metrics-guide-fallback)))
+    metrics-guide-fallback))
+
 (defn- get-analytical-guide []
   (if-let [path (System/getenv "MB_AI_AGENT_ANALYTICAL_GUIDE_FILE")]
     (let [f (io/file path)]
@@ -1706,6 +1734,7 @@ Save all key queries as questions, then build a Metabase Document with:
         "get_mbql_guide" (get-mbql-guide)
         "get_document_guide" (get-document-guide)
         "get_analytical_guide" (get-analytical-guide)
+        "get_metrics_guide"    (get-metrics-guide)
         "run_mbql_query"  (run-mbql-query (get args "database_id") (get args "dataset_query"))
         "create_document" (create-document args)
         "get_document"    (get-document-details (get args "document_id"))
