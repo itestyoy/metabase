@@ -6,6 +6,7 @@
   (:require
    [cheshire.core :as json]
    [clojure.java.io :as io]
+   [clojure.string :as str]
    [metabase.ai-agent.mcp :as mcp]
    [metabase.api.common :as api]
    [metabase.models.interface :as mi]
@@ -74,7 +75,7 @@ Useful to check whether a similar question already exists before creating one."
 
    {:type        "function"
     :name        "run_query"
-    :description "Execute a native SQL query against a database and return the first 10 rows.
+    :description "Execute a native SQL query against a database and return results. Returns up to 50 rows.
 Use this to preview data or validate SQL before saving a question."
     :strict      true
     :parameters  {:type                 "object"
@@ -174,7 +175,7 @@ After creating, always provide the URL /question/<id> to the user."
                                          :collection_id {:type        ["integer" "null"]
                                                          :description "Optional collection ID to save the question into. Pass null for default collection."}
                                          :display       {:anyOf       [{:type "string"
-                                                                        :enum ["table" "bar" "line" "pie" "scalar" "area" "row"]}
+                                                                        :enum ["table" "bar" "line" "pie" "scalar" "area" "row" "progress" "funnel" "scatter"]}
                                                                        {:type "null"}]
                                                          :description "Visualization type. Pass null to use default (table)."}}
                   :required             ["name" "database_id" "sql" "description" "collection_id" "display"]
@@ -444,7 +445,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
     (if (empty? dbs)
       "No databases available."
       (str "Available databases:\n"
-           (clojure.string/join "\n"
+           (str/join "\n"
              (map (fn [db]
                     (format "- ID: %d, Name: \"%s\", Engine: %s"
                             (:id db) (:name db) (name (:engine db))))
@@ -474,13 +475,13 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                                             (if (:schema tbl) (str (:schema tbl) ".") "")
                                             (:name tbl)
                                             (:id tbl))
-                                    (clojure.string/join "\n"
+                                    (str/join "\n"
                                       (map (fn [f]
                                              (format "    - %s (%s)" (:name f) (name (:base_type f))))
                                            flds)))))
                            tables)]
         (str (format "Schema for \"%s\":\n\n" (:name db))
-             (clojure.string/join "\n\n" summaries))))))
+             (str/join "\n\n" summaries))))))
 
 (defn- list-questions [search-term]
   (let [cards (->> (if (seq search-term)
@@ -498,7 +499,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
         (format "No questions found matching \"%s\"." search-term)
         "No questions found.")
       (str "Questions (up to 20):\n"
-           (clojure.string/join "\n"
+           (str/join "\n"
              (map (fn [c]
                     (format "- ID: %d, Name: \"%s\"%s"
                             (:id c) (:name c)
@@ -517,12 +518,12 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
         results (try
                   (:data (search/search (search/search-context ctx)))
                   (catch Exception e
-                    (log/warn e "AI Agent search failed")
-                    []))]
+                    (log/warn e "Search failed" {:term query})
+                    (throw (ex-info (str "Search failed: " (.getMessage e)) {}))))]
     (if (empty? results)
       (format "No results found for \"%s\"." query)
       (str (format "Search results for \"%s\" (up to 15):\n" query)
-           (clojure.string/join "\n"
+           (str/join "\n"
              (map (fn [item]
                     (format "- [%s] ID: %d, Name: \"%s\"%s"
                             (name (:model item))
@@ -542,23 +543,26 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
           rows (get-in result [:data :rows] [])]
       (if (empty? rows)
         "Query executed successfully. No rows returned."
-        (let [header    (clojure.string/join " | " (map :name cols))
-              separator (clojure.string/join " | " (repeat (count cols) "---"))
+        (let [header    (str/join " | " (map :name cols))
+              separator (str/join " | " (repeat (count cols) "---"))
               data-rows (map (fn [row]
-                               (clojure.string/join " | "
+                               (str/join " | "
                                  (map #(if (nil? %) "NULL" (str %)) row)))
                              (take 50 rows))
               total     (count rows)
               note      (when (> total 50)
                           (format "\n... (%d total rows, showing first 50)" total))]
           (str "Results:\n" header "\n" separator "\n"
-               (clojure.string/join "\n" data-rows)
+               (str/join "\n" data-rows)
                note))))))
 
 (defn- run-query [database-id sql]
-  (let [query  {:database database-id
+  (let [db     (t2/select-one :model/Database :id database-id)
+        _      (api/check-404 db)
+        _      (api/check-403 (mi/can-read? db))
+        query  {:database database-id
                 :type     :native
-                :native   {:query sql}}
+                :native   {:query sql :template-tags {}}}
         result (try
                  (qp/process-query
                   (assoc query :info {:executed-by api/*current-user-id*
@@ -592,6 +596,9 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
         effective-db-id (or database-id db-from-json)
         _  (when-not effective-db-id
              (throw (ex-info "database_id is required: pass it as the database_id argument or include \"database\" in the outer query wrapper." {})))
+        db (t2/select-one :model/Database :id effective-db-id)
+        _  (api/check-404 db)
+        _  (api/check-403 (mi/can-read? db))
         query  {:database effective-db-id
                 :type     :query
                 :query    query-map}
@@ -652,7 +659,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
          (when-let [params (:parameters card)]
            (when (seq params)
              (str "\nParameters:\n"
-                  (clojure.string/join "\n"
+                  (str/join "\n"
                     (map (fn [p]
                            (format "  - %s (slug: %s, type: %s)"
                                    (get p "name" (:name p))
@@ -685,7 +692,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
          (when-let [params (:parameters dash)]
            (when (seq params)
              (str "\nFilters/Parameters:\n"
-                  (clojure.string/join "\n"
+                  (str/join "\n"
                     (map (fn [p]
                            (format "  - %s (slug: %s, type: %s)"
                                    (get p "name" (:name p))
@@ -695,7 +702,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
 
          ;; Cards on the dashboard
          (str "\n\nCards on this dashboard (" (count dashcards) "):\n"
-              (clojure.string/join "\n"
+              (str/join "\n"
                 (map (fn [dc]
                        (let [card (get cards-map (:card_id dc))]
                          (if card
@@ -735,7 +742,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
       (str (if parent-id
              (format "Sub-collections of collection %d:\n" parent-id)
              "Root collections:\n")
-           (clojure.string/join "\n"
+           (str/join "\n"
              (map (fn [c]
                     (format "- ID: %d, Name: \"%s\"%s%s"
                             (:id c) (:name c)
@@ -770,13 +777,13 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
     (str (format "Collection \"%s\" (ID: %d) contents:\n\n" (:name coll) collection-id)
          (when (seq sub-colls)
            (str "Sub-collections:\n"
-                (clojure.string/join "\n"
+                (str/join "\n"
                   (map (fn [c] (format "  - [collection] ID: %d, Name: \"%s\"" (:id c) (:name c)))
                        sub-colls))
                 "\n\n"))
          (when (seq cards)
            (str "Questions/Models:\n"
-                (clojure.string/join "\n"
+                (str/join "\n"
                   (map (fn [c]
                          (format "  - [%s] ID: %d, Name: \"%s\", Display: %s"
                                  (name (or (:type c) :question))
@@ -786,7 +793,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                 "\n\n"))
          (when (seq dashes)
            (str "Dashboards:\n"
-                (clojure.string/join "\n"
+                (str/join "\n"
                   (map (fn [d] (format "  - [dashboard] ID: %d, Name: \"%s\"" (:id d) (:name d)))
                        dashes))
                 "\n"))
@@ -812,7 +819,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
          (format "- Database: \"%s\" (ID: %d)\n" (:name db) (:id db))
          (format "- Engine: %s\n" (name (:engine db)))
          (format "\nColumns (%d):\n" (count fields))
-         (clojure.string/join "\n"
+         (str/join "\n"
            (map (fn [f]
                   (str (format "  - ID: %d, %s (%s%s)"
                                (:id f) (:name f) (name (:base_type f))
@@ -846,13 +853,17 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                   (:id updated) (:name updated) (:id updated)))))))
 
 (defn- create-dashboard [{:strs [name description collection_id]}]
+  (when collection_id
+    (let [coll (t2/select-one :model/Collection :id collection_id)]
+      (api/check-404 coll)
+      (api/check-403 (mi/can-write? coll))))
   (let [dash-data (cond-> {:name       name
                             :creator_id api/*current-user-id*
                             :parameters []}
                     description   (assoc :description description)
                     collection_id (assoc :collection_id collection_id))
         dash (t2/insert-returning-instance! :model/Dashboard dash-data)]
-    (format "Dashboard created successfully!\n- ID: %d\n- Name: \"%s\"\n- URL: /dashboard/%d"
+    (format "Dashboard created successfully!\n- ID: %d\n- Name: \"%s\"\n- Display: dashboard\n- URL: /dashboard/%d"
             (:id dash) (:name dash) (:id dash))))
 
 (defn- add-card-to-dashboard [{:strs [dashboard_id card_id size_x size_y]}]
@@ -883,6 +894,10 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
             next-row sx sy)))
 
 (defn- create-question [{:strs [name description database_id sql collection_id display]}]
+  (when collection_id
+    (let [coll (t2/select-one :model/Collection :id collection_id)]
+      (api/check-404 coll)
+      (api/check-403 (mi/can-write? coll))))
   (let [card-data (cond-> {:name          name
                            :dataset_query {:database database_id
                                            :type     :native
@@ -893,8 +908,8 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                     description   (assoc :description description)
                     collection_id (assoc :collection_id collection_id))
         card      (queries.card/create-card! card-data @api/*current-user*)]
-    (format "Question created successfully!\n- ID: %d\n- Name: \"%s\"\n- URL: /question/%d"
-            (:id card) (:name card) (:id card))))
+    (format "Question created successfully!\n- ID: %d\n- Name: \"%s\"\n- Display: %s\n- URL: /question/%d"
+            (:id card) (:name card) (name (or (:display card) :table)) (:id card))))
 
 (defn- archive-item [item-type item-id]
   (let [model (case item-type
@@ -905,7 +920,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
         _     (api/check-403 (mi/can-write? item))]
     (t2/update! model item-id {:archived true})
     (format "%s \"%s\" (ID: %d) has been archived."
-            (clojure.string/capitalize item-type)
+            (str/capitalize item-type)
             (:name item) item-id)))
 
 (defn- move-item [item-type item-id collection-id]
@@ -917,10 +932,10 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
         _     (api/check-403 (mi/can-write? item))
         coll  (t2/select-one :model/Collection :id collection-id)
         _     (api/check-404 coll)
-        _     (api/check-403 (mi/can-read? coll))]
+        _     (api/check-403 (mi/can-write? coll))]
     (t2/update! model item-id {:collection_id collection-id})
     (format "%s \"%s\" (ID: %d) moved to collection \"%s\" (ID: %d)."
-            (clojure.string/capitalize item-type)
+            (str/capitalize item-type)
             (:name item) item-id
             (:name coll) collection-id)))
 
@@ -935,7 +950,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
     (if (empty? tables)
       (format "Database \"%s\" has no accessible tables." (:name db))
       (str (format "Tables in \"%s\" (%d total):\n" (:name db) (count tables))
-           (clojure.string/join "\n"
+           (str/join "\n"
              (map (fn [tbl]
                     (format "- ID: %d, %s%s%s"
                             (:id tbl)
@@ -1524,6 +1539,10 @@ Multiple marks can be combined:
   (load-guide-file! "MB_AI_AGENT_ANALYTICAL_GUIDE_FILE"))
 
 (defn- create-notebook-question [{:strs [name description database_id dataset_query display collection_id]}]
+  (when collection_id
+    (let [coll (t2/select-one :model/Collection :id collection_id)]
+      (api/check-404 coll)
+      (api/check-403 (mi/can-write? coll))))
   (let [{:keys [query-map] db-from-json :database-id} (parse-dataset-query dataset_query)
         effective-db-id (or database_id db-from-json)
         _  (when-not effective-db-id
@@ -1538,13 +1557,17 @@ Multiple marks can be combined:
                     collection_id (assoc :collection_id collection_id))
         card      (queries.card/create-card! card-data @api/*current-user*)]
     (format "Question created successfully!\n- ID: %d\n- Name: \"%s\"\n- Display: %s\n- URL: /question/%d"
-            (:id card) (:name card) (clojure.core/name (or (:display card) :table)) (:id card))))
+            (:id card) (:name card) (name (or (:display card) :table)) (:id card))))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Document tools
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
 (defn- create-document [{:strs [name content collection_id]}]
+  (when collection_id
+    (let [coll (t2/select-one :model/Collection :id collection_id)]
+      (api/check-404 coll)
+      (api/check-403 (mi/can-write? coll))))
   (let [ast (try
               (json/parse-string content)
               (catch Exception e
@@ -1568,10 +1591,12 @@ Multiple marks can be combined:
         ast (:document doc)
         ;; Extract embedded card IDs from AST
         card-ids (prose-mirror/card-ids {:document ast :content_type (:content_type doc)})
-        ;; Summarize content as plain text (collect text nodes)
-        text-summary (->> (tree-seq :content :content ast)
-                          (keep #(when (= "text" (:type %)) (:text %)))
-                          (clojure.string/join " ")
+        ;; Summarize content as plain text (collect text nodes).
+        ;; AST nodes from the DB have string keys after JSON deserialization.
+        text-summary (->> (tree-seq #(seq (get % "content")) #(get % "content") ast)
+                          (keep #(when (= "text" (get % "type")) (get % "text")))
+                          (remove nil?)
+                          (str/join " ")
                           (#(if (> (count %) 500) (str (subs % 0 500) "…") %)))]
     (str (format "Document: \"%s\" (ID: %d)\n" (:name doc) (:id doc))
          (format "- Collection ID: %s\n" (or (:collection_id doc) "root"))
@@ -1580,7 +1605,7 @@ Multiple marks can be combined:
          (format "- Updated: %s\n" (:updated_at doc))
          (format "- Archived: %s\n" (:archived doc))
          (when (seq card-ids)
-           (format "- Embedded card IDs: %s\n" (clojure.string/join ", " card-ids)))
+           (format "- Embedded card IDs: %s\n" (str/join ", " card-ids)))
          (format "- Content preview: %s\n" (if (seq text-summary) text-summary "(no text content)"))
          (format "- URL: /document/%d" (:id doc)))))
 
@@ -1588,9 +1613,14 @@ Multiple marks can be combined:
   (let [doc (t2/select-one :model/Document :id document_id)
         _   (api/check-404 doc)
         _   (api/check-403 (mi/can-write? doc))
+        parsed-content (when (some? content)
+                         (try
+                           (json/parse-string content)
+                           (catch Exception _
+                             (throw (ex-info "The `content` parameter is not valid JSON. Provide a valid ProseMirror AST JSON string." {})))))
         updates (cond-> {}
                   (some? name)          (assoc :name name)
-                  (some? content)       (assoc :document (json/parse-string content)
+                  (some? content)       (assoc :document parsed-content
                                                :content_type prose-mirror/prose-mirror-content-type)
                   (some? collection_id) (assoc :collection_id collection_id)
                   (some? archived)      (assoc :archived archived))]
@@ -1604,7 +1634,7 @@ Multiple marks can be combined:
         _         (api/check-404 doc)
         _         (api/check-403 (mi/can-write? doc))
         new-nodes (try
-                    (json/parse-string nodes true)
+                    (json/parse-string nodes)
                     (catch Exception e
                       (throw (ex-info (str "Error: `nodes` is not valid JSON array. Parse error: "
                                            (.getMessage e))
@@ -1612,7 +1642,8 @@ Multiple marks can be combined:
         _         (when-not (sequential? new-nodes)
                     (throw (ex-info "Error: `nodes` must be a JSON array of ProseMirror nodes." {})))
         current-ast (:document doc)
-        updated-ast (update current-ast :content
+        ;; Use string key "content" to match the DB JSON deserialization format
+        updated-ast (update current-ast "content"
                             (fn [existing] (into (vec existing) new-nodes)))]
     (t2/update! :model/Document :id document_id
                 {:document     updated-ast
@@ -1621,14 +1652,12 @@ Multiple marks can be combined:
             (count new-nodes) document_id document_id)))
 
 (defn- list-metrics [database-id table-id]
-  (let [metrics (->> (cond-> {:archived false
-                              :type     :metric}
-                       database-id (assoc :database_id database-id)
-                       table-id    (assoc :table_id table-id))
-                     (apply concat)
-                     (apply t2/select :model/Card)
-                     (filter mi/can-read?)
-                     (take 50))]
+  (let [base-where (cond-> {:type :metric :archived false}
+                     database-id (assoc :database_id database-id)
+                     table-id    (assoc :table_id table-id))
+        metrics    (->> (t2/select :model/Card base-where)
+                        (filter mi/can-read?)
+                        (take 50))]
     (if (empty? metrics)
       (cond
         (and database-id table-id) (format "No metrics found for table %d in database %d." table-id database-id)
@@ -1636,7 +1665,7 @@ Multiple marks can be combined:
         table-id                   (format "No metrics found for table %d." table-id)
         :else                      "No metrics found.")
       (str (format "Available metrics (%d):\n" (count metrics))
-           (clojure.string/join "\n"
+           (str/join "\n"
              (map (fn [m]
                     (let [tbl (when (:table_id m)
                                 (t2/select-one :model/Table :id (:table_id m)))]
@@ -1651,6 +1680,9 @@ Multiple marks can be combined:
 ;;; Dispatcher
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
+;; IMPORTANT: keep this set in sync with the tool definitions above.
+;; Any tool that creates, modifies, or deletes data must be listed here
+;; so it is excluded when safe-mode? is true.
 (def ^:private write-tool-names
   "Tool names that create, modify, or delete data. Disabled in safe mode."
   #{"create_question" "update_question" "create_dashboard" "add_card_to_dashboard"
