@@ -34,7 +34,10 @@
                       {:env-var env-var :path path})))
     (slurp f)))
 
-(def ^:private effective-system-instructions
+(defn- effective-system-instructions
+  "Read the system prompt from disk on every call.
+  File path is taken from MB_AI_AGENT_SYSTEM_PROMPT_FILE at runtime — never at build/compile time."
+  []
   (load-prompt-file! "MB_AI_AGENT_SYSTEM_PROMPT_FILE"))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
@@ -63,7 +66,7 @@
   [{:keys [model tools previous-response-id] :as opts}]
   (cond-> {:model             model
            ;; System prompt via `instructions` (not inside `input`)
-           :instructions      effective-system-instructions
+           :instructions      (effective-system-instructions)
            :input             (build-input opts)
            :store             true       ; store=true is required for previous_response_id to work
            :max_output_tokens 65536}     ; large limit so tool call arguments (e.g. ProseMirror AST) aren't truncated
