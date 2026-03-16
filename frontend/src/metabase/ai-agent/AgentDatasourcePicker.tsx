@@ -110,21 +110,28 @@ export function AgentDatasourcePicker({ value, onChange }: AgentDatasourcePicker
       >
         <Menu.Target>
           {value ? (
-            <UnstyledButton className={S.datasourceChip} onClick={() => setIsOpen((o: boolean) => !o)}>
-              <Icon name={value.type === "table" ? "table2" : "database"} size={11} />
-              <Text size="xs" lh={1} component="span" className={S.datasourceChipText} title={value.name}>
-                {value.name}
-              </Text>
-              <ActionIcon
-                size={14}
-                variant="transparent"
-                className={S.datasourceChipClear}
-                onClick={handleClear}
-                aria-label={t`Remove datasource`}
-              >
-                <Icon name="close" size={9} />
-              </ActionIcon>
-            </UnstyledButton>
+            <Tooltip
+              label={`${value.type === "table" ? t`Table` : t`Database`}: ${value.name}`}
+              position="top"
+              withArrow
+              openDelay={400}
+            >
+              <UnstyledButton className={S.datasourceChip} onClick={() => setIsOpen((o: boolean) => !o)}>
+                <Icon name={value.type === "table" ? "table2" : "database"} size={11} />
+                <Text size="xs" lh={1} component="span" className={S.datasourceChipText} title={value.name}>
+                  {value.name}
+                </Text>
+                <ActionIcon
+                  size={14}
+                  variant="transparent"
+                  className={S.datasourceChipClear}
+                  onClick={handleClear}
+                  aria-label={t`Remove datasource`}
+                >
+                  <Icon name="close" size={9} />
+                </ActionIcon>
+              </UnstyledButton>
+            </Tooltip>
           ) : (
             <Tooltip label={t`Select database or table`} position="top" withArrow>
               <UnstyledButton className={S.datasourceEmpty} onClick={() => setIsOpen((o: boolean) => !o)}>
