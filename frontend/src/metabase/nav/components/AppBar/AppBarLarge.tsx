@@ -103,7 +103,6 @@ const AppBarLarge = ({
         isNewButtonVisible ||
         isAppSwitcherVisible ||
         isMetabotEnabled ||
-        isProfileLinkVisible ||
         !isEmbeddingIframe) && (
         <Flex
           align="center"
