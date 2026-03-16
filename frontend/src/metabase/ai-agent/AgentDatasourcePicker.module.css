@@ -1,0 +1,104 @@
+/* Datasource picker — sits in the bottom bar */
+.datasourceBar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 4px;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.datasourceLabel {
+  flex-shrink: 0;
+}
+
+/* Selected chip */
+.datasourceChip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 7px;
+  background: color-mix(in srgb, var(--mb-color-brand) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mb-color-brand) 30%, transparent);
+  border-radius: 12px;
+  cursor: pointer;
+  color: var(--mb-color-brand);
+  max-width: 100%;
+  min-width: 0;
+  transition: background 0.12s;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.datasourceChip:hover {
+  background: color-mix(in srgb, var(--mb-color-brand) 18%, transparent);
+}
+
+.datasourceChipText {
+  color: var(--mb-color-brand);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.datasourceChipClear {
+  color: var(--mb-color-brand);
+  opacity: 0.65;
+  flex-shrink: 0;
+}
+
+.datasourceChipClear:hover {
+  opacity: 1;
+}
+
+/* Empty placeholder */
+.datasourceEmpty {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px 2px 6px;
+  border: 1px dashed var(--mb-color-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+  font-family: inherit;
+  font-size: inherit;
+  background: transparent;
+}
+
+.datasourceEmpty:hover {
+  border-color: var(--mb-color-brand);
+  background: color-mix(in srgb, var(--mb-color-brand) 5%, transparent);
+}
+
+.datasourceAddIcon {
+  color: var(--mb-color-text-tertiary);
+}
+
+/* Drill-down navigation */
+.backButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 12px;
+  color: var(--mb-color-text-secondary);
+  transition: background 0.1s;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  background: transparent;
+  min-width: 0;
+}
+
+.backButton:hover {
+  background: var(--mb-color-background-hover);
+}
+
+.scrollArea {
+  max-height: 220px;
+  overflow-y: auto;
+}

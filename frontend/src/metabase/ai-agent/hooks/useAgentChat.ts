@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import api from "metabase/lib/api";
 
 import type { AgentContextValue } from "../AgentContextPicker";
+import type { AgentDatasource } from "../AgentDatasourcePicker";
 import type { ChatMessage, ContentBlock } from "../types";
 
 function makeId(): string {
@@ -157,7 +158,7 @@ export function useAgentChat() {
   }, []);
 
   const sendMessage = useCallback(
-    async (userText: string, context?: AgentContextValue | null, safeMode?: boolean, targetCollectionId?: number | null) => {
+    async (userText: string, context?: AgentContextValue | null, safeMode?: boolean, targetCollectionId?: number | null, datasource?: AgentDatasource | null) => {
       setError(null);
       setIsLoading(true);
 
@@ -187,6 +188,14 @@ export function useAgentChat() {
           ...(context.db_id != null ? { db_id: context.db_id } : {}),
           ...(context.url_params ? { url_params: context.url_params } : {}),
           ...(context.dataset_query ? { dataset_query: context.dataset_query } : {}),
+        };
+      }
+      if (datasource) {
+        body.datasource = {
+          type: datasource.type,
+          id:   datasource.id,
+          name: datasource.name,
+          ...(datasource.db_id != null ? { db_id: datasource.db_id } : {}),
         };
       }
       if (safeMode) {

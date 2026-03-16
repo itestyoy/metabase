@@ -7,6 +7,8 @@ import { ActionIcon, Anchor, Icon, Stack, Text, Textarea, Tooltip } from "metaba
 import { AgentChatMessages } from "./AgentChatMessages";
 import type { AgentContextValue } from "./AgentContextPicker";
 import { AgentContextPicker } from "./AgentContextPicker";
+import type { AgentDatasource } from "./AgentDatasourcePicker";
+import { AgentDatasourcePicker } from "./AgentDatasourcePicker";
 import { AgentMcpServers } from "./AgentMcpServers";
 import type { SaveLocation } from "./AgentSaveLocationPicker";
 import { AgentSaveLocationPicker } from "./AgentSaveLocationPicker";
@@ -62,6 +64,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
 
   const [inputText, setInputText] = useState("");
   const [context, setContext] = useState<AgentContextValue | null>(null);
+  const [datasource, setDatasource] = useState<AgentDatasource | null>(null);
   const [safeMode, setSafeMode] = useState(false);
   const [saveLocation, setSaveLocation] = useState<SaveLocation | null>(null);
   const [isDocked, setIsDocked] = useState(() => readDockState().isDocked);
@@ -152,7 +155,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
     const text = inputText.trim();
     if (!text || isLoading) return;
     setInputText("");
-    sendMessage(text, context, safeMode, saveLocation?.id);
+    sendMessage(text, context, safeMode, saveLocation?.id, datasource);
   }, [inputText, isLoading, sendMessage, context, safeMode, saveLocation]);
 
   const handleKeyDown = useCallback(
@@ -168,9 +171,9 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const handleSelectPrompt = useCallback(
     (prompt: string) => {
       setInputText("");
-      sendMessage(prompt, context, safeMode, saveLocation?.id);
+      sendMessage(prompt, context, safeMode, saveLocation?.id, datasource);
     },
-    [sendMessage, context, safeMode, saveLocation],
+    [sendMessage, context, safeMode, saveLocation, datasource],
   );
 
   const handleSaveAsQuestion = useCallback(
@@ -181,6 +184,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
         context,
         safeMode,
         saveLocation?.id,
+        datasource,
       );
     },
     [sendMessage, context, safeMode, saveLocation],
@@ -367,6 +371,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
               {/* ── Bottom bar: context, save location, safe mode ── */}
               <div className={S.bottomBar}>
                 <AgentContextPicker value={context} onChange={handleContextChange} />
+                <AgentDatasourcePicker value={datasource} onChange={setDatasource} />
                 <AgentSaveLocationPicker value={saveLocation} onChange={setSaveLocation} />
                 <AgentMcpServers />
                 <div className={S.bottomBarSpacer} />

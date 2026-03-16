@@ -449,7 +449,7 @@
 
 (defn- prepare-chat-params
   "Build all the shared parameters needed by both /chat and /chat-stream."
-  [{:keys [message previous-response-id context safe-mode chat-collection-id]}]
+  [{:keys [message previous-response-id context datasource safe-mode chat-collection-id]}]
   (let [api-key          (ai.settings/ai-agent-openai-api-key)
         _                (api/check-403 (some? api-key))
         model            (or (ai.settings/ai-agent-openai-model) "gpt-5.4")
@@ -492,6 +492,20 @@
                                    (when-let [db-id (:db_id context)]
                                      (str ", db_id=" db-id))
                                    ")]\n"))
+                            (when datasource
+                              (str "[Datasource: "
+                                   (name (:type datasource))
+                                   " \""
+                                   (:name datasource)
+                                   "\" (id="
+                                   (:id datasource)
+                                   (when-let [db-id (:db_id datasource)]
+                                     (str ", db_id=" db-id))
+                                   (when (= "database" (name (:type datasource)))
+                                     " — use this database_id for all queries, skip list_databases")
+                                   (when (= "table" (name (:type datasource)))
+                                     " — use this table for queries, call get_table_details to get field IDs")
+                                   ")]\n"))
                             message)
         safe-mode?     (boolean safe-mode)
         effective-msg  (if safe-mode?
@@ -530,6 +544,7 @@
    {message              :message
     previous-response-id :previous_response_id
     context              :context
+    datasource           :datasource
     safe-mode            :safe_mode
     chat-collection-id   :chat_collection_id} :- [:map
                                                     [:message              ms/NonBlankString]
@@ -540,6 +555,12 @@
                                                               [:name  :string]
                                                               [:model :string]
                                                               [:db_id {:optional true} [:maybe :int]]]]]
+                                                    [:datasource           {:optional true}
+                                                     [:maybe [:map
+                                                              [:type  :string]
+                                                              [:id    :int]
+                                                              [:name  :string]
+                                                              [:db_id {:optional true} [:maybe :int]]]]]
                                                     [:safe_mode {:optional true} [:maybe :boolean]]
                                                     [:chat_collection_id {:optional true} [:maybe :int]]]]
   (api/check-403 (ai.settings/ai-agent-enabled))
@@ -549,6 +570,7 @@
         (prepare-chat-params {:message              message
                               :previous-response-id previous-response-id
                               :context              context
+                              :datasource           datasource
                               :safe-mode            safe-mode
                               :chat-collection-id   chat-collection-id})
         raw-result (run-tool-loop api-key model opts
@@ -578,6 +600,7 @@
    {message              :message
     previous-response-id :previous_response_id
     context              :context
+    datasource           :datasource
     safe-mode            :safe_mode
     chat-collection-id   :chat_collection_id} :- [:map
                                                     [:message              ms/NonBlankString]
@@ -588,6 +611,12 @@
                                                               [:name  :string]
                                                               [:model :string]
                                                               [:db_id {:optional true} [:maybe :int]]]]]
+                                                    [:datasource           {:optional true}
+                                                     [:maybe [:map
+                                                              [:type  :string]
+                                                              [:id    :int]
+                                                              [:name  :string]
+                                                              [:db_id {:optional true} [:maybe :int]]]]]
                                                     [:safe_mode {:optional true} [:maybe :boolean]]
                                                     [:chat_collection_id {:optional true} [:maybe :int]]]]
   (api/check-403 (ai.settings/ai-agent-enabled))
@@ -595,6 +624,7 @@
   (let [params (prepare-chat-params {:message              message
                                      :previous-response-id previous-response-id
                                      :context              context
+                                     :datasource           datasource
                                      :safe-mode            safe-mode
                                      :chat-collection-id   chat-collection-id})]
     ;; Use Metabase's streaming-response which writes directly to the Jetty
