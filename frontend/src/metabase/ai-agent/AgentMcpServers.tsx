@@ -39,7 +39,7 @@ export function AgentMcpServers() {
 
   return (
     <div className={S.mcpBar}>
-      <Text size="xs" c="text-tertiary" className={S.mcpLabel}>
+      <Text size="xs" c="text-tertiary" lh={1} className={S.mcpLabel}>
         {t`Tools:`}
       </Text>
       <div className={S.mcpChips}>
@@ -52,7 +52,7 @@ export function AgentMcpServers() {
           >
             <div className={S.mcpChip}>
               <Icon name="bolt" size={10} />
-              <Text size="xs" className={S.mcpChipName}>
+              <Text size="xs" lh={1} className={S.mcpChipName}>
                 {server.name}
               </Text>
             </div>

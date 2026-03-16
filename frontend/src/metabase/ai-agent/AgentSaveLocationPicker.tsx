@@ -103,7 +103,7 @@ export function AgentSaveLocationPicker({ value, onChange }: AgentSaveLocationPi
 
   return (
     <Box className={S.saveBar}>
-      <Text size="xs" c="text-tertiary" className={S.saveLabel}>
+      <Text size="xs" c="text-tertiary" lh={1} className={S.saveLabel}>
         {t`Save to:`}
       </Text>
 
@@ -122,7 +122,7 @@ export function AgentSaveLocationPicker({ value, onChange }: AgentSaveLocationPi
               onClick={() => setIsOpen(o => !o)}
             >
               <Icon name="folder" size={11} />
-              <Text size="xs" className={S.saveChipText} title={value.name}>
+              <Text size="xs" lh={1} className={S.saveChipText} title={value.name}>
                 {value.name}
               </Text>
               <ActionIcon
@@ -140,7 +140,7 @@ export function AgentSaveLocationPicker({ value, onChange }: AgentSaveLocationPi
               className={S.saveEmpty}
               onClick={() => setIsOpen(o => !o)}
             >
-              <Text size="xs" c="text-tertiary">{t`Auto`}</Text>
+              <Text size="xs" c="text-tertiary" lh={1}>{t`Auto`}</Text>
             </UnstyledButton>
           )}
         </Menu.Target>
