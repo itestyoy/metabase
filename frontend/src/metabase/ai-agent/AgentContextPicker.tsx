@@ -64,7 +64,7 @@ export function AgentContextPicker({ value, onChange }: AgentContextPickerProps)
 
   return (
     <Box className={S.contextBar}>
-      <Text size="xs" c="text-tertiary" className={S.contextLabel}>
+      <Text size="xs" c="text-tertiary" lh={1} className={S.contextLabel}>
         {t`Context:`}
       </Text>
 
@@ -80,7 +80,7 @@ export function AgentContextPicker({ value, onChange }: AgentContextPickerProps)
             onClick={() => setIsOpen((o: boolean) => !o)}
           >
             <Icon name={ICON[value.model] ?? "database"} size={11} />
-            <Text size="xs" className={S.contextChipText} title={value.name}>
+            <Text size="xs" lh={1} className={S.contextChipText} title={value.name}>
               {LABEL()[value.model] ?? value.model}: {value.name}
             </Text>
             <ActionIcon
@@ -99,7 +99,7 @@ export function AgentContextPicker({ value, onChange }: AgentContextPickerProps)
             onClick={() => setIsOpen((o: boolean) => !o)}
           >
             <Icon name="add" size={10} className={S.contextAddIcon} />
-            <Text size="xs" c="text-tertiary">{t`Add context`}</Text>
+            <Text size="xs" c="text-tertiary" lh={1}>{t`Add context`}</Text>
           </UnstyledButton>
         )}
 

@@ -364,25 +364,24 @@ export function AgentModal({ onClose }: AgentModalProps) {
                 </div>
               </div>
 
-              {/* ── Bottom bar: safe mode, context, save location ── */}
-              <div className={`${S.bottomBar} ${isDocked ? S.bottomBarDocked : ""}`}>
+              {/* ── Bottom bar: context, save location, safe mode ── */}
+              <div className={S.bottomBar}>
+                <AgentContextPicker value={context} onChange={handleContextChange} />
+                <AgentSaveLocationPicker value={saveLocation} onChange={setSaveLocation} />
+                <AgentMcpServers />
+                <div className={S.bottomBarSpacer} />
+                <div className={S.bottomBarDivider} />
                 <Tooltip label={safeMode ? t`Safe mode ON — write tools disabled` : t`Safe mode OFF — all tools enabled`}>
                   <ActionIcon
                     variant={safeMode ? "light" : "subtle"}
                     color={safeMode ? "green" : "gray"}
                     size="sm"
-                    onClick={() => setSafeMode(v => !v)}
+                    onClick={() => setSafeMode((v: boolean) => !v)}
                     aria-label={t`Toggle safe mode`}
-                    className={S.safeModeButton}
                   >
                     <Icon name="lock" size={14} color={safeMode ? "var(--mb-color-success)" : undefined} />
                   </ActionIcon>
                 </Tooltip>
-                <div className={S.bottomBarRow}>
-                  <AgentContextPicker value={context} onChange={handleContextChange} />
-                  <AgentSaveLocationPicker value={saveLocation} onChange={setSaveLocation} />
-                  <AgentMcpServers />
-                </div>
               </div>
             </>
           )}

@@ -5,6 +5,7 @@
    is allowed to see."
   (:require
    [cheshire.core :as json]
+   [clojure.java.io :as io]
    [metabase.ai-agent.mcp :as mcp]
    [metabase.api.common :as api]
    [metabase.models.interface :as mi]
@@ -330,6 +331,18 @@ to ensure the AST structure is valid."
     :description "Get the analytical investigation methodology guide. You MUST call this before starting any
 data investigation, root-cause analysis, anomaly detection, or exploratory research task.
 Returns a structured framework for how to approach analytical problems like a senior data analyst."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {}
+                  :required             []
+                  :additionalProperties false}}
+
+   {:type        "function"
+    :name        "get_metrics_guide"
+    :description "Get the metrics taxonomy and query guide for the Semantic Layer database.
+Call this before building any query that uses metrics — it explains the atomic vs semi-atomic
+metric distinction, available dimensions for each type, conversion rate formulas, and common
+use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
     :strict      true
     :parameters  {:type                 "object"
                   :properties           {}
@@ -1438,65 +1451,25 @@ Multiple marks can be combined:
   ]}
 ]}")
 
+(defn- load-guide-file!
+  "Load a guide file from the path given by env var.
+  Throws if the env var is not set or the file does not exist."
+  [env-var]
+  (let [path (or (System/getenv env-var)
+                 (throw (ex-info (str "BI Agent: env var " env-var " is not set. "
+                                      "Set it to the path of the guide file.")
+                                 {:env-var env-var})))
+        f    (io/file path)]
+    (when-not (.exists f)
+      (throw (ex-info (str "BI Agent: " env-var " points to non-existent file '" path "'")
+                      {:env-var env-var :path path})))
+    (slurp f)))
+
+(defn- get-metrics-guide []
+  (load-guide-file! "MB_AI_AGENT_METRICS_GUIDE_FILE"))
+
 (defn- get-analytical-guide []
-  "## Analytical Investigation Framework
-
-You are a senior data analyst. When investigating a problem, follow this structured methodology.
-
-### Phase 1: Understand the problem
-- Clarify what exactly happened: what metric changed, by how much, when did it start?
-- Identify the key metric(s) and the expected vs actual values.
-- Determine the time window of the anomaly — when did things start deviating?
-
-### Phase 2: Scope the data landscape
-- Identify which tables and databases are relevant (use get_database_tables, get_table_details).
-- Check available metrics (list_metrics) — they contain team-agreed definitions, prefer them.
-- Understand the data model: what joins exist, what are the key dimensions for slicing.
-
-### Phase 3: Establish baselines
-- Query the metric over a broader time range to see historical norms.
-- Compare the anomaly period to prior periods (week-over-week, month-over-month).
-- Save baseline queries as questions — you'll embed them in the final report.
-
-### Phase 4: Segment & drill down
-- Break the metric by key dimensions: geography, product, channel, user segment, platform, etc.
-- Look for which segment is driving the change — often one segment explains 80%+ of the shift.
-- Use filters to isolate segments and run targeted queries.
-- At each step, ask: does this segment explain the anomaly? If not, try another dimension.
-
-### Phase 5: Identify root cause
-- Once you find the responsible segment, dig deeper:
-  - Did something change upstream (e.g. a data pipeline issue, missing data)?
-  - Is there a business event (launch, outage, promotion, seasonality)?
-  - Did the definition or tracking change (new event schema, removed field)?
-- Cross-reference with other tables if needed (e.g. events vs transactions).
-
-### Phase 6: Quantify the impact
-- Calculate the exact impact: how much revenue/users/events were affected?
-- Compare against what the numbers would have been without the anomaly.
-- Express in both absolute and relative terms (e.g. -$12K, -8% vs prior week).
-
-### Phase 7: Compile the report
-Save all key queries as questions, then build a Metabase Document with:
-1. **Title**: clear description of the investigation
-2. **Executive summary**: 2-3 sentences with the headline finding
-3. **Background**: what triggered the investigation, the metric and time range
-4. **Analysis sections** (each with an embedded chart + written interpretation):
-   - Overall trend (baseline vs anomaly)
-   - Segment breakdown (which dimensions explain the change)
-   - Root cause deep-dive
-5. **Key findings**: bullet list of the most important facts
-6. **Impact**: quantified effect on the business
-7. **Recommendations**: actionable next steps
-
-### Analytical principles
-- **Always show your evidence** — every claim should have a query/chart backing it.
-- **Compare, don't just describe** — a number without context is meaningless. Always compare to a baseline.
-- **Start broad, then narrow** — don't jump to conclusions. Let the data guide you through progressive filtering.
-- **Check data quality first** — before blaming business factors, rule out data issues (NULL spikes, missing days, schema changes).
-- **Use percentages AND absolutes** — a 50% drop in a tiny segment matters less than a 5% drop in the biggest one.
-- **Be honest about uncertainty** — if the data is inconclusive, say so. Suggest what additional data would help.
-- **Think about the audience** — the report should be understandable by someone who wasn't part of the investigation.")
+  (load-guide-file! "MB_AI_AGENT_ANALYTICAL_GUIDE_FILE"))
 
 (defn- create-notebook-question [{:strs [name description database_id dataset_query display collection_id]}]
   (let [query-map (if (string? dataset_query)
@@ -1685,6 +1658,7 @@ Save all key queries as questions, then build a Metabase Document with:
         "get_mbql_guide" (get-mbql-guide)
         "get_document_guide" (get-document-guide)
         "get_analytical_guide" (get-analytical-guide)
+        "get_metrics_guide"    (get-metrics-guide)
         "run_mbql_query"  (run-mbql-query (get args "database_id") (get args "dataset_query"))
         "create_document" (create-document args)
         "get_document"    (get-document-details (get args "document_id"))
