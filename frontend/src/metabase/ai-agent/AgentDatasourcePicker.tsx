@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { t } from "ttag";
 
 import api from "metabase/lib/api";
-import { ActionIcon, Box, Icon, Menu, Text, UnstyledButton } from "metabase/ui";
+import { ActionIcon, Box, Icon, Menu, Text, Tooltip, UnstyledButton } from "metabase/ui";
 
 import S from "./AgentDatasourcePicker.module.css";
 
@@ -101,10 +101,6 @@ export function AgentDatasourcePicker({ value, onChange }: AgentDatasourcePicker
 
   return (
     <Box className={S.datasourceBar}>
-      <Text size="xs" c="text-tertiary" lh={1} className={S.datasourceLabel}>
-        {t`Database:`}
-      </Text>
-
       <Menu
         opened={isOpen}
         onClose={() => setIsOpen(false)}
@@ -114,7 +110,7 @@ export function AgentDatasourcePicker({ value, onChange }: AgentDatasourcePicker
       >
         <Menu.Target>
           {value ? (
-            <UnstyledButton className={S.datasourceChip} onClick={() => setIsOpen(o => !o)}>
+            <UnstyledButton className={S.datasourceChip} onClick={() => setIsOpen((o: boolean) => !o)}>
               <Icon name={value.type === "table" ? "table2" : "database"} size={11} />
               <Text size="xs" lh={1} className={S.datasourceChipText} title={value.name}>
                 {value.name}
@@ -130,10 +126,12 @@ export function AgentDatasourcePicker({ value, onChange }: AgentDatasourcePicker
               </ActionIcon>
             </UnstyledButton>
           ) : (
-            <UnstyledButton className={S.datasourceEmpty} onClick={() => setIsOpen(o => !o)}>
-              <Icon name="database" size={10} className={S.datasourceAddIcon} />
-              <Text size="xs" c="text-tertiary" lh={1}>{t`Add DB`}</Text>
-            </UnstyledButton>
+            <Tooltip label={t`Select database or table`} position="top" withArrow>
+              <UnstyledButton className={S.datasourceEmpty} onClick={() => setIsOpen((o: boolean) => !o)}>
+                <Icon name="database" size={10} className={S.datasourceAddIcon} />
+                <Text size="xs" c="text-tertiary" lh={1}>{t`DB`}</Text>
+              </UnstyledButton>
+            </Tooltip>
           )}
         </Menu.Target>
 

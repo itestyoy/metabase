@@ -525,8 +525,8 @@
 .bottomBar {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 0 6px;
+  gap: 4px;
+  padding: 0 8px;
   min-height: 36px;
   background: var(--mb-color-background-primary);
   flex-shrink: 0;

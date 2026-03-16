@@ -1,16 +1,8 @@
 /* Datasource picker — sits in the bottom bar */
 .datasourceBar {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0 4px;
   flex-shrink: 1;
   min-width: 0;
   overflow: hidden;
-}
-
-.datasourceLabel {
-  flex-shrink: 0;
 }
 
 /* Selected chip */
