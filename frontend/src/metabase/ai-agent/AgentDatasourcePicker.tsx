@@ -112,7 +112,7 @@ export function AgentDatasourcePicker({ value, onChange }: AgentDatasourcePicker
           {value ? (
             <UnstyledButton className={S.datasourceChip} onClick={() => setIsOpen((o: boolean) => !o)}>
               <Icon name={value.type === "table" ? "table2" : "database"} size={11} />
-              <Text size="xs" lh={1} className={S.datasourceChipText} title={value.name}>
+              <Text size="xs" lh={1} component="span" className={S.datasourceChipText} title={value.name}>
                 {value.name}
               </Text>
               <ActionIcon

@@ -118,7 +118,7 @@ export function AgentSaveLocationPicker({ value, onChange }: AgentSaveLocationPi
               onClick={() => setIsOpen((o: boolean) => !o)}
             >
               <Icon name="folder" size={11} />
-              <Text size="xs" lh={1} className={S.saveChipText} title={value.name}>
+              <Text size="xs" lh={1} component="span" className={S.saveChipText} title={value.name}>
                 {value.name}
               </Text>
               <ActionIcon

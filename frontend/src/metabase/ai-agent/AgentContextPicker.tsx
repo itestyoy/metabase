@@ -71,7 +71,7 @@ export function AgentContextPicker({ value, onChange }: AgentContextPickerProps)
             onClick={() => setIsOpen((o: boolean) => !o)}
           >
             <Icon name={ICON[value.model] ?? "database"} size={11} />
-            <Text size="xs" lh={1} className={S.contextChipText} title={value.name}>
+            <Text size="xs" lh={1} component="span" className={S.contextChipText} title={value.name}>
               {value.name}
             </Text>
             <ActionIcon

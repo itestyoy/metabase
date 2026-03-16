@@ -49,7 +49,7 @@ export function AgentMcpServers() {
           >
             <div className={S.mcpChip}>
               <Icon name="bolt" size={10} />
-              <Text size="xs" lh={1} className={S.mcpChipName}>
+              <Text size="xs" lh={1} component="span" className={S.mcpChipName}>
                 {server.name}
               </Text>
             </div>
