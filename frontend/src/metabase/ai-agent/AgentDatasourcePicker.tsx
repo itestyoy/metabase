@@ -59,11 +59,15 @@ export function AgentDatasourcePicker({ value, onChange }: AgentDatasourcePicker
       return;
     }
     setIsLoading(true);
-    api
-      .GET(`/api/database/${drillDb.id}/tables`)({})
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (api.sessionToken) {
+      headers["X-Metabase-Session"] = api.sessionToken;
+    }
+    fetch(`/api/database/${drillDb.id}?include=tables`, { headers })
+      .then(r => r.json())
       .then((data: unknown) => {
-        const arr = Array.isArray(data) ? (data as Table[]) : [];
-        setTables(arr);
+        const d = data as { tables?: Table[] };
+        setTables(Array.isArray(d.tables) ? d.tables : []);
       })
       .catch(() => setTables([]))
       .finally(() => setIsLoading(false));
