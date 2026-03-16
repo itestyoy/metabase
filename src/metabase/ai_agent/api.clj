@@ -668,6 +668,9 @@
    :access           true
    :model            (or (ai.settings/ai-agent-openai-model) "gpt-5.4")
    :enabled          (ai.settings/ai-agent-enabled)
+   :default_database (when-let [db-id (ai.settings/ai-agent-default-database-id)]
+                       (when-let [db (t2/select-one :model/Database :id db-id)]
+                         {:id (:id db) :name (:name db)}))
    :available_models [;; ── GPT-5 family (flagship, Mar 2026) ───────────────────────────
                       {:value "gpt-5.4"       :label "GPT-5.4 — flagship, best quality (recommended)" :group "GPT-5"}
                       {:value "gpt-5.4-pro"   :label "GPT-5.4 Pro — max capability, higher cost"      :group "GPT-5"}

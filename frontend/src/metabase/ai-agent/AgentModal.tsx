@@ -65,6 +65,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const [inputText, setInputText] = useState("");
   const [context, setContext] = useState<AgentContextValue | null>(null);
   const [datasource, setDatasource] = useState<AgentDatasource | null>(null);
+  const isDatasourceManual = useRef(false);
   const [safeMode, setSafeMode] = useState(false);
   const [saveLocation, setSaveLocation] = useState<SaveLocation | null>(null);
   const [isDocked, setIsDocked] = useState(() => readDockState().isDocked);
@@ -73,6 +74,18 @@ export function AgentModal({ onClose }: AgentModalProps) {
 
   const { messages, isLoading, error, agentSettings, chatCollectionId, chatCollectionName, sendMessage, clearMessages } =
     useAgentChat();
+
+  // Auto-populate datasource from default_database setting
+  useEffect(() => {
+    if (!isDatasourceManual.current && agentSettings?.default_database) {
+      setDatasource({
+        type: "database",
+        id: agentSettings.default_database.id,
+        name: agentSettings.default_database.name,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentSettings?.default_database]);
 
   // When the backend auto-creates a chat collection, show it in the save-location chip
   useEffect(() => {
@@ -148,6 +161,11 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const handleContextChange = useCallback((value: AgentContextValue | null) => {
     isContextManual.current = true;
     setContext(value);
+  }, []);
+
+  const handleDatasourceChange = useCallback((value: AgentDatasource | null) => {
+    isDatasourceManual.current = true;
+    setDatasource(value);
   }, []);
 
   // ── Send ───────────────────────────────────────────────────────────────
@@ -371,7 +389,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
               {/* ── Bottom bar: context, save location, safe mode ── */}
               <div className={S.bottomBar}>
                 <AgentContextPicker value={context} onChange={handleContextChange} />
-                <AgentDatasourcePicker value={datasource} onChange={setDatasource} />
+                <AgentDatasourcePicker value={datasource} onChange={handleDatasourceChange} />
                 <AgentSaveLocationPicker value={saveLocation} onChange={setSaveLocation} />
                 <AgentMcpServers />
                 <div className={S.bottomBarSpacer} />

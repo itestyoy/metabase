@@ -28,3 +28,10 @@
   :type        :boolean
   :default     true
   :export?     false)
+
+(defsetting ai-agent-default-database-id
+  (deferred-tru "Default database ID pre-selected in the AI Agent datasource picker (MB_AI_AGENT_DEFAULT_DATABASE_ID).")
+  :visibility  :authenticated
+  :type        :integer
+  :default     nil
+  :export?     false)

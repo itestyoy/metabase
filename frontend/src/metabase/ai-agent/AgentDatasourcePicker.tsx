@@ -109,7 +109,7 @@ export function AgentDatasourcePicker({ value, onChange }: AgentDatasourcePicker
         opened={isOpen}
         onClose={() => setIsOpen(false)}
         closeOnItemClick={false}
-        position="top-start"
+        position="bottom-start"
         width={240}
       >
         <Menu.Target>
