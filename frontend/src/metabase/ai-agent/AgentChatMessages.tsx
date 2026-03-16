@@ -420,7 +420,7 @@ function ToolCallMessage({ message }: { message: ChatMessage }) {
             color={isError ? "var(--mb-color-error)" : "var(--mb-color-success)"}
           />
         )}
-        <Text size="xs" c="text-secondary" fs="italic" style={{ flex: 1 }}>
+        <Text size="xs" c="text-secondary" fs="italic" lh={1} style={{ flex: 1 }}>
           {toolLabel}{isRunning ? "…" : ""}
         </Text>
         {message.toolResult && (
