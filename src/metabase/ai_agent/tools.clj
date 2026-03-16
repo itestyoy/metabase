@@ -1451,101 +1451,25 @@ Multiple marks can be combined:
   ]}
 ]}")
 
-(def ^:private analytical-guide-fallback
-  "## Analytical Investigation Framework
-
-You are a senior data analyst. When investigating a problem, follow this structured methodology.
-
-### Phase 1: Understand the problem
-- Clarify what exactly happened: what metric changed, by how much, when did it start?
-- Identify the key metric(s) and the expected vs actual values.
-- Determine the time window of the anomaly — when did things start deviating?
-
-### Phase 2: Scope the data landscape — METRICS FIRST (MANDATORY)
-- **Step 1 — Discover metrics**: Call list_metrics(database_id, table_id=null) immediately.
-  Read EVERY metric name and description. Metrics reveal which KPIs the team tracks, which tables
-  matter, and what the correct business definitions are. This is not optional.
-- **Step 2 — Map the data model**: Use get_database_tables + get_table_details to find relevant tables and field IDs.
-- **Step 3 — Plan your queries**: For every aggregation you will run, check whether an existing metric covers it.
-  If yes — use [\"metric\", metric_id] in MBQL. Never reinvent what a metric already defines.
-- Understand the data model: what joins exist, what are the key dimensions for slicing.
-
-### Phase 3: Establish baselines using official metrics
-- Use the metrics found in Phase 2 as your baseline queries — they use the team's agreed definitions.
-  Call run_mbql_query with [\"metric\", id] over the full available time range first.
-- Compare the anomaly period to prior periods (week-over-week, month-over-month).
-- If multiple related metrics exist, query all of them — cross-metric correlation often reveals root causes faster.
-- Save baseline queries as questions — you'll embed them in the final report.
-
-### Phase 4: Segment & drill down
-- Break the metric by key dimensions: geography, product, channel, user segment, platform, etc.
-- Look for which segment is driving the change — often one segment explains 80%+ of the shift.
-- Use filters to isolate segments and run targeted queries.
-- At each step, ask: does this segment explain the anomaly? If not, try another dimension.
-
-### Phase 5: Identify root cause
-- Once you find the responsible segment, dig deeper:
-  - Did something change upstream (e.g. a data pipeline issue, missing data)?
-  - Is there a business event (launch, outage, promotion, seasonality)?
-  - Did the definition or tracking change (new event schema, removed field)?
-- Cross-reference with other tables if needed (e.g. events vs transactions).
-
-### Phase 6: Quantify the impact
-- Calculate the exact impact: how much revenue/users/events were affected?
-- Compare against what the numbers would have been without the anomaly.
-- Express in both absolute and relative terms (e.g. -$12K, -8% vs prior week).
-
-### Phase 7: Compile the report
-Save all key queries as questions, then build a Metabase Document with:
-1. **Title**: clear description of the investigation
-2. **Executive summary**: 2-3 sentences with the headline finding
-3. **Background**: what triggered the investigation, the metric and time range
-4. **Analysis sections** (each with an embedded chart + written interpretation):
-   - Overall trend (baseline vs anomaly)
-   - Segment breakdown (which dimensions explain the change)
-   - Root cause deep-dive
-5. **Key findings**: bullet list of the most important facts
-6. **Impact**: quantified effect on the business
-7. **Recommendations**: actionable next steps
-
-### Analytical principles
-- **Use official metrics, not manual aggregations** — always call list_metrics first and use [\"metric\", id] in MBQL.
-  Manual SUM/COUNT reinvents definitions the team has already agreed on, producing inconsistent numbers.
-- **Explore all available metrics** — don't assume you know which metric is relevant; read every one.
-  Adjacent metrics (e.g. Gross Revenue + Net Revenue + Refunds) often together explain an anomaly.
-- **Always show your evidence** — every claim should have a query/chart backing it.
-- **Compare, don't just describe** — a number without context is meaningless. Always compare to a baseline.
-- **Start broad, then narrow** — don't jump to conclusions. Let the data guide you through progressive filtering.
-- **Check data quality first** — before blaming business factors, rule out data issues (NULL spikes, missing days, schema changes).
-- **Use percentages AND absolutes** — a 50% drop in a tiny segment matters less than a 5% drop in the biggest one.
-- **Be honest about uncertainty** — if the data is inconclusive, say so. Suggest what additional data would help.
-- **Think about the audience** — the report should be understandable by someone who wasn't part of the investigation.")
-
-(def ^:private metrics-guide-fallback
-  "## Metrics Guide — Semantic Layer
-
-See MB_AI_AGENT_METRICS_GUIDE_FILE for the full guide.
-No metrics guide file is currently configured.")
+(defn- load-guide-file!
+  "Load a guide file from the path given by env var.
+  Throws if the env var is not set or the file does not exist."
+  [env-var]
+  (let [path (or (System/getenv env-var)
+                 (throw (ex-info (str "BI Agent: env var " env-var " is not set. "
+                                      "Set it to the path of the guide file.")
+                                 {:env-var env-var})))
+        f    (io/file path)]
+    (when-not (.exists f)
+      (throw (ex-info (str "BI Agent: " env-var " points to non-existent file '" path "'")
+                      {:env-var env-var :path path})))
+    (slurp f)))
 
 (defn- get-metrics-guide []
-  (if-let [path (System/getenv "MB_AI_AGENT_METRICS_GUIDE_FILE")]
-    (let [f (io/file path)]
-      (if (.exists f)
-        (slurp f)
-        (do
-          (log/warnf "BI Agent: MB_AI_AGENT_METRICS_GUIDE_FILE points to non-existent file '%s'; using built-in fallback" path)
-          metrics-guide-fallback)))
-    metrics-guide-fallback))
+  (load-guide-file! "MB_AI_AGENT_METRICS_GUIDE_FILE"))
 
 (defn- get-analytical-guide []
-  (if-let [path (System/getenv "MB_AI_AGENT_ANALYTICAL_GUIDE_FILE")]
-    (let [f (io/file path)]
-      (if (.exists f)
-        (slurp f)
-        (do
-          (log/warnf "BI Agent: MB_AI_AGENT_ANALYTICAL_GUIDE_FILE points to non-existent file '%s'; using built-in guide" path)
-          analytical-guide-fallback)))
-    analytical-guide-fallback))
+  (load-guide-file! "MB_AI_AGENT_ANALYTICAL_GUIDE_FILE"))
 
 (defn- create-notebook-question [{:strs [name description database_id dataset_query display collection_id]}]
   (let [query-map (if (string? dataset_query)
