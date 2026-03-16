@@ -39,9 +39,6 @@ export function AgentMcpServers() {
 
   return (
     <div className={S.mcpBar}>
-      <Text size="xs" c="text-tertiary" lh={1} className={S.mcpLabel}>
-        {t`Tools:`}
-      </Text>
       <div className={S.mcpChips}>
         {servers.map(server => (
           <Tooltip

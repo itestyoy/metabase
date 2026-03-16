@@ -1,21 +1,8 @@
 /* Context bar — sits inside the bottom bar */
 .contextBar {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0 4px;
   flex-shrink: 1;
   min-width: 0;
   overflow: hidden;
-}
-
-.contextIcon {
-  color: var(--mb-color-text-tertiary);
-  flex-shrink: 0;
-}
-
-.contextLabel {
-  flex-shrink: 0;
 }
 
 /*
@@ -24,7 +11,6 @@
 */
 .contextAnchor {
   position: relative;
-  flex: 1;
   min-width: 0;
 }
 

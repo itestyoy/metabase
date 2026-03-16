@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { t } from "ttag";
 
 import api from "metabase/lib/api";
-import { ActionIcon, Box, Icon, Menu, Text, UnstyledButton } from "metabase/ui";
+import { ActionIcon, Box, Icon, Menu, Text, Tooltip, UnstyledButton } from "metabase/ui";
 
 import S from "./AgentSaveLocationPicker.module.css";
 
@@ -103,10 +103,6 @@ export function AgentSaveLocationPicker({ value, onChange }: AgentSaveLocationPi
 
   return (
     <Box className={S.saveBar}>
-      <Text size="xs" c="text-tertiary" lh={1} className={S.saveLabel}>
-        {t`Save to:`}
-      </Text>
-
       <Menu
         opened={isOpen}
         onClose={() => setIsOpen(false)}
@@ -119,7 +115,7 @@ export function AgentSaveLocationPicker({ value, onChange }: AgentSaveLocationPi
           {value ? (
             <UnstyledButton
               className={S.saveChip}
-              onClick={() => setIsOpen(o => !o)}
+              onClick={() => setIsOpen((o: boolean) => !o)}
             >
               <Icon name="folder" size={11} />
               <Text size="xs" lh={1} className={S.saveChipText} title={value.name}>
@@ -136,12 +132,15 @@ export function AgentSaveLocationPicker({ value, onChange }: AgentSaveLocationPi
               </ActionIcon>
             </UnstyledButton>
           ) : (
-            <UnstyledButton
-              className={S.saveEmpty}
-              onClick={() => setIsOpen(o => !o)}
-            >
-              <Text size="xs" c="text-tertiary" lh={1}>{t`Auto`}</Text>
-            </UnstyledButton>
+            <Tooltip label={t`Save location — auto-creates a sub-collection`} position="top" withArrow>
+              <UnstyledButton
+                className={S.saveEmpty}
+                onClick={() => setIsOpen((o: boolean) => !o)}
+              >
+                <Icon name="folder" size={10} color="var(--mb-color-text-tertiary)" />
+                <Text size="xs" c="text-tertiary" lh={1}>{t`Auto`}</Text>
+              </UnstyledButton>
+            </Tooltip>
           )}
         </Menu.Target>
 

@@ -4,7 +4,7 @@ import { t } from "ttag";
 
 import { MiniPicker } from "metabase/common/components/Pickers/MiniPicker";
 import type { MiniPickerPickableItem } from "metabase/common/components/Pickers/MiniPicker/types";
-import { ActionIcon, Box, Icon, Text, UnstyledButton } from "metabase/ui";
+import { ActionIcon, Box, Icon, Text, Tooltip, UnstyledButton } from "metabase/ui";
 
 import S from "./AgentContextPicker.module.css";
 
@@ -64,15 +64,6 @@ export function AgentContextPicker({ value, onChange }: AgentContextPickerProps)
 
   return (
     <Box className={S.contextBar}>
-      <Text size="xs" c="text-tertiary" lh={1} className={S.contextLabel}>
-        {t`Context:`}
-      </Text>
-
-      {/*
-        Anchor wrapper: MiniPicker renders a Mantine Menu internally.
-        Its Menu.Target is an invisible <Box />, so the dropdown
-        positions itself relative to this container element.
-      */}
       <Box className={S.contextAnchor}>
         {value ? (
           <UnstyledButton
@@ -81,7 +72,7 @@ export function AgentContextPicker({ value, onChange }: AgentContextPickerProps)
           >
             <Icon name={ICON[value.model] ?? "database"} size={11} />
             <Text size="xs" lh={1} className={S.contextChipText} title={value.name}>
-              {LABEL()[value.model] ?? value.model}: {value.name}
+              {value.name}
             </Text>
             <ActionIcon
               size={14}
@@ -94,13 +85,15 @@ export function AgentContextPicker({ value, onChange }: AgentContextPickerProps)
             </ActionIcon>
           </UnstyledButton>
         ) : (
-          <UnstyledButton
-            className={S.contextEmpty}
-            onClick={() => setIsOpen((o: boolean) => !o)}
-          >
-            <Icon name="add" size={10} className={S.contextAddIcon} />
-            <Text size="xs" c="text-tertiary" lh={1}>{t`Add context`}</Text>
-          </UnstyledButton>
+          <Tooltip label={t`Add context (current page, question, dashboard…)`} position="top" withArrow>
+            <UnstyledButton
+              className={S.contextEmpty}
+              onClick={() => setIsOpen((o: boolean) => !o)}
+            >
+              <Icon name="add" size={10} className={S.contextAddIcon} />
+              <Text size="xs" c="text-tertiary" lh={1}>{t`Context`}</Text>
+            </UnstyledButton>
+          </Tooltip>
         )}
 
         <MiniPicker

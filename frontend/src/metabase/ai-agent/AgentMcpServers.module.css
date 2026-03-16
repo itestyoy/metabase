@@ -1,16 +1,8 @@
 /* MCP servers bar — sits in the bottom bar next to context/save pickers */
 .mcpBar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 4px;
   flex-shrink: 1;
   min-width: 0;
   overflow: hidden;
-}
-
-.mcpLabel {
-  flex-shrink: 0;
 }
 
 .mcpChips {

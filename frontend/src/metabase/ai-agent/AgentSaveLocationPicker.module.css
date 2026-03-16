@@ -1,21 +1,8 @@
 /* Save location bar — sits inside the bottom bar */
 .saveBar {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0 4px;
   flex-shrink: 1;
   min-width: 0;
   overflow: hidden;
-}
-
-.saveIcon {
-  color: var(--mb-color-text-tertiary);
-  flex-shrink: 0;
-}
-
-.saveLabel {
-  flex-shrink: 0;
 }
 
 /* Selected collection chip */
@@ -63,8 +50,8 @@
 .saveEmpty {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px 8px;
+  gap: 4px;
+  padding: 2px 8px 2px 6px;
   border: 1px dashed var(--mb-color-border);
   border-radius: 12px;
   cursor: pointer;
