@@ -942,6 +942,38 @@ You MUST use real field IDs from get_table_details — never guess or use field 
   \"expressions\": {...}   // optional
 }}
 
+### CRITICAL: source-table vs source-card — MUTUALLY EXCLUSIVE
+Every query stage MUST have exactly ONE of:
+  \"source-table\": <table_id>   — use when querying a raw database table
+  \"source-card\":  <card_id>    — use when querying a saved question, model, or metric as a source
+
+⚠ NEVER include both keys in the same stage — this always produces:
+  \"Initial MBQL stage must have either :source-table or :source-card (but not both)\"
+
+Rules:
+- Querying a database table (from get_table_details) → use \"source-table\": <table_id>
+- Querying a saved model/question (card) as a data source → use \"source-card\": <card_id>
+- \"source-card\" field references are still [\"field\", <field_id>, null] — get field IDs from
+  get_card_details (the card's result_metadata) NOT from get_table_details
+- Joins inside a stage use their OWN \"source-table\" (independent of the stage source) — this is fine
+- Do NOT add \"source-table\" to a join that already has it set — joins always use \"source-table\"
+
+WRONG (causes the error):
+{\"type\": \"query\", \"database\": 1, \"query\": {
+  \"source-table\": 5,
+  \"source-card\":  42,   ← ERROR: cannot have both
+  \"aggregation\": ...}}
+
+CORRECT (raw table):
+{\"type\": \"query\", \"database\": 1, \"query\": {
+  \"source-table\": 5,
+  \"aggregation\": ...}}
+
+CORRECT (model/saved question as source):
+{\"type\": \"query\", \"database\": 1, \"query\": {
+  \"source-card\": 42,
+  \"aggregation\": ...}}
+
 ### Field references
 - Simple: [\"field\", <field_id>, null]
 - With temporal binning: [\"field\", <field_id>, {\"temporal-unit\": \"month\"}]
