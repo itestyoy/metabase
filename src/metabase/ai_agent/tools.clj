@@ -909,7 +909,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                     collection_id (assoc :collection_id collection_id))
         card      (queries.card/create-card! card-data @api/*current-user*)]
     (format "Question created successfully!\n- ID: %d\n- Name: \"%s\"\n- Display: %s\n- URL: /question/%d"
-            (:id card) (:name card) (name (or (:display card) :table)) (:id card))))
+            (:id card) (:name card) (clojure.core/name (or (:display card) :table)) (:id card))))
 
 (defn- archive-item [item-type item-id]
   (let [model (case item-type
@@ -1557,7 +1557,7 @@ Multiple marks can be combined:
                     collection_id (assoc :collection_id collection_id))
         card      (queries.card/create-card! card-data @api/*current-user*)]
     (format "Question created successfully!\n- ID: %d\n- Name: \"%s\"\n- Display: %s\n- URL: /question/%d"
-            (:id card) (:name card) (name (or (:display card) :table)) (:id card))))
+            (:id card) (:name card) (clojure.core/name (or (:display card) :table)) (:id card))))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Document tools
