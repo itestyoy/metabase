@@ -362,7 +362,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                                          :database_id   {:type        "integer"
                                                          :description "Database ID this question queries."}
                                          :dataset_query {:type        "string"
-                                                         :description "The MBQL structured query as a JSON string. Must be a JSON object with keys: source-table (integer), and optionally: aggregation, breakout, filter, order-by, limit, joins, expressions. Example: {\"source-table\": 5, \"aggregation\": [[\"count\"]], \"breakout\": [[\"field\", 12, {\"temporal-unit\": \"month\"}]]}"}
+                                                         :description "The MBQL inner query as a JSON string. Must contain EXACTLY ONE of: \"source-table\": <table_id> (for raw tables) OR \"source-card\": <card_id> (for saved questions/models) — NEVER both. Optional keys: aggregation, breakout, filter, order-by, limit, joins, expressions. Pass ONLY the inner query object, NOT the outer {type,database,query} wrapper. Example: {\"source-table\": 5, \"aggregation\": [[\"count\"]], \"breakout\": [[\"field\", 12, {\"temporal-unit\": \"month\"}]]}"}
                                          :display       {:anyOf       [{:type "string"
                                                                         :enum ["table" "bar" "line" "pie" "scalar" "area" "row" "progress" "funnel" "scatter"]}
                                                                        {:type "null"}]
@@ -381,7 +381,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                   :properties           {:database_id   {:type        "integer"
                                                          :description "Database ID to run the query against."}
                                          :dataset_query {:type        "string"
-                                                         :description "The MBQL structured query as a JSON string. Must be a JSON object with keys: source-table (integer), and optionally: aggregation, breakout, filter, order-by, limit, joins, expressions. Example: {\"source-table\": 5, \"aggregation\": [[\"count\"]], \"breakout\": [[\"field\", 12, {\"temporal-unit\": \"month\"}]]}"}}
+                                                         :description "The MBQL inner query as a JSON string. Must contain EXACTLY ONE of: \"source-table\": <table_id> (for raw tables) OR \"source-card\": <card_id> (for saved questions/models) — NEVER both. Optional keys: aggregation, breakout, filter, order-by, limit, joins, expressions. Pass ONLY the inner query object, NOT the outer {type,database,query} wrapper. Example: {\"source-table\": 5, \"aggregation\": [[\"count\"]], \"breakout\": [[\"field\", 12, {\"temporal-unit\": \"month\"}]]}"}}
                   :required             ["database_id" "dataset_query"]
                   :additionalProperties false}}
    {:type        "function"
@@ -568,10 +568,23 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                    {:error (.getMessage e)}))]
     (format-qp-result result)))
 
+(defn- extract-inner-query
+  "If the AI passed the full outer MBQL wrapper {type, database, query},
+   extract just the inner :query map so we don't double-nest.
+   If the AI correctly passed only the inner map, return it as-is."
+  [raw-map]
+  (if (contains? raw-map "query")
+    (get raw-map "query")
+    raw-map))
+
+(defn- parse-dataset-query [dataset-query-str]
+  (-> (if (string? dataset-query-str)
+        (json/parse-string dataset-query-str)
+        dataset-query-str)
+      extract-inner-query))
+
 (defn- run-mbql-query [database-id dataset-query-str]
-  (let [query-map (if (string? dataset-query-str)
-                    (json/parse-string dataset-query-str)
-                    dataset-query-str)
+  (let [query-map (parse-dataset-query dataset-query-str)
         query  {:database database-id
                 :type     :query
                 :query    query-map}
@@ -1504,9 +1517,7 @@ Multiple marks can be combined:
   (load-guide-file! "MB_AI_AGENT_ANALYTICAL_GUIDE_FILE"))
 
 (defn- create-notebook-question [{:strs [name description database_id dataset_query display collection_id]}]
-  (let [query-map (if (string? dataset_query)
-                    (json/parse-string dataset_query)
-                    dataset_query)
+  (let [query-map (parse-dataset-query dataset_query)
         card-data (cond-> {:name          name
                            :dataset_query {:database database_id
                                            :type     :query
