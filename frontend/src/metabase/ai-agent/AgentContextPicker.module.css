@@ -1,10 +1,9 @@
-/* Context bar — sits below the composer */
+/* Context bar — sits inside the bottom bar */
 .contextBar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px 6px 5px;
-  background: var(--mb-color-background-primary);
+  gap: 5px;
+  padding: 0 4px;
   flex-shrink: 1;
   min-width: 0;
   overflow: hidden;

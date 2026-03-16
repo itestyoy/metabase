@@ -525,27 +525,27 @@
 .bottomBar {
   display: flex;
   align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  min-height: 36px;
   background: var(--mb-color-background-primary);
   flex-shrink: 0;
   border-top: 1px solid var(--mb-color-border);
-}
-
-.bottomBarRow {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
   overflow: hidden;
 }
 
-.safeModeButton {
-  flex-shrink: 0;
-  margin-left: 8px;
+/* Pushes safe-mode toggle to the far right */
+.bottomBarSpacer {
+  flex: 1;
 }
 
-/* Bottom bar in docked mode: match header height */
-.bottomBarDocked {
-  height: 50px;
+/* Thin vertical separator before safe-mode toggle */
+.bottomBarDivider {
+  width: 1px;
+  height: 16px;
+  background: var(--mb-color-border);
+  flex-shrink: 0;
+  margin: 0 4px;
 }
 
 /* Header in docked mode: match Metabase app bar appearance */
