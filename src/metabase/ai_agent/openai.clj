@@ -13,11 +13,25 @@
   (:require
    [cheshire.core :as json]
    [clj-http.client :as http]
+   [clojure.java.io :as io]
    [metabase.util.log :as log]))
 
 (set! *warn-on-reflection* true)
 
 (def ^:private openai-responses-url "https://api.openai.com/v1/responses")
+
+(defn- load-prompt-file
+  "Load a prompt file from the path given by env var, falling back to `default-text`.
+  The env var value may be an absolute path or a classpath-relative path."
+  [env-var default-text]
+  (if-let [path (System/getenv env-var)]
+    (let [f (io/file path)]
+      (if (.exists f)
+        (slurp f)
+        (do
+          (log/warnf "BI Agent: %s points to non-existent file '%s'; using built-in prompt" env-var path)
+          default-text)))
+    default-text))
 
 (def ^:private system-instructions
   "You are BI Agent — a senior BI analyst assistant embedded in Metabase.
@@ -291,6 +305,10 @@ HUMAN-FRIENDLY LANGUAGE in all user-facing text:
   In suggestions: 'Show revenue from Analytics' not 'Use database_id=1'.
   Exception: structured blocks require IDs internally — that is fine, but `name` must be readable.")
 
+;;; system-instructions is the inline fallback; at runtime we prefer the file from env.
+(def ^:private effective-system-instructions
+  (load-prompt-file "MB_AI_AGENT_SYSTEM_PROMPT_FILE" system-instructions))
+
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Request building
 ;;; ─────────────────────────────────────────────────────────────────────────────
@@ -317,7 +335,7 @@ HUMAN-FRIENDLY LANGUAGE in all user-facing text:
   [{:keys [model tools previous-response-id] :as opts}]
   (cond-> {:model             model
            ;; System prompt via `instructions` (not inside `input`)
-           :instructions      system-instructions
+           :instructions      effective-system-instructions
            :input             (build-input opts)
            :store             true       ; store=true is required for previous_response_id to work
            :max_output_tokens 65536}     ; large limit so tool call arguments (e.g. ProseMirror AST) aren't truncated

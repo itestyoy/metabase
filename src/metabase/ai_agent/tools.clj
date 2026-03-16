@@ -5,6 +5,7 @@
    is allowed to see."
   (:require
    [cheshire.core :as json]
+   [clojure.java.io :as io]
    [metabase.ai-agent.mcp :as mcp]
    [metabase.api.common :as api]
    [metabase.models.interface :as mi]
@@ -1438,7 +1439,7 @@ Multiple marks can be combined:
   ]}
 ]}")
 
-(defn- get-analytical-guide []
+(def ^:private analytical-guide-fallback
   "## Analytical Investigation Framework
 
 You are a senior data analyst. When investigating a problem, follow this structured methodology.
@@ -1507,6 +1508,16 @@ Save all key queries as questions, then build a Metabase Document with:
 - **Use percentages AND absolutes** — a 50% drop in a tiny segment matters less than a 5% drop in the biggest one.
 - **Be honest about uncertainty** — if the data is inconclusive, say so. Suggest what additional data would help.
 - **Think about the audience** — the report should be understandable by someone who wasn't part of the investigation.")
+
+(defn- get-analytical-guide []
+  (if-let [path (System/getenv "MB_AI_AGENT_ANALYTICAL_GUIDE_FILE")]
+    (let [f (io/file path)]
+      (if (.exists f)
+        (slurp f)
+        (do
+          (log/warnf "BI Agent: MB_AI_AGENT_ANALYTICAL_GUIDE_FILE points to non-existent file '%s'; using built-in guide" path)
+          analytical-guide-fallback)))
+    analytical-guide-fallback))
 
 (defn- create-notebook-question [{:strs [name description database_id dataset_query display collection_id]}]
   (let [query-map (if (string? dataset_query)
