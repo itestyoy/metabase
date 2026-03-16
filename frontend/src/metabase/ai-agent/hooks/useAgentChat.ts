@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import api from "metabase/lib/api";
 
 import type { AgentContextValue } from "../AgentContextPicker";
+import type { AgentDatasource } from "../AgentDatasourcePicker";
 import type { ChatMessage, ContentBlock } from "../types";
 
 function makeId(): string {
@@ -70,6 +71,7 @@ export interface AgentSettings {
   model: string;
   enabled: boolean;
   access: boolean;
+  default_database?: { id: number; name: string } | null;
 }
 
 interface AgentResponse {
@@ -136,6 +138,7 @@ export function useAgentChat() {
           model: s.model ?? "gpt-5.4",
           enabled: s.enabled ?? true,
           access: s.access ?? false,
+          default_database: (s as { default_database?: { id: number; name: string } | null }).default_database ?? null,
         });
       })
       .catch(() => {
@@ -157,7 +160,7 @@ export function useAgentChat() {
   }, []);
 
   const sendMessage = useCallback(
-    async (userText: string, context?: AgentContextValue | null, safeMode?: boolean, targetCollectionId?: number | null) => {
+    async (userText: string, context?: AgentContextValue | null, safeMode?: boolean, targetCollectionId?: number | null, datasource?: AgentDatasource | null) => {
       setError(null);
       setIsLoading(true);
 
@@ -187,6 +190,14 @@ export function useAgentChat() {
           ...(context.db_id != null ? { db_id: context.db_id } : {}),
           ...(context.url_params ? { url_params: context.url_params } : {}),
           ...(context.dataset_query ? { dataset_query: context.dataset_query } : {}),
+        };
+      }
+      if (datasource) {
+        body.datasource = {
+          type: datasource.type,
+          id:   datasource.id,
+          name: datasource.name,
+          ...(datasource.db_id != null ? { db_id: datasource.db_id } : {}),
         };
       }
       if (safeMode) {
