@@ -432,36 +432,33 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
           popoverProps={{ withinPortal: true }}
         />
         {/* Entity filter (card/dashboard) via MiniPicker */}
-        <MiniPicker
-          opened={entityPickerOpen}
-          onClose={() => setEntityPickerOpen(false)}
-          models={["card", "dashboard"]}
-          onChange={handleEntityPick}
-          dropdownMt="xs"
-          closeOnClickOutside
-          menuDropdownProps={{ style: { zIndex: 400 } }}
-        >
-          {contextLabel && (cardIdFilter || dashboardIdFilter) ? (
-            <Flex align="center" gap={4} className={S.contextChip}
-              onClick={() => setEntityPickerOpen(v => !v)}>
-              <Icon name={dashboardIdFilter ? "dashboard" : "question"} size={12} />
-              <Text size="xs" truncate maw={160}>{contextLabel}</Text>
-              <ActionIcon variant="transparent" size="xs"
-                onClick={(e: { stopPropagation: () => void }) => {
-                  e.stopPropagation();
-                  setCardIdFilter(null); setDashboardIdFilter(null); setContextLabel(null);
-                }}>
-                <Icon name="close" size={10} />
-              </ActionIcon>
-            </Flex>
-          ) : (
+        {/* Entity filter: context chip with clear, or picker button */}
+        {contextLabel && (cardIdFilter || dashboardIdFilter) ? (
+          <Flex align="center" gap={4} className={S.contextChip}>
+            <Icon name={dashboardIdFilter ? "dashboard" : "question"} size={12} />
+            <Text size="xs" truncate maw={160}>{contextLabel}</Text>
+            <ActionIcon variant="transparent" size="xs"
+              onClick={() => { setCardIdFilter(null); setDashboardIdFilter(null); setContextLabel(null); }}>
+              <Icon name="close" size={10} />
+            </ActionIcon>
+          </Flex>
+        ) : (
+          <MiniPicker
+            opened={entityPickerOpen}
+            onClose={() => setEntityPickerOpen(false)}
+            models={["card", "dashboard"]}
+            onChange={handleEntityPick}
+            dropdownMt="xs"
+            closeOnClickOutside
+            menuDropdownProps={{ style: { zIndex: 400 } }}
+          >
             <Button size="xs" variant="subtle" c="text-tertiary"
               leftSection={<Icon name="filter" size={12} />}
-              onClick={() => setEntityPickerOpen(v => !v)}>
+              onClick={() => setEntityPickerOpen(true)}>
               {t`Card / Dashboard`}
             </Button>
-          )}
-        </MiniPicker>
+          </MiniPicker>
+        )}
 
         <Button size="xs" variant="filled" onClick={fetchQueries} loading={isLoadingQueries}
           leftSection={<Icon name="search" size={12} />}>
