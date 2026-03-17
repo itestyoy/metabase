@@ -227,26 +227,6 @@ export function useAgentChat() {
     setIsLoading(false);
   }, []);
 
-  const retryLastMessage = useCallback(() => {
-    const args = lastSendArgsRef.current;
-    if (!args) return;
-    // Remove the last error message and the failed user message
-    setMessages(prev => {
-      const copy = [...prev];
-      // Remove trailing error assistant message
-      if (copy.length > 0 && copy[copy.length - 1].role === "assistant" && copy[copy.length - 1].content?.startsWith("Sorry, I encountered")) {
-        copy.pop();
-      }
-      // Remove the user message that triggered the error
-      if (copy.length > 0 && copy[copy.length - 1].role === "user") {
-        copy.pop();
-      }
-      return copy;
-    });
-    setError(null);
-    sendMessage(args.text, args.context, args.safeMode, args.collectionId, args.datasource);
-  }, [sendMessage]);
-
   const clearMessages = useCallback(() => {
     if (abortRef.current) {
       abortRef.current.abort();
@@ -466,6 +446,24 @@ export function useAgentChat() {
     },
     [previousResponseId, chatCollectionId],
   );
+
+  const retryLastMessage = useCallback(() => {
+    const args = lastSendArgsRef.current;
+    if (!args) return;
+    // Remove the last error message and the failed user message
+    setMessages(prev => {
+      const copy = [...prev];
+      if (copy.length > 0 && copy[copy.length - 1].role === "assistant" && copy[copy.length - 1].content?.startsWith("Sorry, I encountered")) {
+        copy.pop();
+      }
+      if (copy.length > 0 && copy[copy.length - 1].role === "user") {
+        copy.pop();
+      }
+      return copy;
+    });
+    setError(null);
+    sendMessage(args.text, args.context, args.safeMode, args.collectionId, args.datasource);
+  }, [sendMessage]);
 
   return {
     messages,
