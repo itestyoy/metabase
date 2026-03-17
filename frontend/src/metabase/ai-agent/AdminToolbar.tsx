@@ -289,6 +289,7 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [compiledResults, setCompiledResults] = useState<CompiledCard[]>([]);
   const [isCompiling, setIsCompiling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Load users on mount
   useEffect(() => {
@@ -324,6 +325,7 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
     setQueries([]);
     setSelectedIndices(new Set());
     setCompiledResults([]);
+    setError(null);
     try {
       const params = new URLSearchParams();
       if (selectedUserId) params.set("user_id", selectedUserId);
@@ -334,9 +336,14 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
       params.set("limit", "100");
       const resp = await fetch(`/api/ai-agent/admin/query-history?${params}`, { headers: apiHeaders() });
       const data = await resp.json();
-      if (Array.isArray(data)) setQueries(data);
-    } catch { /* ignore */ }
-    finally { setIsLoadingQueries(false); }
+      if (!resp.ok) {
+        setError(data?.message || data?.error || `HTTP ${resp.status}`);
+      } else if (Array.isArray(data)) {
+        setQueries(data);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Request failed");
+    } finally { setIsLoadingQueries(false); }
   }, [selectedUserId, dateValue, cardIdFilter, dashboardIdFilter]);
 
   const toggleIndex = useCallback((idx: number) => {
@@ -363,6 +370,7 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
     if (selectedIndices.size === 0) return;
     setIsCompiling(true);
     setCompiledResults([]);
+    setError(null);
     try {
       const items = [...selectedIndices].map(idx => {
         const q = queries[idx];
@@ -378,9 +386,14 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
         body: JSON.stringify({ items }),
       });
       const data = await resp.json();
-      if (Array.isArray(data)) setCompiledResults(data);
-    } catch { /* ignore */ }
-    finally { setIsCompiling(false); }
+      if (!resp.ok) {
+        setError(data?.message || data?.error || `HTTP ${resp.status}`);
+      } else if (Array.isArray(data)) {
+        setCompiledResults(data);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Compile failed");
+    } finally { setIsCompiling(false); }
   }, [selectedIndices, queries]);
 
   const allSql = useMemo(
@@ -461,6 +474,17 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
           </Button>
         )}
       </Flex>
+
+      {/* ── Error ──── */}
+      {error && (
+        <Flex align="center" gap={8} px="md" py={8} className={S.errorBar}>
+          <Icon name="warning" size={14} color="var(--mb-color-error)" />
+          <Text size="xs" c="error" style={{ flex: 1 }}>{error}</Text>
+          <ActionIcon variant="transparent" size="xs" onClick={() => setError(null)}>
+            <Icon name="close" size={10} />
+          </ActionIcon>
+        </Flex>
+      )}
 
       {/* ── Query list ──── */}
       {queries.length > 0 && (
