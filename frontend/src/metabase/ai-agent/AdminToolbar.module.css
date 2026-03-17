@@ -60,11 +60,6 @@
   pointer-events: none;
 }
 
-.hintBar {
-  background: var(--mb-color-background-secondary);
-  border-bottom: 1px solid var(--mb-color-border);
-}
-
 /* ── Filters bar (Query Explorer) ─────────────────── */
 .filtersBar {
   background: var(--mb-color-background-primary);
@@ -97,12 +92,6 @@
   border-left: 3px solid var(--mb-color-brand) !important;
 }
 
-/* ── Query detail (expanded row) ─────────────────── */
-.queryDetail {
-  border-bottom: 1px solid color-mix(in srgb, var(--mb-color-border) 50%, transparent);
-  background: var(--mb-color-background-secondary);
-}
-
 /* ── Entity picker trigger button ─────────────────── */
 .entityPickerButton {
   display: flex;
@@ -130,7 +119,6 @@
 /* ── Actions bar (selected row) ───────────────────── */
 .actionsBar {
   background: color-mix(in srgb, var(--mb-color-brand) 5%, transparent);
-  border-top: 1px solid var(--mb-color-border);
   border-bottom: 1px solid var(--mb-color-border);
 }
 
@@ -142,7 +130,6 @@
 
 /* ── Formatted input JSON ─────────────────────────── */
 .formattedInputContainer {
-  border-top: 1px solid var(--mb-color-border);
   background: var(--mb-color-background-secondary);
 }
 
@@ -165,6 +152,7 @@
   color: var(--mb-color-brand);
   font-size: 12px;
   white-space: nowrap;
+  cursor: default;
 }
 
 /* ── Code editor (readonly, syntax highlighted) ──── */
