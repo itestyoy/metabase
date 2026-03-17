@@ -29,12 +29,11 @@ export const AppContentContainer = styled.div<{
 
 export const AppContent = styled.main`
   width: 100%;
-  height: 100%;
+  height: calc(100% - var(--agent-dock-height, 0px));
   overflow: auto;
   scroll-margin-top: ${APP_BAR_HEIGHT};
   margin-right: var(--agent-dock-width, 0px);
-  margin-bottom: var(--agent-dock-height, 0px);
-  transition: margin-right 0.2s ease, margin-bottom 0.2s ease;
+  transition: margin-right 0.2s ease, height 0.2s ease;
 
   @media print {
     overflow: visible !important;
