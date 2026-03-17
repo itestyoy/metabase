@@ -5,6 +5,8 @@ import { t } from "ttag";
 import api from "metabase/lib/api";
 import { useSelector } from "metabase/lib/redux";
 import { getUserIsAdmin } from "metabase/selectors/user";
+
+import { usePageContext } from "./hooks/usePageContext";
 import {
   ActionIcon,
   Box,
@@ -187,10 +189,26 @@ interface QueryRow {
 }
 interface CompiledCard { card_id: number; card_name: string; query: string; }
 
-function QueriesTab() {
+interface PageContext {
+  id: number;
+  model: string;
+  name: string;
+}
+
+function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [cardIdFilter, setCardIdFilter] = useState<number | null>(
+    pageContext?.model === "card" || pageContext?.model === "dataset" || pageContext?.model === "metric"
+      ? pageContext.id : null,
+  );
+  const [dashboardIdFilter, setDashboardIdFilter] = useState<number | null>(
+    pageContext?.model === "dashboard" ? pageContext.id : null,
+  );
+  const [contextLabel, setContextLabel] = useState<string | null>(
+    pageContext ? `${pageContext.name}` : null,
+  );
   const [queries, setQueries] = useState<QueryRow[]>([]);
   const [isLoadingQueries, setIsLoadingQueries] = useState(false);
   // Selection by row index (works for both card and ad-hoc)
@@ -215,13 +233,15 @@ function QueriesTab() {
       const params = new URLSearchParams();
       if (selectedUserId) params.set("user_id", String(selectedUserId));
       if (date) params.set("date", date);
+      if (cardIdFilter) params.set("card_id", String(cardIdFilter));
+      if (dashboardIdFilter) params.set("dashboard_id", String(dashboardIdFilter));
       params.set("limit", "100");
       const resp = await fetch(`/api/ai-agent/admin/query-history?${params}`, { headers: apiHeaders() });
       const data = await resp.json();
       if (Array.isArray(data)) setQueries(data);
     } catch { /* ignore */ }
     finally { setIsLoadingQueries(false); }
-  }, [selectedUserId, date]);
+  }, [selectedUserId, date, cardIdFilter, dashboardIdFilter]);
 
   const toggleIndex = useCallback((idx: number) => {
     setSelectedIndices(prev => {
@@ -293,6 +313,16 @@ function QueriesTab() {
           <input type="date" className={S.filterSelect} value={date}
             onChange={e => setDate(e.target.value)} />
         </Flex>
+        {contextLabel && (cardIdFilter || dashboardIdFilter) && (
+          <Flex align="center" gap={4} className={S.contextChip}>
+            <Icon name={dashboardIdFilter ? "dashboard" : "question"} size={12} />
+            <Text size="xs" truncate maw={180}>{contextLabel}</Text>
+            <ActionIcon variant="transparent" size="xs"
+              onClick={() => { setCardIdFilter(null); setDashboardIdFilter(null); setContextLabel(null); }}>
+              <Icon name="close" size={10} />
+            </ActionIcon>
+          </Flex>
+        )}
         <Button size="xs" variant="filled" onClick={fetchQueries} loading={isLoadingQueries}
           leftSection={<Icon name="search" size={12} />}>
           {t`Search`}
@@ -383,6 +413,10 @@ function QueriesTab() {
 export function AdminToolbar({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<Tab>("mbql");
   const backdropRef = useRef<HTMLDivElement>(null);
+  const rawPageContext = usePageContext();
+  const pageCtx: PageContext | null = rawPageContext && rawPageContext.id
+    ? { id: rawPageContext.id, model: rawPageContext.model, name: rawPageContext.name }
+    : null;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -417,7 +451,7 @@ export function AdminToolbar({ onClose }: { onClose: () => void }) {
 
           {/* ── Tab content ──── */}
           {tab === "mbql" && <MbqlTab />}
-          {tab === "queries" && <QueriesTab />}
+          {tab === "queries" && <QueriesTab pageContext={pageCtx} />}
         </Card>
       </Center>
     </Overlay>,
