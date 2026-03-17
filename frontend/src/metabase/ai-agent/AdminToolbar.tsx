@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { t } from "ttag";
 
+import { CodeEditor } from "metabase/common/components/CodeEditor";
 import api from "metabase/lib/api";
+import { format as formatSql } from "sql-formatter";
 import { useSelector } from "metabase/lib/redux";
 import { getUserIsAdmin } from "metabase/selectors/user";
 
@@ -16,7 +18,6 @@ import {
   Card,
   Center,
   Checkbox,
-  Code,
   DateInput,
   Flex,
   Group,
@@ -130,9 +131,15 @@ function MbqlTab() {
         return;
       }
       const data = await resp.json();
-      setResult(data.query
-        ? { type: "sql", content: data.query }
-        : { type: "json", content: JSON.stringify(data, null, 2) });
+      if (data.query) {
+        try {
+          setResult({ type: "sql", content: formatSql(data.query, { language: "sql" }) });
+        } catch {
+          setResult({ type: "sql", content: data.query });
+        }
+      } else {
+        setResult({ type: "json", content: JSON.stringify(data, null, 2) });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       setResult({ type: "error", content: msg });
@@ -165,7 +172,7 @@ function MbqlTab() {
             <CopyButton text={formattedInput} />
           </Flex>
           <ScrollArea mah={170} scrollbarSize={4}>
-            <Code className={S.resultCode} block>{formattedInput}</Code>
+            <CodeEditor value={formattedInput} language="json" readOnly lineNumbers={false} className={S.codeEditor} />
           </ScrollArea>
         </Box>
       )}
@@ -187,7 +194,13 @@ function MbqlTab() {
             <CopyButton text={result.content} />
           </Flex>
           <ScrollArea mah="min(50vh, 700px)" scrollbarSize={4}>
-            <Code className={S.resultCode} block>{result.content}</Code>
+            <CodeEditor
+              value={result.content}
+              language={result.type === "sql" ? "sql" : result.type === "json" ? "json" : undefined}
+              readOnly
+              lineNumbers={result.type === "sql"}
+              className={S.codeEditor}
+            />
           </ScrollArea>
         </Box>
       )}
@@ -338,9 +351,11 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
   }, [selectedIndices, queries]);
 
   const allSql = useMemo(
-    () => compiledResults.map(r =>
-      `-- ${r.card_name}${r.card_id ? ` (ID: ${r.card_id})` : ""}\n${r.query}`
-    ).join("\n\n"),
+    () => compiledResults.map(r => {
+      let sql = r.query;
+      try { sql = formatSql(sql, { language: "sql" }); } catch { /* keep raw */ }
+      return `-- ${r.card_name}${r.card_id ? ` (ID: ${r.card_id})` : ""}\n${sql}`;
+    }).join("\n\n"),
     [compiledResults],
   );
 
@@ -475,7 +490,7 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
             <CopyButton text={allSql} />
           </Flex>
           <ScrollArea mah="min(50vh, 700px)" scrollbarSize={4}>
-            <Code className={S.resultCode} block>{allSql}</Code>
+            <CodeEditor value={allSql} language="sql" readOnly lineNumbers className={S.codeEditor} />
           </ScrollArea>
         </Box>
       )}
