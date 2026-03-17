@@ -131,6 +131,10 @@ interface QueryRow {
   card_id: number | null;
   card_name: string | null;
   user_email: string | null;
+  dashboard_id: number | null;
+  dashboard_name: string | null;
+  database_id: number | null;
+  database_name: string | null;
   context: string | null;
   native: boolean;
   raw_query: string | null;
@@ -508,8 +512,10 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
               indeterminate={selectedIndices.size > 0 && selectedIndices.size < selectableIndices.length}
               onChange={toggleAll} />
             <Text size="xs" fw={500} c="text-secondary" style={{ flex: 1 }}>{t`Query`}</Text>
-            <Text size="xs" fw={500} c="text-secondary" w={60} ta="right">{t`Rows`}</Text>
-            <Text size="xs" fw={500} c="text-secondary" w={60} ta="right">{t`Time`}</Text>
+            <Text size="xs" fw={500} c="text-secondary" w={100} truncate>{t`Dashboard`}</Text>
+            <Text size="xs" fw={500} c="text-secondary" w={80} truncate>{t`Database`}</Text>
+            <Text size="xs" fw={500} c="text-secondary" w={50} ta="right">{t`Rows`}</Text>
+            <Text size="xs" fw={500} c="text-secondary" w={55} ta="right">{t`Time`}</Text>
           </Flex>
           <Box className={S.queryListScroll}>
             {queries.map((q, i) => {
@@ -537,8 +543,10 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
                         {q.context ? ` · ${q.context}` : ""}
                       </Text>
                     </Flex>
-                    <Text size="xs" c="text-secondary" w={60} ta="right">{q.result_rows ?? "—"}</Text>
-                    <Text size="xs" c="text-secondary" w={60} ta="right">{q.running_time != null ? `${q.running_time}ms` : "—"}</Text>
+                    <Text size="xs" c="text-tertiary" w={100} truncate>{q.dashboard_name ?? "—"}</Text>
+                    <Text size="xs" c="text-tertiary" w={80} truncate>{q.database_name ?? "—"}</Text>
+                    <Text size="xs" c="text-secondary" w={50} ta="right">{q.result_rows ?? "—"}</Text>
+                    <Text size="xs" c="text-secondary" w={55} ta="right">{q.running_time != null ? `${q.running_time}ms` : "—"}</Text>
                   </Flex>
                 </UnstyledButton>
               );

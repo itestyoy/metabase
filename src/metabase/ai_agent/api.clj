@@ -757,15 +757,21 @@
                            :qe.result_rows
                            :qe.executor_id
                            :qe.card_id
+                           :qe.dashboard_id
+                           :qe.database_id
                            :qe.context
                            :qe.native
                            [:q.query :raw_query]
                            [:c.name :card_name]
+                           [:d.name :dashboard_name]
+                           [:db.name :database_name]
                            [:u.email :user_email]]
                :from      [[:query_execution :qe]]
-               :left-join [[:query :q]       [:= :qe.hash :q.query_hash]
-                           [:report_card :c] [:= :qe.card_id :c.id]
-                           [:core_user :u]   [:= :qe.executor_id :u.id]]
+               :left-join [[:query :q]            [:= :qe.hash :q.query_hash]
+                           [:report_card :c]      [:= :qe.card_id :c.id]
+                           [:report_dashboard :d] [:= :qe.dashboard_id :d.id]
+                           [:metabase_database :db] [:= :qe.database_id :db.id]
+                           [:core_user :u]        [:= :qe.executor_id :u.id]]
                :where     wheres
                :order-by  [[:qe.started_at :desc]]
                :limit     limit})))
