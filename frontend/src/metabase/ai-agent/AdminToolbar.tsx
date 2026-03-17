@@ -290,6 +290,9 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
   const [compiledResults, setCompiledResults] = useState<CompiledCard[]>([]);
   const [isCompiling, setIsCompiling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [expandedDetail, setExpandedDetail] = useState<string | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
   // Load users on mount
   useEffect(() => {
@@ -345,6 +348,45 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
       setError(err instanceof Error ? err.message : "Request failed");
     } finally { setIsLoadingQueries(false); }
   }, [selectedUserId, dateValue, cardIdFilter, dashboardIdFilter]);
+
+  const handleRowClick = useCallback(async (idx: number) => {
+    if (expandedRow === idx) {
+      setExpandedRow(null);
+      setExpandedDetail(null);
+      return;
+    }
+    const q = queries[idx];
+    setExpandedRow(idx);
+    setExpandedDetail(null);
+
+    if (q.raw_query) {
+      // Ad-hoc: show raw SQL
+      try {
+        setExpandedDetail(formatSql(q.raw_query, { language: "sql" }));
+      } catch {
+        setExpandedDetail(q.raw_query);
+      }
+      return;
+    }
+
+    if (q.card_id) {
+      // Saved card: fetch dataset_query
+      setIsLoadingDetail(true);
+      try {
+        const resp = await fetch(`/api/card/${q.card_id}`, { headers: apiHeaders() });
+        const card = await resp.json();
+        if (card?.dataset_query) {
+          setExpandedDetail(JSON.stringify(card.dataset_query, null, 2));
+        } else {
+          setExpandedDetail(JSON.stringify(card, null, 2));
+        }
+      } catch {
+        setExpandedDetail("Failed to load card details");
+      } finally {
+        setIsLoadingDetail(false);
+      }
+    }
+  }, [expandedRow, queries]);
 
   const toggleIndex = useCallback((idx: number) => {
     setSelectedIndices(prev => {
@@ -499,31 +541,64 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
           <ScrollArea mah={260} scrollbarSize={4}>
             {queries.map((q, i) => {
               const selectable = q.card_id != null || !!q.raw_query;
+              const isExpanded = expandedRow === i;
               return (
-                <UnstyledButton key={`${q.hash}-${i}`} className={S.queryRow}
-                  onClick={selectable ? () => toggleIndex(i) : undefined}
-                >
-                  <Flex align="center" px="md" py={5} gap={8}>
-                    {selectable ? (
-                      <Checkbox size="xs" checked={selectedIndices.has(i)}
-                        onChange={() => toggleIndex(i)}
-                        onClick={e => e.stopPropagation()} />
-                    ) : (
-                      <Box w={20} />
-                    )}
-                    <Flex direction="column" style={{ flex: 1, minWidth: 0 }}>
-                      <Text size="xs" truncate fw={500}>
-                        {q.card_name ?? (q.native ? t`Ad-hoc SQL` : t`Ad-hoc query`)}
-                      </Text>
-                      <Text size="xs" c="text-tertiary" truncate>
-                        {q.user_email} · {new Date(q.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                        {q.context ? ` · ${q.context}` : ""}
-                      </Text>
+                <Box key={`${q.hash}-${i}`}>
+                  <UnstyledButton className={`${S.queryRow} ${isExpanded ? S.queryRowExpanded : ""}`}
+                    onClick={() => handleRowClick(i)}
+                  >
+                    <Flex align="center" px="md" py={5} gap={8}>
+                      {selectable ? (
+                        <Checkbox size="xs" checked={selectedIndices.has(i)}
+                          onChange={() => toggleIndex(i)}
+                          onClick={e => e.stopPropagation()} />
+                      ) : (
+                        <Box w={20} />
+                      )}
+                      <Flex direction="column" style={{ flex: 1, minWidth: 0 }}>
+                        <Text size="xs" truncate fw={500}>
+                          {q.card_name ?? (q.native ? t`Ad-hoc SQL` : t`Ad-hoc query`)}
+                        </Text>
+                        <Text size="xs" c="text-tertiary" truncate>
+                          {q.user_email} · {new Date(q.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                          {q.context ? ` · ${q.context}` : ""}
+                        </Text>
+                      </Flex>
+                      <Text size="xs" c="text-secondary" w={60} ta="right">{q.result_rows ?? "—"}</Text>
+                      <Text size="xs" c="text-secondary" w={60} ta="right">{q.running_time != null ? `${q.running_time}ms` : "—"}</Text>
+                      <Icon name={isExpanded ? "chevronup" : "chevrondown"} size={10} color="var(--mb-color-text-tertiary)" />
                     </Flex>
-                    <Text size="xs" c="text-secondary" w={60} ta="right">{q.result_rows ?? "—"}</Text>
-                    <Text size="xs" c="text-secondary" w={60} ta="right">{q.running_time != null ? `${q.running_time}ms` : "—"}</Text>
-                  </Flex>
-                </UnstyledButton>
+                  </UnstyledButton>
+                  {isExpanded && (
+                    <Box className={S.queryDetail}>
+                      {isLoadingDetail ? (
+                        <Flex align="center" justify="center" p="sm" gap={6}>
+                          <Loader size="xs" /><Text size="xs" c="text-tertiary">{t`Loading…`}</Text>
+                        </Flex>
+                      ) : expandedDetail ? (
+                        <Box pos="relative">
+                          <Box pos="absolute" top={4} right={4} style={{ zIndex: 1 }}>
+                            <Flex gap={4}>
+                              {q.raw_query && <OpenInEditorButton sql={expandedDetail} />}
+                              <CopyButton text={expandedDetail} />
+                            </Flex>
+                          </Box>
+                          <Box mah={200} className={S.codeEditorScroll}>
+                            <CodeEditor
+                              value={expandedDetail}
+                              language={q.raw_query ? "sql" : "json"}
+                              readOnly
+                              lineNumbers={false}
+                              className={S.codeEditor}
+                            />
+                          </Box>
+                        </Box>
+                      ) : (
+                        <Text size="xs" c="text-tertiary" p="sm">{t`No query data available`}</Text>
+                      )}
+                    </Box>
+                  )}
+                </Box>
               );
             })}
           </ScrollArea>
