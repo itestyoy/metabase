@@ -504,7 +504,6 @@ function ToolCallRow({ message }: { message: ChatMessage }) {
 /* ── Grouped tool calls block ─────────────────────────────────────────── */
 
 function ToolCallGroup({ messages }: { messages: ChatMessage[] }) {
-  const [isExpanded, setIsExpanded] = useState(false);
   const runningCount = messages.filter(m => m.toolStatus === "running").length;
   const errorCount = messages.filter(m => m.toolStatus === "error").length;
   const doneCount = messages.length - runningCount;
@@ -513,14 +512,24 @@ function ToolCallGroup({ messages }: { messages: ChatMessage[] }) {
     ? messages.find(m => m.toolStatus === "running")
     : null;
 
+  // Start expanded; user can collapse only after all tools finish
+  const [userCollapsed, setUserCollapsed] = useState(false);
+  // Reset userCollapsed when new tools start running
+  const prevAllDone = useRef(isAllDone);
+  useEffect(() => {
+    if (prevAllDone.current && !isAllDone) {
+      setUserCollapsed(false);
+    }
+    prevAllDone.current = isAllDone;
+  }, [isAllDone]);
+
+  const showTools = !userCollapsed;
+
   const summaryLabel = !isAllDone
     ? t`Running ${formatToolName(currentTool?.toolName)}…`
     : errorCount > 0
       ? t`Used ${messages.length} tools (${errorCount} failed)`
       : t`Used ${messages.length} tools`;
-
-  // Auto-expand while running for visibility
-  const showTools = isExpanded || !isAllDone;
 
   return (
     <Paper className={S.toolGroup} withBorder radius="sm" p={0}>
@@ -531,8 +540,8 @@ function ToolCallGroup({ messages }: { messages: ChatMessage[] }) {
         py={6}
         align="center"
         wrap="nowrap"
-        onClick={() => setIsExpanded(v => !v)}
-        style={{ cursor: "pointer" }}
+        onClick={isAllDone ? () => setUserCollapsed(v => !v) : undefined}
+        style={{ cursor: isAllDone ? "pointer" : "default" }}
       >
         {!isAllDone ? (
           <Loader size={12} />
