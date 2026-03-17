@@ -406,9 +406,11 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
           <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={4}>
             <Text size="xs" fw={500} c="text-tertiary">{t`Input MBQL`}</Text>
             <Flex gap={4}>
-              {mbqlFormatted.includes('"type":"query"') || mbqlFormatted.includes('"type": "query"')
+              {mbqlFormatted.includes('"type": "query"') || mbqlFormatted.includes('"type":"query"')
                 ? <OpenInNotebookButton datasetQuery={mbqlFormatted} />
-                : null}
+                : mbqlFormatted.includes('"type": "native"') || mbqlFormatted.includes('"type":"native"')
+                  ? <OpenInEditorButton sql={(() => { try { return JSON.parse(mbqlFormatted)?.native?.query ?? ""; } catch { return ""; } })()} />
+                  : null}
               <CopyButton text={mbqlFormatted} />
               <ActionIcon variant="subtle" size="xs" onClick={() => setMbqlFormatted(null)}>
                 <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
@@ -545,6 +547,7 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
               indeterminate={selectedIndices.size > 0 && selectedIndices.size < selectableIndices.length}
               onChange={toggleAll} />
             <Text size="xs" fw={500} c="text-secondary" style={{ flex: 1 }}>{t`Query`}</Text>
+            <Text size="xs" fw={500} c="text-secondary" w={50}>{t`Type`}</Text>
             <Text size="xs" fw={500} c="text-secondary" w={100} truncate>{t`Dashboard`}</Text>
             <Text size="xs" fw={500} c="text-secondary" w={80} truncate>{t`Database`}</Text>
             <Text size="xs" fw={500} c="text-secondary" w={50} ta="right">{t`Rows`}</Text>
@@ -576,6 +579,9 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
                         {q.context ? ` · ${q.context}` : ""}
                       </Text>
                     </Flex>
+                    <Text size="xs" w={50} c={q.native ? "text-tertiary" : "brand"} fw={500}>
+                      {q.native ? "SQL" : "MBQL"}
+                    </Text>
                     <Text size="xs" c="text-tertiary" w={100} truncate>{q.dashboard_name ?? "—"}</Text>
                     <Text size="xs" c="text-tertiary" w={80} truncate>{q.database_name ?? "—"}</Text>
                     <Text size="xs" c="text-secondary" w={50} ta="right">{q.result_rows ?? "—"}</Text>
@@ -592,20 +598,19 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
         <Box className={S.resultContainer}>
           <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={6}>
             <Flex align="center" gap={6}>
-              <Icon name={queries[expandedRow]?.raw_query ? "database" : "notebook"} size={14}
+              <Icon name={queries[expandedRow]?.native ? "database" : "notebook"} size={14}
                 color="var(--mb-color-text-tertiary)" />
               <Text size="xs" fw={500} c="text-secondary">
                 {queries[expandedRow]?.card_name ?? (queries[expandedRow]?.native ? t`Ad-hoc SQL` : t`Ad-hoc query`)}
-                {queries[expandedRow]?.raw_query ? " — SQL" : " — MBQL"}
+                {queries[expandedRow]?.native ? " — Native SQL" : " — MBQL"}
               </Text>
             </Flex>
             {expandedDetail && (
               <Flex gap={4}>
-                {queries[expandedRow]?.raw_query && !queries[expandedRow]?.card_id && (
+                {queries[expandedRow]?.native && (
                   <OpenInEditorButton sql={expandedDetail} />
                 )}
-                {queries[expandedRow]?.card_id && expandedDetail &&
-                  (expandedDetail.includes('"type":"query"') || expandedDetail.includes('"type": "query"')) && (
+                {!queries[expandedRow]?.native && expandedDetail && (
                   <OpenInNotebookButton datasetQuery={expandedDetail} />
                 )}
                 <CopyButton text={expandedDetail} />
