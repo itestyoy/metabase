@@ -440,6 +440,63 @@ function ToolCallMessage({ message }: { message: ChatMessage }) {
   );
 }
 
+/* ── Timestamp label ─────────────────────────────────────────────────────── */
+
+function MessageTimestamp({ timestamp }: { timestamp?: string }) {
+  if (!timestamp) return null;
+  const date = new Date(timestamp);
+  const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return (
+    <Text size="xs" c="text-tertiary" className={S.messageTimestamp}>
+      {time}
+    </Text>
+  );
+}
+
+/* ── Copy button for assistant messages ─────────────────────────────────── */
+
+function CopyMessageButton({ message }: { message: ChatMessage }) {
+  const [copied, setCopied] = useState(false);
+
+  const textContent = useMemo(() => {
+    if (message.content) return message.content;
+    if (message.blocks) {
+      return message.blocks
+        .filter(b => b.type === "text" || b.type === "sql")
+        .map(b => (b as { content: string }).content)
+        .join("\n\n");
+    }
+    return "";
+  }, [message]);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(textContent).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [textContent]);
+
+  if (!textContent) return null;
+
+  return (
+    <Tooltip label={copied ? t`Copied!` : t`Copy`}>
+      <ActionIcon
+        variant="subtle"
+        size="xs"
+        onClick={handleCopy}
+        className={S.copyMessageButton}
+        aria-label={t`Copy message`}
+      >
+        <Icon
+          name={copied ? "check" : "copy"}
+          size={12}
+          color={copied ? "var(--mb-color-success)" : "var(--mb-color-text-tertiary)"}
+        />
+      </ActionIcon>
+    </Tooltip>
+  );
+}
+
 /* ── Message bubble ──────────────────────────────────────────────────────── */
 
 function MessageBubble({
@@ -462,41 +519,41 @@ function MessageBubble({
 
   if (isUser) {
     return (
-      <Flex className={S.messageBubbleRow} justify="flex-end">
+      <Flex className={S.messageBubbleRow} justify="flex-end" direction="column" align="flex-end">
         <Paper className={S.userBubble} radius="xl">
           <Markdown className={S.userMarkdown}>{message.content ?? ""}</Markdown>
         </Paper>
+        <MessageTimestamp timestamp={message.timestamp} />
       </Flex>
     );
   }
 
   // Assistant message — structured blocks or plain markdown fallback
-  if (message.blocks && message.blocks.length > 0) {
-    const hasRichBlock = message.blocks.some(
-      b => b.type !== "text",
-    );
-    return (
-      <Flex className={S.messageBubbleRow} justify="flex-start">
-        <Paper className={`${S.assistantBubble} ${hasRichBlock ? S.assistantBubbleWide : ""}`} radius="xl">
-          <Stack gap={8}>
-            {message.blocks.map((block, idx) => (
-              <ContentBlockRenderer
-                key={idx}
-                block={block}
-                onSaveAsQuestion={onSaveAsQuestion}
-              />
-            ))}
-          </Stack>
-        </Paper>
-      </Flex>
-    );
-  }
+  const bubbleContent = message.blocks && message.blocks.length > 0 ? (
+    <Stack gap={8}>
+      {message.blocks.map((block, idx) => (
+        <ContentBlockRenderer
+          key={idx}
+          block={block}
+          onSaveAsQuestion={onSaveAsQuestion}
+        />
+      ))}
+    </Stack>
+  ) : (
+    <Markdown>{message.content ?? ""}</Markdown>
+  );
+
+  const hasRichBlock = message.blocks?.some(b => b.type !== "text") ?? false;
 
   return (
-    <Flex className={S.messageBubbleRow} justify="flex-start">
-      <Paper className={S.assistantBubble} radius="xl">
-        <Markdown>{message.content ?? ""}</Markdown>
-      </Paper>
+    <Flex className={S.messageBubbleRow} justify="flex-start" direction="column" align="flex-start">
+      <Box className={S.assistantBubbleWrapper}>
+        <Paper className={`${S.assistantBubble} ${hasRichBlock ? S.assistantBubbleWide : ""}`} radius="xl">
+          {bubbleContent}
+        </Paper>
+        <CopyMessageButton message={message} />
+      </Box>
+      <MessageTimestamp timestamp={message.timestamp} />
     </Flex>
   );
 }
@@ -506,20 +563,34 @@ function MessageBubble({
 interface AgentChatMessagesProps {
   messages: ChatMessage[];
   isLoading: boolean;
+  error?: string | null;
   onSelectPrompt?: (prompt: string) => void;
   onSaveAsQuestion?: (sql: string) => void;
+  onRetry?: () => void;
 }
 
 export function AgentChatMessages({
   messages,
   isLoading,
+  error,
   onSelectPrompt,
   onSaveAsQuestion,
+  onRetry,
 }: AgentChatMessagesProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
 
+  // Track whether user is scrolled to bottom
+  const handleScroll = useCallback(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const threshold = 40;
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+  }, []);
+
+  // Auto-scroll only if user was at bottom
   useEffect(() => {
-    if (viewportRef.current) {
+    if (isAtBottomRef.current && viewportRef.current) {
       viewportRef.current.scrollTo({
         top: viewportRef.current.scrollHeight,
         behavior: "smooth",
@@ -563,6 +634,7 @@ export function AgentChatMessages({
       className={S.messagesScroll}
       viewportRef={viewportRef}
       scrollbarSize={6}
+      onScrollPositionChange={handleScroll}
     >
       <Stack className={S.messagesInner} gap={4} p="12px 16px">
         {messages.map(msg => (
@@ -582,6 +654,14 @@ export function AgentChatMessages({
                 </Text>
               </Group>
             </Paper>
+          </Flex>
+        )}
+        {error && onRetry && (
+          <Flex justify="flex-start" className={S.messageBubbleRow}>
+            <UnstyledButton className={S.retryButton} onClick={onRetry}>
+              <Icon name="refresh" size={14} />
+              <Text size="xs" fw={500}>{t`Retry`}</Text>
+            </UnstyledButton>
           </Flex>
         )}
         {suggestions && onSelectPrompt && (

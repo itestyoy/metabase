@@ -554,3 +554,61 @@
   background: var(--mb-color-background-primary);
   border-bottom: 1px solid var(--mb-color-border);
 }
+
+/* ── Message timestamps ──────────────────────────── */
+.messageTimestamp {
+  font-size: 10px;
+  line-height: 1;
+  margin-top: 2px;
+  padding: 0 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.messageBubbleRow:hover .messageTimestamp {
+  opacity: 1;
+}
+
+/* ── Copy message button ─────────────────────────── */
+.assistantBubbleWrapper {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: 82%;
+}
+
+.assistantBubbleWrapper .assistantBubble {
+  max-width: 100%;
+}
+
+.copyMessageButton {
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+
+.assistantBubbleWrapper:hover .copyMessageButton {
+  opacity: 1;
+}
+
+/* ── Retry button ────────────────────────────────── */
+.retryButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--mb-color-brand);
+  background: color-mix(in srgb, var(--mb-color-brand) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mb-color-brand) 25%, transparent);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.retryButton:hover {
+  background: color-mix(in srgb, var(--mb-color-brand) 18%, transparent);
+  border-color: var(--mb-color-brand);
+}

@@ -172,6 +172,13 @@ export function useAgentChat() {
     null,
   );
   const abortRef = useRef<AbortController | null>(null);
+  const lastSendArgsRef = useRef<{
+    text: string;
+    context?: AgentContextValue | null;
+    safeMode?: boolean;
+    collectionId?: number | null;
+    datasource?: AgentDatasource | null;
+  } | null>(null);
 
   // Persist chat state to sessionStorage on every change
   useEffect(() => {
@@ -208,6 +215,38 @@ export function useAgentChat() {
       });
   }, []);
 
+  const stopGeneration = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    // Remove any loading/running placeholders
+    setMessages(prev =>
+      prev.filter(m => m.content !== null || m.toolStatus === "done" || m.toolStatus === "error"),
+    );
+    setIsLoading(false);
+  }, []);
+
+  const retryLastMessage = useCallback(() => {
+    const args = lastSendArgsRef.current;
+    if (!args) return;
+    // Remove the last error message and the failed user message
+    setMessages(prev => {
+      const copy = [...prev];
+      // Remove trailing error assistant message
+      if (copy.length > 0 && copy[copy.length - 1].role === "assistant" && copy[copy.length - 1].content?.startsWith("Sorry, I encountered")) {
+        copy.pop();
+      }
+      // Remove the user message that triggered the error
+      if (copy.length > 0 && copy[copy.length - 1].role === "user") {
+        copy.pop();
+      }
+      return copy;
+    });
+    setError(null);
+    sendMessage(args.text, args.context, args.safeMode, args.collectionId, args.datasource);
+  }, [sendMessage]);
+
   const clearMessages = useCallback(() => {
     if (abortRef.current) {
       abortRef.current.abort();
@@ -219,10 +258,12 @@ export function useAgentChat() {
     setChatCollectionId(null);
     setChatCollectionName(null);
     clearChatState();
+    lastSendArgsRef.current = null;
   }, []);
 
   const sendMessage = useCallback(
     async (userText: string, context?: AgentContextValue | null, safeMode?: boolean, targetCollectionId?: number | null, datasource?: AgentDatasource | null) => {
+      lastSendArgsRef.current = { text: userText, context, safeMode, collectionId: targetCollectionId, datasource };
       setError(null);
       setIsLoading(true);
 
@@ -230,6 +271,7 @@ export function useAgentChat() {
         id: makeId(),
         role: "user",
         content: userText,
+        timestamp: new Date().toISOString(),
       };
       setMessages(prev => [...prev, userMsg]);
 
@@ -379,6 +421,7 @@ export function useAgentChat() {
                 id: makeId(),
                 role: "assistant",
                 content: blocks ? null : rawContent,
+                timestamp: new Date().toISOString(),
                 blocks,
                 suggestions,
               };
@@ -412,6 +455,7 @@ export function useAgentChat() {
               id: makeId(),
               role: "assistant",
               content: `Sorry, I encountered an error: ${errMsg}`,
+              timestamp: new Date().toISOString(),
             },
           ]);
         }
@@ -432,5 +476,7 @@ export function useAgentChat() {
     chatCollectionName,
     sendMessage,
     clearMessages,
+    stopGeneration,
+    retryLastMessage,
   };
 }
