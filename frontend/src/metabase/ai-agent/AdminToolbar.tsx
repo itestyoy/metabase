@@ -383,7 +383,12 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
         <Box className={S.formattedInputContainer}>
           <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={4}>
             <Text size="xs" fw={500} c="text-tertiary">{t`Input MBQL`}</Text>
-            <CopyButton text={mbqlFormatted} />
+            <Flex gap={4}>
+              <CopyButton text={mbqlFormatted} />
+              <ActionIcon variant="subtle" size="xs" onClick={() => setMbqlFormatted(null)}>
+                <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
+              </ActionIcon>
+            </Flex>
           </Flex>
           <Box mah={170} className={S.codeEditorScroll}>
             <CodeEditor value={mbqlFormatted} language="json" readOnly lineNumbers={false} className={S.codeEditor} />
@@ -410,6 +415,9 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
             <Flex gap={4}>
               {mbqlResult.type === "sql" && <OpenInEditorButton sql={mbqlResult.content} />}
               <CopyButton text={mbqlResult.content} />
+              <ActionIcon variant="subtle" size="xs" onClick={() => setMbqlResult(null)}>
+                <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
+              </ActionIcon>
             </Flex>
           </Flex>
           <Box mah="min(40vh, 500px)" className={S.codeEditorScroll}>
@@ -572,6 +580,9 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
                   <OpenInEditorButton sql={expandedDetail} />
                 )}
                 <CopyButton text={expandedDetail} />
+                <ActionIcon variant="subtle" size="xs" onClick={() => { setExpandedRow(null); setExpandedDetail(null); }}>
+                  <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
+                </ActionIcon>
               </Flex>
             )}
           </Flex>
@@ -614,6 +625,9 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
             <Flex gap={4}>
               <OpenInEditorButton sql={allSql} />
               <CopyButton text={allSql} />
+              <ActionIcon variant="subtle" size="xs" onClick={() => setCompiledResults([])}>
+                <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
+              </ActionIcon>
             </Flex>
           </Flex>
           <Box mah="min(50vh, 700px)" className={S.codeEditorScroll}>
