@@ -648,10 +648,10 @@
   flex-shrink: 0;
 }
 
-/* Bottom bar in bottom dock: compact horizontal, allow wrapping */
+/* Bottom bar in bottom dock: same as other modes, no wrapping */
 .bottomBarVertical {
-  flex-wrap: wrap;
-  padding: 4px 8px;
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 
 /* ── Message timestamps ──────────────────────────── */
