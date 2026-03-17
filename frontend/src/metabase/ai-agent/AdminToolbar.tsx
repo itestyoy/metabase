@@ -213,16 +213,23 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [dateValue, setDateValue] = useState<Date | null>(() => new Date());
-  const [cardIdFilter, setCardIdFilter] = useState<number | null>(
-    pageContext?.model === "card" || pageContext?.model === "dataset" || pageContext?.model === "metric"
-      ? pageContext.id : null,
-  );
-  const [dashboardIdFilter, setDashboardIdFilter] = useState<number | null>(
-    pageContext?.model === "dashboard" ? pageContext.id : null,
-  );
-  const [contextLabel, setContextLabel] = useState<string | null>(
-    pageContext ? `${pageContext.name}` : null,
-  );
+  const [cardIdFilter, setCardIdFilter] = useState<number | null>(null);
+  const [dashboardIdFilter, setDashboardIdFilter] = useState<number | null>(null);
+  const [contextLabel, setContextLabel] = useState<string | null>(null);
+  const contextApplied = useRef(false);
+
+  // Auto-populate filters from page context (runs when context loads async)
+  useEffect(() => {
+    if (contextApplied.current || !pageContext) return;
+    contextApplied.current = true;
+    if (pageContext.model === "card" || pageContext.model === "dataset" || pageContext.model === "metric") {
+      setCardIdFilter(pageContext.id);
+      setContextLabel(pageContext.name);
+    } else if (pageContext.model === "dashboard") {
+      setDashboardIdFilter(pageContext.id);
+      setContextLabel(pageContext.name);
+    }
+  }, [pageContext]);
   const [queries, setQueries] = useState<QueryRow[]>([]);
   const [isLoadingQueries, setIsLoadingQueries] = useState(false);
   // Selection by row index (works for both card and ad-hoc)
