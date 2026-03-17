@@ -70,6 +70,12 @@
   border-bottom: 1px solid var(--mb-color-border);
 }
 
+/* ── Query list (scrollable) ──────────────────────── */
+.queryListScroll {
+  max-height: min(40vh, 400px);
+  overflow-y: auto;
+}
+
 /* ── Query row ────────────────────────────────────── */
 .queryRow {
   width: 100%;
