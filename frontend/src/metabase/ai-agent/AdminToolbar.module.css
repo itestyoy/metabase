@@ -36,12 +36,12 @@
 .input {
   padding: var(--mantine-spacing-lg);
   padding-left: 3.75rem;
-  font-size: 17px;
+  font-size: 14px;
   width: 100%;
   border: none;
   border-bottom: 1px solid var(--mb-color-border);
   color: var(--mb-color-text-primary);
-  line-height: 1rem;
+  line-height: 1.4;
   outline: none;
   background-color: transparent;
   font-family: monospace;
