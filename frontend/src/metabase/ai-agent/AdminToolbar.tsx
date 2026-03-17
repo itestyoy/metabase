@@ -424,6 +424,8 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
           models={["card", "dashboard"]}
           onChange={handleEntityPick}
           dropdownMt="xs"
+          closeOnClickOutside
+          menuDropdownProps={{ style: { zIndex: 400 } }}
         >
           {contextLabel && (cardIdFilter || dashboardIdFilter) ? (
             <Flex align="center" gap={4} className={S.contextChip}
