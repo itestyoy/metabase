@@ -585,27 +585,28 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
         </Flex>
       )}
 
-      {/* ── Selected row: MBQL JSON ──── */}
-      {expandedRow !== null && expandedDetail && (
+      {/* ── Selected row: MBQL / dataset_query (only for saved cards) ──── */}
+      {expandedRow !== null && expandedDetail && queries[expandedRow]?.card_id && (
         <Box className={S.resultContainer}>
           <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={4}>
             <Text size="xs" fw={500} c="text-tertiary">
-              {queries[expandedRow]?.native ? "Native SQL Query" : "MBQL (dataset_query)"}
+              {queries[expandedRow]?.native ? "dataset_query (native)" : "dataset_query (MBQL)"}
             </Text>
             <CopyButton text={expandedDetail} />
           </Flex>
           <Box mah={200} className={S.codeEditorScroll}>
-            <CodeEditor value={expandedDetail} language={queries[expandedRow]?.card_id ? "json" : "sql"}
-              readOnly lineNumbers className={S.codeEditor} />
+            <CodeEditor value={expandedDetail} language="json" readOnly lineNumbers className={S.codeEditor} />
           </Box>
         </Box>
       )}
 
-      {/* ── Selected row: compiled SQL ──── */}
-      {expandedRow !== null && expandedSql && queries[expandedRow]?.card_id && (
+      {/* ── Selected row: SQL (compiled or raw) ──── */}
+      {expandedRow !== null && expandedSql && (
         <Box className={S.resultContainer}>
           <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={4}>
-            <Text size="xs" fw={500} c="text-tertiary">{t`Compiled SQL`}</Text>
+            <Text size="xs" fw={500} c="text-tertiary">
+              {queries[expandedRow]?.card_id ? t`Compiled SQL` : "SQL"}
+            </Text>
             <Flex gap={4}>
               <OpenInEditorButton sql={expandedSql} />
               <CopyButton text={expandedSql} />
