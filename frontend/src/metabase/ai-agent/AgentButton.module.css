@@ -1,49 +1,26 @@
-/* AI Agent button in the app bar header */
-
-@keyframes ai-shimmer {
-  0%   { color: var(--mb-color-brand); }
-  50%  { color: #a855f7; }
-  100% { color: var(--mb-color-brand); }
-}
+/* AI Agent button — matches Metabot button style */
 
 .aiButton {
-  border-radius: 8px;
-  color: var(--mb-color-text-secondary);
-  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
-  font-weight: 600;
-  font-size: 13px;
+  transition: border-color 0.15s, background 0.15s;
 }
 
 .aiButton:hover {
-  background: color-mix(in srgb, var(--mb-color-brand) 10%, transparent);
-  color: var(--mb-color-brand);
+  border-color: var(--mb-color-brand) !important;
+  background: color-mix(in srgb, var(--mb-color-brand) 8%, transparent);
 }
 
 /* Active state when the chat modal is open */
 .aiButtonActive {
+  border-color: var(--mb-color-brand) !important;
   background: color-mix(in srgb, var(--mb-color-brand) 12%, transparent);
-  color: var(--mb-color-brand);
-  box-shadow: inset 0 -2px 0 var(--mb-color-brand);
 }
 
-/* Icon: subtle shimmer on hover only */
+/* Icon default state */
 .aiIcon {
-  color: var(--mb-color-text-secondary);
-  transition: color 0.15s;
+  color: var(--mb-color-text-primary);
 }
 
-.aiButton:hover .aiIcon {
-  animation: ai-shimmer 2s ease-in-out infinite;
-}
-
-.aiButtonActive .aiIcon {
+/* Icon active state when chat is open */
+.aiIconActive {
   color: var(--mb-color-brand);
-  animation: none;
-}
-
-/* Hide label on small screens */
-@media (max-width: 768px) {
-  .aiButtonLabel {
-    display: none;
-  }
 }
