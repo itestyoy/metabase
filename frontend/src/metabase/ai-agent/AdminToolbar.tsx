@@ -408,7 +408,7 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
   return (
     <>
       {/* ── Filters ──── */}
-      <Flex className={S.filtersBar} gap="sm" align="center" px="md" py={8} wrap="wrap">
+      <Flex className={S.filtersBar} gap="sm" align="center" px="md" py={8}>
         <Select
           size="xs"
           w={220}
@@ -460,16 +460,18 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
           </MiniPicker>
         )}
 
-        <Button size="xs" variant="filled" onClick={fetchQueries} loading={isLoadingQueries}
-          leftSection={<Icon name="search" size={12} />}>
-          {t`Search`}
-        </Button>
-        {selectedIndices.size > 0 && (
-          <Button size="xs" variant="light" onClick={compileSelected} loading={isCompiling}
-            leftSection={<Icon name="notebook" size={12} />} ml="auto">
-            {t`Get SQL`} ({selectedIndices.size})
+        <Flex gap="xs" ml="auto">
+          {selectedIndices.size > 0 && (
+            <Button size="xs" variant="light" onClick={compileSelected} loading={isCompiling}
+              leftSection={<Icon name="notebook" size={12} />}>
+              {t`Get SQL`} ({selectedIndices.size})
+            </Button>
+          )}
+          <Button size="xs" variant="filled" onClick={fetchQueries} loading={isLoadingQueries}
+            leftSection={<Icon name="search" size={12} />}>
+            {t`Search`}
           </Button>
-        )}
+        </Flex>
       </Flex>
 
       {/* ── Error ──── */}
