@@ -9,8 +9,6 @@ import { format as formatSql } from "sql-formatter";
 import { useSelector } from "metabase/lib/redux";
 import { getUserIsAdmin } from "metabase/selectors/user";
 
-import { MiniPicker } from "metabase/common/components/Pickers/MiniPicker";
-import type { MiniPickerPickableItem } from "metabase/common/components/Pickers/MiniPicker/types";
 import { usePageContext } from "./hooks/usePageContext";
 import {
   ActionIcon,
@@ -280,8 +278,6 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
   const [contextLabel, setContextLabel] = useState<string | null>(
     pageContext ? `${pageContext.name}` : null,
   );
-  // Entity picker for filtering by card/dashboard
-  const [entityPickerOpen, setEntityPickerOpen] = useState(false);
   const [queries, setQueries] = useState<QueryRow[]>([]);
   const [isLoadingQueries, setIsLoadingQueries] = useState(false);
   // Selection by row index (works for both card and ad-hoc)
@@ -309,18 +305,46 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
     [users],
   );
 
-  const handleEntityPick = useCallback((item: MiniPickerPickableItem) => {
-    setEntityPickerOpen(false);
-    if (item.model === "dashboard") {
-      setDashboardIdFilter(item.id as number);
-      setCardIdFilter(null);
-      setContextLabel(item.name);
-    } else {
-      setCardIdFilter(item.id as number);
-      setDashboardIdFilter(null);
-      setContextLabel(item.name);
-    }
+  // Entity search for card/dashboard filter
+  const [entitySearchResults, setEntitySearchResults] = useState<Array<{ value: string; label: string }>>([]);
+  const entitySearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleEntitySearch = useCallback((query: string) => {
+    if (entitySearchTimer.current) clearTimeout(entitySearchTimer.current);
+    if (!query || query.length < 2) { setEntitySearchResults([]); return; }
+    entitySearchTimer.current = setTimeout(async () => {
+      try {
+        const resp = await fetch(
+          `/api/search?q=${encodeURIComponent(query)}&models=card&models=dashboard&limit=15`,
+          { headers: apiHeaders() },
+        );
+        const data = await resp.json();
+        const items = (data?.data ?? data ?? []) as Array<{ id: number; name: string; model: string }>;
+        setEntitySearchResults(
+          items.map(item => ({
+            value: `${item.model}:${item.id}`,
+            label: `${item.model === "dashboard" ? "📊" : "📝"} ${item.name}`,
+          })),
+        );
+      } catch { setEntitySearchResults([]); }
+    }, 300);
   }, []);
+
+  const handleEntitySelect = useCallback((val: string | null) => {
+    if (!val) {
+      setCardIdFilter(null); setDashboardIdFilter(null); setContextLabel(null);
+      return;
+    }
+    const [model, idStr] = val.split(":");
+    const id = Number(idStr);
+    const label = entitySearchResults.find(r => r.value === val)?.label?.replace(/^[📊📝]\s*/, "") ?? val;
+    if (model === "dashboard") {
+      setDashboardIdFilter(id); setCardIdFilter(null);
+    } else {
+      setCardIdFilter(id); setDashboardIdFilter(null);
+    }
+    setContextLabel(label);
+  }, [entitySearchResults]);
 
   const fetchQueries = useCallback(async () => {
     setIsLoadingQueries(true);
@@ -479,34 +503,21 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
           leftSection={<Icon name="calendar" size={14} />}
           popoverProps={{ withinPortal: true }}
         />
-        {/* Entity filter (card/dashboard) via MiniPicker */}
-        {/* Entity filter: context chip with clear, or picker button */}
-        {contextLabel && (cardIdFilter || dashboardIdFilter) ? (
-          <Flex align="center" gap={4} className={S.contextChip}>
-            <Icon name={dashboardIdFilter ? "dashboard" : "question"} size={12} />
-            <Text size="xs" truncate maw={160}>{contextLabel}</Text>
-            <ActionIcon variant="transparent" size="xs"
-              onClick={() => { setCardIdFilter(null); setDashboardIdFilter(null); setContextLabel(null); }}>
-              <Icon name="close" size={10} />
-            </ActionIcon>
-          </Flex>
-        ) : (
-          <MiniPicker
-            opened={entityPickerOpen}
-            onClose={() => setEntityPickerOpen(false)}
-            models={["card", "dashboard"]}
-            onChange={handleEntityPick}
-            dropdownMt="xs"
-            closeOnClickOutside
-            menuDropdownProps={{ style: { zIndex: 400 } }}
-          >
-            <Button size="xs" variant="subtle" c="text-tertiary"
-              leftSection={<Icon name="filter" size={12} />}
-              onClick={() => setEntityPickerOpen(true)}>
-              {t`Card / Dashboard`}
-            </Button>
-          </MiniPicker>
-        )}
+        {/* Entity filter: searchable select for card/dashboard */}
+        <Select
+          size="xs"
+          w={220}
+          placeholder={t`Card / Dashboard`}
+          data={entitySearchResults}
+          value={cardIdFilter ? `card:${cardIdFilter}` : dashboardIdFilter ? `dashboard:${dashboardIdFilter}` : null}
+          onChange={handleEntitySelect}
+          onSearchChange={handleEntitySearch}
+          clearable
+          searchable
+          nothingFoundMessage={t`Type to search…`}
+          leftSection={<Icon name="filter" size={14} />}
+          comboboxProps={{ withinPortal: true, position: "bottom-start" }}
+        />
 
         <Flex gap="xs" ml="auto">
           {selectedIndices.size > 0 && (
