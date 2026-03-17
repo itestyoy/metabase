@@ -469,8 +469,13 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
           w={150}
           placeholder={t`Date`}
           value={dateValue}
-          onChange={setDateValue}
+          onChange={(v: Date | null) => {
+            if (v === null) { setDateValue(null); return; }
+            const d = v instanceof Date ? v : new Date(v);
+            setDateValue(isNaN(d.getTime()) ? null : d);
+          }}
           clearable
+          valueFormat="YYYY-MM-DD"
           leftSection={<Icon name="calendar" size={14} />}
           popoverProps={{ withinPortal: true }}
         />
