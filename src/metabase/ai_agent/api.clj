@@ -713,4 +713,66 @@
     {:reconnected (count registry)
      :servers     (keys registry)}))
 
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;; Admin Toolbar — query history
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :get "/admin/users"
+  "List users for the admin toolbar query explorer. Superuser only."
+  []
+  (api/check-superuser)
+  (t2/select [:model/User :id :first_name :last_name :email]
+             {:where [:= :is_active true]
+              :order-by [[:last_name :asc] [:first_name :asc]]}))
+
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema
+                      :metabase/validate-defendpoint-query-params-use-kebab-case]}
+(api.macros/defendpoint :get "/admin/query-history"
+  "Fetch recent query executions. Superuser only.
+  Params: user_id (optional), date (optional, YYYY-MM-DD), limit (optional, default 50)."
+  [user_id :- [:maybe ms/PositiveInt]
+   date    :- [:maybe :string]
+   limit   :- [:maybe ms/PositiveInt]]
+  (api/check-superuser)
+  (let [limit  (or limit 50)
+        wheres (cond-> [:and [:= 1 1]]
+                 user_id (conj [:= :executor_id user_id])
+                 date    (conj [:>= :started_at (str date " 00:00:00")]
+                               [:<  :started_at (str date " 23:59:59")]))]
+    (t2/query {:select   [:qe.hash
+                          :qe.started_at
+                          :qe.running_time
+                          :qe.result_rows
+                          :qe.executor_id
+                          :qe.card_id
+                          :qe.context
+                          :qe.native
+                          [:c.name :card_name]
+                          [:u.email :user_email]]
+               :from     [[:query_execution :qe]]
+               :left-join [[:report_card :c] [:= :qe.card_id :c.id]
+                           [:core_user :u]   [:= :qe.executor_id :u.id]]
+               :where    wheres
+               :order-by [[:qe.started_at :desc]]
+               :limit    limit})))
+
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :post "/admin/compile-cards"
+  "Compile multiple saved questions (cards) to SQL. Superuser only."
+  [:as {{card-ids :card_ids} :body}]
+  (api/check-superuser)
+  (vec
+   (for [card-id card-ids
+         :let [card (t2/select-one :model/Card :id card-id)]
+         :when card]
+     {:card_id   card-id
+      :card_name (:name card)
+      :query     (try
+                   (let [qp-ns   (requiring-resolve 'metabase.query-processor.compile/compile)
+                         compiled (qp-ns (:dataset_query card))]
+                     (if (map? compiled) (:query compiled) (str compiled)))
+                   (catch Exception e
+                     (str "Error: " (.getMessage e))))})))
+
 (def routes (api.macros/ns-handler))
