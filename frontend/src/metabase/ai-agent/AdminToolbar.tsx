@@ -213,7 +213,7 @@ interface QueryRow {
   native: boolean;
   raw_query: string | null;
 }
-interface CompiledCard { card_id: number; card_name: string; query: string; }
+interface CompiledCard { card_id: number | null; card_name: string; query: string; }
 
 interface PageContext {
   id: number;
@@ -338,7 +338,9 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
   }, [selectedIndices, queries]);
 
   const allSql = useMemo(
-    () => compiledResults.map(r => `-- ${r.card_name} (ID: ${r.card_id})\n${r.query}`).join("\n\n"),
+    () => compiledResults.map(r =>
+      `-- ${r.card_name}${r.card_id ? ` (ID: ${r.card_id})` : ""}\n${r.query}`
+    ).join("\n\n"),
     [compiledResults],
   );
 
@@ -382,7 +384,7 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
               <Icon name={dashboardIdFilter ? "dashboard" : "question"} size={12} />
               <Text size="xs" truncate maw={160}>{contextLabel}</Text>
               <ActionIcon variant="transparent" size="xs"
-                onClick={(e: React.MouseEvent) => {
+                onClick={(e: { stopPropagation: () => void }) => {
                   e.stopPropagation();
                   setCardIdFilter(null); setDashboardIdFilter(null); setContextLabel(null);
                 }}>
