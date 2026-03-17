@@ -149,6 +149,7 @@ function MbqlTab() {
     }
 
     setFormattedInput(JSON.stringify(mbql, null, 2));
+    setInput("");
     setIsLoading(true);
     setResult(null);
     try {
@@ -200,9 +201,9 @@ function MbqlTab() {
             <Text size="xs" fw={500} c="text-tertiary">{t`Input MBQL`}</Text>
             <CopyButton text={formattedInput} />
           </Flex>
-          <ScrollArea mah={170} scrollbarSize={4}>
+          <Box mah={170} className={S.codeEditorScroll}>
             <CodeEditor value={formattedInput} language="json" readOnly lineNumbers={false} className={S.codeEditor} />
-          </ScrollArea>
+          </Box>
         </Box>
       )}
       {isLoading && (
@@ -225,7 +226,7 @@ function MbqlTab() {
               <CopyButton text={result.content} />
             </Flex>
           </Flex>
-          <ScrollArea mah="min(50vh, 700px)" scrollbarSize={4}>
+          <Box mah="min(50vh, 700px)" className={S.codeEditorScroll}>
             <CodeEditor
               value={result.content}
               language={result.type === "sql" ? "sql" : result.type === "json" ? "json" : undefined}
@@ -233,7 +234,7 @@ function MbqlTab() {
               lineNumbers={result.type === "sql"}
               className={S.codeEditor}
             />
-          </ScrollArea>
+          </Box>
         </Box>
       )}
     </>
@@ -526,9 +527,9 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
               <CopyButton text={allSql} />
             </Flex>
           </Flex>
-          <ScrollArea mah="min(50vh, 700px)" scrollbarSize={4}>
+          <Box mah="min(50vh, 700px)" className={S.codeEditorScroll}>
             <CodeEditor value={allSql} language="sql" readOnly lineNumbers className={S.codeEditor} />
-          </ScrollArea>
+          </Box>
         </Box>
       )}
     </>

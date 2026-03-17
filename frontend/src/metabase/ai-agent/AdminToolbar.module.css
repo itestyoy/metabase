@@ -113,6 +113,10 @@
 }
 
 /* ── Code editor (readonly, syntax highlighted) ──── */
+.codeEditorScroll {
+  overflow: auto;
+}
+
 .codeEditor {
   font-size: 12px;
   background: var(--mb-color-background-primary);
