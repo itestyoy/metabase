@@ -739,7 +739,7 @@
                                                          [:dashboard_id {:optional true} [:maybe ms/PositiveInt]]
                                                          [:limit        {:optional true} [:maybe ms/PositiveInt]]]]
   (api/check-superuser)
-  (let [limit      (or limit 50)
+  (let [limit      (or limit 500)
         ;; When filtering by dashboard, find all card IDs on that dashboard
         dash-cards (when dashboard_id
                      (map :card_id

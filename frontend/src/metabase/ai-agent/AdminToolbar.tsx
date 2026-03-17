@@ -17,7 +17,6 @@ import {
   Button,
   Card,
   Center,
-  Checkbox,
   DateInput,
   Flex,
   Group,
@@ -232,13 +231,11 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
   }, [pageContext]);
   const [queries, setQueries] = useState<QueryRow[]>([]);
   const [isLoadingQueries, setIsLoadingQueries] = useState(false);
-  // Selection by row index (works for both card and ad-hoc)
-  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
-  const [compiledResults, setCompiledResults] = useState<CompiledCard[]>([]);
-  const [isCompiling, setIsCompiling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Selected row detail
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [expandedDetail, setExpandedDetail] = useState<string | null>(null);
+  const [expandedSql, setExpandedSql] = useState<string | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
   // Load users on mount
@@ -275,8 +272,9 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
   const fetchQueries = useCallback(async () => {
     setIsLoadingQueries(true);
     setQueries([]);
-    setSelectedIndices(new Set());
-    setCompiledResults([]);
+    setExpandedRow(null);
+    setExpandedDetail(null);
+    setExpandedSql(null);
     setError(null);
     try {
       const params = new URLSearchParams();
@@ -287,7 +285,7 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
       if (dateStr) params.set("date", dateStr);
       if (cardIdFilter) params.set("card_id", String(cardIdFilter));
       if (dashboardIdFilter) params.set("dashboard_id", String(dashboardIdFilter));
-      params.set("limit", "100");
+      params.set("limit", "500");
       const resp = await fetch(`/api/ai-agent/admin/query-history?${params}`, { headers: apiHeaders() });
       const data = await resp.json();
       if (!resp.ok) {
@@ -304,28 +302,40 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
     if (expandedRow === idx) {
       setExpandedRow(null);
       setExpandedDetail(null);
+      setExpandedSql(null);
       return;
     }
     const q = queries[idx];
     setExpandedRow(idx);
     setExpandedDetail(null);
-
-    // Fetch detail for any query
+    setExpandedSql(null);
     setIsLoadingDetail(true);
+
     try {
       if (q.card_id) {
+        // Saved card: fetch dataset_query JSON + compile to SQL
         const resp = await fetch(`/api/card/${q.card_id}`, { headers: apiHeaders() });
         const card = await resp.json();
         const dq = card?.dataset_query;
         setExpandedDetail(dq ? JSON.stringify(dq, null, 2) : JSON.stringify(card, null, 2));
-      } else if (q.raw_query) {
-        try {
-          setExpandedDetail(formatSql(q.raw_query, { language: "sql" }));
-        } catch {
-          setExpandedDetail(q.raw_query);
+
+        // Compile to SQL
+        if (dq) {
+          try {
+            const sqlResp = await fetch("/api/dataset/native", {
+              method: "POST", headers: apiHeaders(), body: JSON.stringify(dq),
+            });
+            const sqlData = await sqlResp.json();
+            if (sqlData?.query) {
+              try { setExpandedSql(formatSql(sqlData.query, { language: "sql" })); }
+              catch { setExpandedSql(sqlData.query); }
+            }
+          } catch { /* SQL compilation optional */ }
         }
-      } else {
-        setExpandedDetail(null);
+      } else if (q.raw_query) {
+        // Ad-hoc: raw SQL is the detail
+        try { setExpandedSql(formatSql(q.raw_query, { language: "sql" })); }
+        catch { setExpandedSql(q.raw_query); }
       }
     } catch {
       setExpandedDetail("Failed to load query details");
@@ -334,64 +344,6 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
     }
   }, [expandedRow, queries]);
 
-  const toggleIndex = useCallback((idx: number) => {
-    setSelectedIndices(prev => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx); else next.add(idx);
-      return next;
-    });
-  }, []);
-
-  // Selectable: saved questions (card_id) or any query with raw_query
-  const selectableIndices = useMemo(
-    () => queries.map((q, i) => (q.card_id != null || q.raw_query) ? i : -1).filter(i => i >= 0),
-    [queries],
-  );
-
-  const toggleAll = useCallback(() => {
-    setSelectedIndices(prev =>
-      prev.size === selectableIndices.length ? new Set() : new Set(selectableIndices),
-    );
-  }, [selectableIndices]);
-
-  const compileSelected = useCallback(async () => {
-    if (selectedIndices.size === 0) return;
-    setIsCompiling(true);
-    setCompiledResults([]);
-    setError(null);
-    try {
-      const items = [...selectedIndices].map(idx => {
-        const q = queries[idx];
-        if (q.card_id) return { card_id: q.card_id };
-        return {
-          raw_query: q.raw_query,
-          label: q.card_name ?? (q.native ? "Ad-hoc SQL" : "Ad-hoc query"),
-        };
-      });
-      const resp = await fetch("/api/ai-agent/admin/compile-queries", {
-        method: "POST",
-        headers: apiHeaders(),
-        body: JSON.stringify({ items }),
-      });
-      const data = await resp.json();
-      if (!resp.ok) {
-        setError(data?.message || data?.error || `HTTP ${resp.status}`);
-      } else if (Array.isArray(data)) {
-        setCompiledResults(data);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Compile failed");
-    } finally { setIsCompiling(false); }
-  }, [selectedIndices, queries]);
-
-  const allSql = useMemo(
-    () => compiledResults.map(r => {
-      let sql = r.query;
-      try { sql = formatSql(sql, { language: "sql" }); } catch { /* keep raw */ }
-      return `-- ${r.card_name}${r.card_id ? ` (ID: ${r.card_id})` : ""}\n${sql}`;
-    }).join("\n\n"),
-    [compiledResults],
-  );
 
   return (
     <>
@@ -521,18 +473,10 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
           />
         </Box>
 
-        <Flex gap="xs" ml="auto">
-          {selectedIndices.size > 0 && (
-            <Button size="xs" variant="light" onClick={compileSelected} loading={isCompiling}
-              leftSection={<Icon name="notebook" size={12} />}>
-              {t`Get SQL`} ({selectedIndices.size})
-            </Button>
-          )}
-          <Button size="xs" variant="filled" onClick={fetchQueries} loading={isLoadingQueries}
-            leftSection={<Icon name="search" size={12} />}>
-            {t`Search`}
-          </Button>
-        </Flex>
+        <Button size="xs" variant="filled" onClick={fetchQueries} loading={isLoadingQueries} ml="auto"
+          leftSection={<Icon name="search" size={12} />}>
+          {t`Search`}
+        </Button>
       </Flex>
 
       {/* ── Error ──── */}
@@ -550,9 +494,6 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
       {queries.length > 0 && (
         <Box className={S.resultContainer}>
           <Flex className={S.resultHeader} align="center" px="md" py={4} gap={8}>
-            <Checkbox size="xs" checked={selectedIndices.size === selectableIndices.length && selectableIndices.length > 0}
-              indeterminate={selectedIndices.size > 0 && selectedIndices.size < selectableIndices.length}
-              onChange={toggleAll} />
             <Text size="xs" fw={500} c="text-secondary" style={{ flex: 1 }}>{t`Query`}</Text>
             <Text size="xs" fw={500} c="text-secondary" w={50}>{t`Type`}</Text>
             <Text size="xs" fw={500} c="text-secondary" w={100} truncate>{t`Dashboard`}</Text>
@@ -562,7 +503,6 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
           </Flex>
           <Box className={S.queryListScroll}>
             {queries.map((q, i) => {
-              const selectable = q.card_id != null || !!q.raw_query;
               const isActive = expandedRow === i;
               return (
                 <UnstyledButton key={`${q.hash}-${i}`}
@@ -570,13 +510,6 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
                   onClick={() => handleRowClick(i)}
                 >
                   <Flex align="center" px="md" py={5} gap={8}>
-                    {selectable ? (
-                      <Checkbox size="xs" checked={selectedIndices.has(i)}
-                        onChange={() => toggleIndex(i)}
-                        onClick={e => e.stopPropagation()} />
-                    ) : (
-                      <Box w={20} />
-                    )}
                     <Flex direction="column" style={{ flex: 1, minWidth: 0 }}>
                       <Text size="xs" truncate fw={500}>
                         {q.card_name ?? (q.native ? t`Ad-hoc SQL` : t`Ad-hoc query`)}
@@ -600,81 +533,101 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
           </Box>
         </Box>
       )}
-      {/* ── Selected row detail (separate section like MBQL tab) ──── */}
-      {expandedRow !== null && (
-        <Box className={S.resultContainer}>
-          <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={6}>
-            <Flex align="center" gap={6}>
-              <Icon name={queries[expandedRow]?.native ? "database" : "notebook"} size={14}
-                color="var(--mb-color-text-tertiary)" />
-              <Text size="xs" fw={500} c="text-secondary">
-                {queries[expandedRow]?.card_name ?? (queries[expandedRow]?.native ? t`Ad-hoc SQL` : t`Ad-hoc query`)}
-                {queries[expandedRow]?.native ? " — Native SQL" : " — MBQL"}
-              </Text>
-            </Flex>
-            {expandedDetail && (
-              <Flex gap={4}>
-                {queries[expandedRow]?.native && (
-                  <OpenInEditorButton sql={expandedDetail} />
-                )}
-                {!queries[expandedRow]?.native && expandedDetail && (
-                  <OpenInNotebookButton datasetQuery={expandedDetail} />
-                )}
-                <CopyButton text={expandedDetail} />
-                <ActionIcon variant="subtle" size="xs" onClick={() => { setExpandedRow(null); setExpandedDetail(null); }}>
-                  <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
-                </ActionIcon>
-              </Flex>
-            )}
-          </Flex>
-          {isLoadingDetail ? (
-            <Flex align="center" justify="center" p="lg" gap={6}>
-              <Loader size="xs" /><Text size="xs" c="text-tertiary">{t`Loading…`}</Text>
-            </Flex>
-          ) : expandedDetail ? (
-            <Box mah={200} className={S.codeEditorScroll}>
-              <CodeEditor
-                value={expandedDetail}
-                language={queries[expandedRow]?.card_id ? "json" : "sql"}
-                readOnly
-                lineNumbers
-                className={S.codeEditor}
-              />
-            </Box>
-          ) : (
-            <Text size="xs" c="text-tertiary" p="md">{t`No query data available`}</Text>
+      {/* ── Selected row: actions bar ──── */}
+      {expandedRow !== null && queries[expandedRow] && (
+        <Flex className={S.actionsBar} gap="xs" align="center" px="md" py={6} wrap="wrap">
+          {queries[expandedRow].card_id && (
+            <Button size="xs" variant="light" leftSection={<Icon name="question" size={12} />}
+              onClick={() => window.open(`/question/${queries[expandedRow]!.card_id}`, "_blank")}>
+              {t`Open Card`}
+            </Button>
           )}
+          {queries[expandedRow].dashboard_id && (
+            <Button size="xs" variant="light" leftSection={<Icon name="dashboard" size={12} />}
+              onClick={() => window.open(`/dashboard/${queries[expandedRow]!.dashboard_id}`, "_blank")}>
+              {t`Open Dashboard`}
+            </Button>
+          )}
+          {!queries[expandedRow].native && expandedDetail && (
+            <OpenInNotebookButton datasetQuery={expandedDetail} />
+          )}
+          {(queries[expandedRow].native || expandedSql) && (
+            <OpenInEditorButton sql={expandedSql ?? ""} />
+          )}
+          <Box style={{ flex: 1 }} />
+          {queries[expandedRow].card_id && (
+            <Button size="xs" variant="subtle" c="text-tertiary"
+              leftSection={<Icon name="filter" size={12} />}
+              onClick={() => {
+                setCardIdFilter(queries[expandedRow]!.card_id);
+                setDashboardIdFilter(null);
+                setContextLabel(queries[expandedRow]!.card_name ?? `Card ${queries[expandedRow]!.card_id}`);
+                setTimeout(() => fetchQueries(), 100);
+              }}>
+              {t`Filter by card`}
+            </Button>
+          )}
+          {queries[expandedRow].dashboard_id && (
+            <Button size="xs" variant="subtle" c="text-tertiary"
+              leftSection={<Icon name="filter" size={12} />}
+              onClick={() => {
+                setDashboardIdFilter(queries[expandedRow]!.dashboard_id);
+                setCardIdFilter(null);
+                setContextLabel(queries[expandedRow]!.dashboard_name ?? `Dashboard ${queries[expandedRow]!.dashboard_id}`);
+                setTimeout(() => fetchQueries(), 100);
+              }}>
+              {t`Filter by dashboard`}
+            </Button>
+          )}
+          <ActionIcon variant="subtle" size="xs" onClick={() => { setExpandedRow(null); setExpandedDetail(null); setExpandedSql(null); }}>
+            <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
+          </ActionIcon>
+        </Flex>
+      )}
+
+      {/* ── Selected row: MBQL JSON ──── */}
+      {expandedRow !== null && expandedDetail && (
+        <Box className={S.resultContainer}>
+          <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={4}>
+            <Text size="xs" fw={500} c="text-tertiary">
+              {queries[expandedRow]?.native ? "Native SQL Query" : "MBQL (dataset_query)"}
+            </Text>
+            <CopyButton text={expandedDetail} />
+          </Flex>
+          <Box mah={200} className={S.codeEditorScroll}>
+            <CodeEditor value={expandedDetail} language={queries[expandedRow]?.card_id ? "json" : "sql"}
+              readOnly lineNumbers className={S.codeEditor} />
+          </Box>
         </Box>
+      )}
+
+      {/* ── Selected row: compiled SQL ──── */}
+      {expandedRow !== null && expandedSql && queries[expandedRow]?.card_id && (
+        <Box className={S.resultContainer}>
+          <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={4}>
+            <Text size="xs" fw={500} c="text-tertiary">{t`Compiled SQL`}</Text>
+            <Flex gap={4}>
+              <OpenInEditorButton sql={expandedSql} />
+              <CopyButton text={expandedSql} />
+            </Flex>
+          </Flex>
+          <Box mah={200} className={S.codeEditorScroll}>
+            <CodeEditor value={expandedSql} language="sql" readOnly lineNumbers className={S.codeEditor} />
+          </Box>
+        </Box>
+      )}
+
+      {/* ── Loading detail ──── */}
+      {isLoadingDetail && (
+        <Flex align="center" justify="center" p="md" gap={6}>
+          <Loader size="xs" /><Text size="xs" c="text-tertiary">{t`Loading…`}</Text>
+        </Flex>
       )}
 
       {queries.length === 0 && !isLoadingQueries && (
         <Flex align="center" justify="center" p="lg">
           <Text size="sm" c="text-tertiary">{t`Select user and date, then click Search`}</Text>
         </Flex>
-      )}
-
-      {/* ── Compiled SQL results ──── */}
-      {compiledResults.length > 0 && (
-        <Box className={S.resultContainer}>
-          <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={6}>
-            <Flex align="center" gap={6}>
-              <Icon name="check" size={14} color="var(--mb-color-success)" />
-              <Text size="xs" fw={500} c="text-secondary">
-                {t`SQL for ${compiledResults.length} questions`}
-              </Text>
-            </Flex>
-            <Flex gap={4}>
-              <OpenInEditorButton sql={allSql} />
-              <CopyButton text={allSql} />
-              <ActionIcon variant="subtle" size="xs" onClick={() => setCompiledResults([])}>
-                <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
-              </ActionIcon>
-            </Flex>
-          </Flex>
-          <Box mah="min(50vh, 700px)" className={S.codeEditorScroll}>
-            <CodeEditor value={allSql} language="sql" readOnly lineNumbers className={S.codeEditor} />
-          </Box>
-        </Box>
       )}
     </>
   );
