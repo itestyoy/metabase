@@ -732,14 +732,15 @@
   "Fetch recent query executions. Superuser only.
   Params: user_id, date (YYYY-MM-DD), card_id, dashboard_id, limit — all optional."
   [_route-params
-   {:keys [user_id date card_id dashboard_id limit]} :- [:map
+   {:keys [user_id date card_id dashboard_id limit before]} :- [:map
                                                          [:user_id      {:optional true} [:maybe ms/PositiveInt]]
                                                          [:date         {:optional true} [:maybe :string]]
                                                          [:card_id      {:optional true} [:maybe ms/PositiveInt]]
                                                          [:dashboard_id {:optional true} [:maybe ms/PositiveInt]]
-                                                         [:limit        {:optional true} [:maybe ms/PositiveInt]]]]
+                                                         [:limit        {:optional true} [:maybe ms/PositiveInt]]
+                                                         [:before       {:optional true} [:maybe :string]]]]
   (api/check-superuser)
-  (let [limit      (or limit 500)
+  (let [limit      (or limit 200)
         ;; When filtering by dashboard, find all card IDs on that dashboard
         dash-cards (when dashboard_id
                      (map :card_id
@@ -750,7 +751,8 @@
                      date         (conj [:>= :started_at [:cast (str date " 00:00:00") :timestamp]]
                                         [:<  :started_at [:cast (str date " 23:59:59") :timestamp]])
                      card_id      (conj [:= :qe.card_id card_id])
-                     (seq dash-cards) (conj [:in :qe.card_id dash-cards]))]
+                     (seq dash-cards) (conj [:in :qe.card_id dash-cards])
+                     before       (conj [:< :started_at [:cast before :timestamp]]))]
     (t2/query {:select    [:qe.hash
                            :qe.started_at
                            :qe.running_time

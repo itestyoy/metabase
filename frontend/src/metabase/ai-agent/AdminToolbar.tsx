@@ -231,6 +231,7 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
   }, [pageContext]);
   const [queries, setQueries] = useState<QueryRow[]>([]);
   const [isLoadingQueries, setIsLoadingQueries] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Selected row detail
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
@@ -269,12 +270,16 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
     setContextLabel(item.name);
   }, []);
 
-  const fetchQueries = useCallback(async () => {
+  const PAGE_SIZE = 200;
+
+  const doFetch = useCallback(async (before?: string) => {
     setIsLoadingQueries(true);
-    setQueries([]);
-    setExpandedRow(null);
-    setExpandedDetail(null);
-    setExpandedSql(null);
+    if (!before) {
+      setQueries([]);
+      setExpandedRow(null);
+      setExpandedDetail(null);
+      setExpandedSql(null);
+    }
     setError(null);
     try {
       const params = new URLSearchParams();
@@ -285,18 +290,28 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
       if (dateStr) params.set("date", dateStr);
       if (cardIdFilter) params.set("card_id", String(cardIdFilter));
       if (dashboardIdFilter) params.set("dashboard_id", String(dashboardIdFilter));
-      params.set("limit", "500");
+      if (before) params.set("before", before);
+      params.set("limit", String(PAGE_SIZE));
       const resp = await fetch(`/api/ai-agent/admin/query-history?${params}`, { headers: apiHeaders() });
       const data = await resp.json();
       if (!resp.ok) {
         setError(data?.message || data?.error || `HTTP ${resp.status}`);
       } else if (Array.isArray(data)) {
-        setQueries(data);
+        setQueries(prev => before ? [...prev, ...data] : data);
+        setHasMore(data.length === PAGE_SIZE);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed");
     } finally { setIsLoadingQueries(false); }
   }, [selectedUserId, dateValue, cardIdFilter, dashboardIdFilter]);
+
+  const fetchQueries = useCallback(() => doFetch(), [doFetch]);
+
+  const loadMore = useCallback(() => {
+    if (queries.length === 0) return;
+    const lastStartedAt = queries[queries.length - 1].started_at;
+    doFetch(lastStartedAt);
+  }, [queries, doFetch]);
 
   const handleRowClick = useCallback(async (idx: number) => {
     if (expandedRow === idx) {
@@ -531,6 +546,14 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
               );
             })}
           </Box>
+          {hasMore && (
+            <Flex justify="center" py={6} className={S.loadMoreBar}>
+              <Button size="xs" variant="subtle" onClick={loadMore} loading={isLoadingQueries}
+                leftSection={<Icon name="chevrondown" size={12} />}>
+                {t`Load more`} ({queries.length} {t`loaded`})
+              </Button>
+            </Flex>
+          )}
         </Box>
       )}
       {/* ── Selected row: actions bar ──── */}

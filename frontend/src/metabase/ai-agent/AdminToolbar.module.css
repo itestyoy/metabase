@@ -122,6 +122,11 @@
   border-color: var(--mb-color-brand);
 }
 
+/* ── Load more bar ────────────────────────────────── */
+.loadMoreBar {
+  border-top: 1px solid color-mix(in srgb, var(--mb-color-border) 50%, transparent);
+}
+
 /* ── Actions bar (selected row) ───────────────────── */
 .actionsBar {
   background: color-mix(in srgb, var(--mb-color-brand) 5%, transparent);
