@@ -9,7 +9,7 @@
   background: var(--mb-color-background-primary);
   border: 1px solid var(--mb-color-border);
   border-radius: var(--default-border-radius, 8px);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08);
+  box-shadow: none;
   /* z-index below Mantine's default tooltip/popover z-index (300)
      so tooltips inside the modal are never covered by the modal itself */
   z-index: 200;
@@ -28,7 +28,6 @@
   border-right: none;
   border-top: none;
   border-bottom: none;
-  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.06);
   transition: width 0.2s ease;
 }
 
@@ -41,7 +40,6 @@
   border-left: none;
   border-right: none;
   border-bottom: none;
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
   transition: height 0.2s ease;
 }
 
@@ -620,10 +618,11 @@
   min-width: 0;
 }
 
-/* Right panel in bottom dock: input + toolbar stacked vertically */
+/* Right panel in bottom dock: input + toolbar, vertically centered */
 .inputPanelRight {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   width: 340px;
   min-width: 280px;
   flex-shrink: 0;
@@ -631,33 +630,7 @@
 }
 
 .inputPanelRight .inputArea {
-  flex: 1;
   border-top: none;
-  display: flex;
-  flex-direction: column;
-  padding: 10px 12px;
-}
-
-.inputPanelRight .composer {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Make textarea fill available vertical space in bottom dock */
-.inputPanelRight .composerTextarea {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.inputPanelRight .composerTextarea textarea {
-  flex: 1 !important;
-  min-height: 60px !important;
-}
-
-.inputPanelRight .bottomBar {
-  border-top: 1px solid var(--mb-color-border);
 }
 
 /* Bottom panel in vertical mode: unchanged */
