@@ -731,11 +731,13 @@
 (api.macros/defendpoint :get "/admin/query-history"
   "Fetch recent query executions. Superuser only.
   Params: user_id, date (YYYY-MM-DD), card_id, dashboard_id, limit — all optional."
-  [user_id      :- [:maybe ms/PositiveInt]
-   date         :- [:maybe :string]
-   card_id      :- [:maybe ms/PositiveInt]
-   dashboard_id :- [:maybe ms/PositiveInt]
-   limit        :- [:maybe ms/PositiveInt]]
+  [_route-params
+   {:keys [user_id date card_id dashboard_id limit]} :- [:map
+                                                         [:user_id      {:optional true} [:maybe ms/PositiveInt]]
+                                                         [:date         {:optional true} [:maybe :string]]
+                                                         [:card_id      {:optional true} [:maybe ms/PositiveInt]]
+                                                         [:dashboard_id {:optional true} [:maybe ms/PositiveInt]]
+                                                         [:limit        {:optional true} [:maybe ms/PositiveInt]]]]
   (api/check-superuser)
   (let [limit      (or limit 50)
         ;; When filtering by dashboard, find all card IDs on that dashboard
@@ -771,7 +773,9 @@
 (api.macros/defendpoint :post "/admin/compile-queries"
   "Compile saved questions (by card_id) or ad-hoc queries (by json_query) to SQL.
   Superuser only. Body: {items: [{card_id: N} | {json_query: {...}, label: \"...\"}]}"
-  [:as {{items :items} :body}]
+  [_route-params
+   _query-params
+   {items :items} :- [:map [:items [:sequential :map]]]]
   (api/check-superuser)
   (let [compile-fn (requiring-resolve 'metabase.query-processor.compile/compile)]
     (vec
