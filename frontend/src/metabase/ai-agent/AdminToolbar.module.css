@@ -5,6 +5,34 @@
   overflow: hidden;
 }
 
+/* ── Tabs ──────────────────────────────────────────── */
+.tabBar {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--mb-color-border);
+  background: var(--mb-color-background-secondary);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  color: var(--mb-color-text-tertiary);
+  border-bottom: 2px solid transparent;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.tab:hover {
+  color: var(--mb-color-text-primary);
+}
+
+.tabActive {
+  color: var(--mb-color-brand);
+  border-bottom-color: var(--mb-color-brand);
+}
+
+/* ── Input (MBQL tab) ─────────────────────────────── */
 .input {
   padding: var(--mantine-spacing-lg);
   padding-left: 3.75rem;
@@ -12,8 +40,6 @@
   width: 100%;
   border: none;
   border-bottom: 1px solid var(--mb-color-border);
-  border-top-left-radius: 0.5rem;
-  border-top-right-radius: 0.5rem;
   color: var(--mb-color-text-primary);
   line-height: 1rem;
   outline: none;
@@ -33,6 +59,43 @@
 .hintBar {
   background: var(--mb-color-background-secondary);
   border-bottom: 1px solid var(--mb-color-border);
+}
+
+/* ── Filters bar (Query Explorer) ─────────────────── */
+.filtersBar {
+  background: var(--mb-color-background-primary);
+  border-bottom: 1px solid var(--mb-color-border);
+}
+
+.filterSelect {
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid var(--mb-color-border);
+  border-radius: 6px;
+  background: var(--mb-color-background-primary);
+  color: var(--mb-color-text-primary);
+  outline: none;
+  min-width: 140px;
+  height: 28px;
+}
+
+.filterSelect:focus {
+  border-color: var(--mb-color-brand);
+}
+
+/* ── Query row ────────────────────────────────────── */
+.queryRow {
+  width: 100%;
+  border-bottom: 1px solid color-mix(in srgb, var(--mb-color-border) 50%, transparent);
+  transition: background 0.1s;
+}
+
+.queryRow:last-child {
+  border-bottom: none;
+}
+
+.queryRow:hover {
+  background: color-mix(in srgb, var(--mb-color-brand) 4%, transparent);
 }
 
 /* ── Result ──────────────────────────────────────── */
