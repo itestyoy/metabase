@@ -25,7 +25,6 @@ import {
   Icon,
   Loader,
   Overlay,
-  ScrollArea,
   Select,
   Stack,
   Text,
@@ -538,7 +537,7 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
             <Text size="xs" fw={500} c="text-secondary" w={60} ta="right">{t`Rows`}</Text>
             <Text size="xs" fw={500} c="text-secondary" w={60} ta="right">{t`Time`}</Text>
           </Flex>
-          <ScrollArea mah={260} scrollbarSize={4}>
+          <Box className={S.queryListScroll}>
             {queries.map((q, i) => {
               const selectable = q.card_id != null || !!q.raw_query;
               const isExpanded = expandedRow === i;
@@ -601,7 +600,7 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
                 </Box>
               );
             })}
-          </ScrollArea>
+          </Box>
         </Box>
       )}
       {queries.length === 0 && !isLoadingQueries && (
