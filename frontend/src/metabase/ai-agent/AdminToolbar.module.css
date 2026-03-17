@@ -93,7 +93,8 @@
 }
 
 .queryRowExpanded {
-  background: color-mix(in srgb, var(--mb-color-brand) 6%, transparent);
+  background: color-mix(in srgb, var(--mb-color-brand) 10%, transparent);
+  border-left: 3px solid var(--mb-color-brand) !important;
 }
 
 /* ── Query detail (expanded row) ─────────────────── */
