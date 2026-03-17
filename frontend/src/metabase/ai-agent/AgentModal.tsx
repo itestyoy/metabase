@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { t } from "ttag";
 
-import { ActionIcon, Anchor, Icon, Stack, Text, Textarea, Tooltip } from "metabase/ui";
+import { ActionIcon, Anchor, Icon, Menu, Stack, Text, Textarea, Tooltip } from "metabase/ui";
 
 import { AgentChatMessages } from "./AgentChatMessages";
 import type { AgentContextValue } from "./AgentContextPicker";
@@ -149,9 +149,6 @@ export function AgentModal({ onClose }: AgentModalProps) {
     saveDockState({ mode: dockMode, width: dockedWidth, height: dockedHeight, inputPanelWidth });
   }, [dockMode, dockedWidth, dockedHeight, inputPanelWidth]);
 
-  const cycleDockMode = useCallback(() => {
-    setDockMode((m: DockMode) => (m === "none" ? "right" : m === "right" ? "bottom" : "none"));
-  }, []);
 
   // ── Docked edge resize (right dock: left edge, bottom dock: top edge) ──
   const onDockedResizePointerDown = useCallback(
@@ -374,17 +371,44 @@ export function AgentModal({ onClose }: AgentModalProps) {
               </ActionIcon>
             </Tooltip>
           )}
-          <Tooltip label={dockMode === "none" ? t`Dock to right` : dockMode === "right" ? t`Dock to bottom` : t`Undock`}>
-            <ActionIcon
-              variant="transparent"
-              c={isDocked ? "var(--mb-color-text-secondary)" : "rgba(255,255,255,0.8)"}
-              size="sm"
-              onClick={cycleDockMode}
-              aria-label={t`Change dock mode`}
-            >
-              <Icon name={dockMode === "none" ? "sidebar_closed" : dockMode === "right" ? "arrow_down" : "sidebar_open"} size={14} />
-            </ActionIcon>
-          </Tooltip>
+          <Menu position="bottom-end" withinPortal>
+            <Menu.Target>
+              <ActionIcon
+                variant="transparent"
+                c={isDocked ? "var(--mb-color-text-secondary)" : "rgba(255,255,255,0.8)"}
+                size="sm"
+                aria-label={t`Dock mode`}
+              >
+                <Icon name={dockMode === "none" ? "sidebar_closed" : dockMode === "right" ? "sidebar_closed" : "arrow_down"} size={14} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item
+                leftSection={<Icon name="chevronleft" size={14} />}
+                onClick={() => setDockMode("none")}
+                fw={dockMode === "none" ? 600 : 400}
+                c={dockMode === "none" ? "brand" : undefined}
+              >
+                {t`Floating`}
+              </Menu.Item>
+              <Menu.Item
+                leftSection={<Icon name="sidebar_closed" size={14} />}
+                onClick={() => setDockMode("right")}
+                fw={dockMode === "right" ? 600 : 400}
+                c={dockMode === "right" ? "brand" : undefined}
+              >
+                {t`Dock right`}
+              </Menu.Item>
+              <Menu.Item
+                leftSection={<Icon name="arrow_down" size={14} />}
+                onClick={() => setDockMode("bottom")}
+                fw={dockMode === "bottom" ? 600 : 400}
+                c={dockMode === "bottom" ? "brand" : undefined}
+              >
+                {t`Dock bottom`}
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
           {!isDocked && (
             <Tooltip label={isMinimized ? t`Expand` : t`Minimize`}>
               <ActionIcon
