@@ -112,15 +112,20 @@
   white-space: nowrap;
 }
 
-/* ── Result code block ────────────────────────────── */
-.resultCode {
-  font-size: 12px !important;
-  line-height: 1.5;
-  background: var(--mb-color-background-primary) !important;
+/* ── Code editor (readonly, syntax highlighted) ──── */
+.codeEditor {
+  font-size: 12px;
+  background: var(--mb-color-background-primary);
+}
+
+/* Remove border/shadow from CodeMirror inside our containers */
+.codeEditor :global(.cm-editor) {
   border: none !important;
-  border-radius: 0 !important;
-  padding: 12px 16px !important;
-  color: var(--mb-color-text-primary) !important;
-  white-space: pre;
-  overflow-x: auto;
+  outline: none !important;
+}
+
+.codeEditor :global(.cm-scroller) {
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
 }
