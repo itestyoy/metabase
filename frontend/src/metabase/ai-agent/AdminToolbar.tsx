@@ -6,6 +6,8 @@ import api from "metabase/lib/api";
 import { useSelector } from "metabase/lib/redux";
 import { getUserIsAdmin } from "metabase/selectors/user";
 
+import { MiniPicker } from "metabase/common/components/Pickers/MiniPicker";
+import type { MiniPickerPickableItem } from "metabase/common/components/Pickers/MiniPicker/types";
 import { usePageContext } from "./hooks/usePageContext";
 import {
   ActionIcon,
@@ -15,12 +17,14 @@ import {
   Center,
   Checkbox,
   Code,
+  DateInput,
   Flex,
   Group,
   Icon,
   Loader,
   Overlay,
   ScrollArea,
+  Select,
   Stack,
   Text,
   Tooltip,
@@ -197,8 +201,8 @@ interface PageContext {
 
 function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
   const [users, setUsers] = useState<UserOption[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [dateValue, setDateValue] = useState<Date | null>(() => new Date());
   const [cardIdFilter, setCardIdFilter] = useState<number | null>(
     pageContext?.model === "card" || pageContext?.model === "dataset" || pageContext?.model === "metric"
       ? pageContext.id : null,
@@ -209,6 +213,8 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
   const [contextLabel, setContextLabel] = useState<string | null>(
     pageContext ? `${pageContext.name}` : null,
   );
+  // Entity picker for filtering by card/dashboard
+  const [entityPickerOpen, setEntityPickerOpen] = useState(false);
   const [queries, setQueries] = useState<QueryRow[]>([]);
   const [isLoadingQueries, setIsLoadingQueries] = useState(false);
   // Selection by row index (works for both card and ad-hoc)
@@ -224,6 +230,27 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
       .catch(() => {});
   }, []);
 
+  const userOptions = useMemo(
+    () => users.map(u => ({
+      value: String(u.id),
+      label: `${u.first_name} ${u.last_name} (${u.email})`,
+    })),
+    [users],
+  );
+
+  const handleEntityPick = useCallback((item: MiniPickerPickableItem) => {
+    setEntityPickerOpen(false);
+    if (item.model === "dashboard") {
+      setDashboardIdFilter(item.id as number);
+      setCardIdFilter(null);
+      setContextLabel(item.name);
+    } else {
+      setCardIdFilter(item.id as number);
+      setDashboardIdFilter(null);
+      setContextLabel(item.name);
+    }
+  }, []);
+
   const fetchQueries = useCallback(async () => {
     setIsLoadingQueries(true);
     setQueries([]);
@@ -231,8 +258,9 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
     setCompiledResults([]);
     try {
       const params = new URLSearchParams();
-      if (selectedUserId) params.set("user_id", String(selectedUserId));
-      if (date) params.set("date", date);
+      if (selectedUserId) params.set("user_id", selectedUserId);
+      const dateStr = dateValue ? dateValue.toISOString().slice(0, 10) : null;
+      if (dateStr) params.set("date", dateStr);
       if (cardIdFilter) params.set("card_id", String(cardIdFilter));
       if (dashboardIdFilter) params.set("dashboard_id", String(dashboardIdFilter));
       params.set("limit", "100");
@@ -241,7 +269,7 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
       if (Array.isArray(data)) setQueries(data);
     } catch { /* ignore */ }
     finally { setIsLoadingQueries(false); }
-  }, [selectedUserId, date, cardIdFilter, dashboardIdFilter]);
+  }, [selectedUserId, dateValue, cardIdFilter, dashboardIdFilter]);
 
   const toggleIndex = useCallback((idx: number) => {
     setSelectedIndices(prev => {
@@ -296,33 +324,58 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
     <>
       {/* ── Filters ──── */}
       <Flex className={S.filtersBar} gap="sm" align="center" px="md" py={8} wrap="wrap">
-        <Flex align="center" gap={6}>
-          <Icon name="person" size={14} color="var(--mb-color-text-tertiary)" />
-          <select className={S.filterSelect}
-            value={selectedUserId ?? ""}
-            onChange={e => setSelectedUserId(e.target.value ? Number(e.target.value) : null)}
-          >
-            <option value="">{t`All users`}</option>
-            {users.map(u => (
-              <option key={u.id} value={u.id}>{u.first_name} {u.last_name} ({u.email})</option>
-            ))}
-          </select>
-        </Flex>
-        <Flex align="center" gap={6}>
-          <Icon name="calendar" size={14} color="var(--mb-color-text-tertiary)" />
-          <input type="date" className={S.filterSelect} value={date}
-            onChange={e => setDate(e.target.value)} />
-        </Flex>
-        {contextLabel && (cardIdFilter || dashboardIdFilter) && (
-          <Flex align="center" gap={4} className={S.contextChip}>
-            <Icon name={dashboardIdFilter ? "dashboard" : "question"} size={12} />
-            <Text size="xs" truncate maw={180}>{contextLabel}</Text>
-            <ActionIcon variant="transparent" size="xs"
-              onClick={() => { setCardIdFilter(null); setDashboardIdFilter(null); setContextLabel(null); }}>
-              <Icon name="close" size={10} />
-            </ActionIcon>
-          </Flex>
-        )}
+        <Select
+          size="xs"
+          w={220}
+          placeholder={t`All users`}
+          data={userOptions}
+          value={selectedUserId}
+          onChange={setSelectedUserId}
+          clearable
+          searchable
+          leftSection={<Icon name="person" size={14} />}
+          comboboxProps={{ withinPortal: true, position: "bottom-start" }}
+        />
+        <DateInput
+          size="xs"
+          w={150}
+          placeholder={t`Date`}
+          value={dateValue}
+          onChange={setDateValue}
+          clearable
+          leftSection={<Icon name="calendar" size={14} />}
+          popoverProps={{ withinPortal: true }}
+        />
+        {/* Entity filter (card/dashboard) via MiniPicker */}
+        <MiniPicker
+          opened={entityPickerOpen}
+          onClose={() => setEntityPickerOpen(false)}
+          models={["card", "dashboard"]}
+          onChange={handleEntityPick}
+          dropdownMt="xs"
+        >
+          {contextLabel && (cardIdFilter || dashboardIdFilter) ? (
+            <Flex align="center" gap={4} className={S.contextChip}
+              onClick={() => setEntityPickerOpen(v => !v)}>
+              <Icon name={dashboardIdFilter ? "dashboard" : "question"} size={12} />
+              <Text size="xs" truncate maw={160}>{contextLabel}</Text>
+              <ActionIcon variant="transparent" size="xs"
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  setCardIdFilter(null); setDashboardIdFilter(null); setContextLabel(null);
+                }}>
+                <Icon name="close" size={10} />
+              </ActionIcon>
+            </Flex>
+          ) : (
+            <Button size="xs" variant="subtle" c="text-tertiary"
+              leftSection={<Icon name="filter" size={12} />}
+              onClick={() => setEntityPickerOpen(v => !v)}>
+              {t`Card / Dashboard`}
+            </Button>
+          )}
+        </MiniPicker>
+
         <Button size="xs" variant="filled" onClick={fetchQueries} loading={isLoadingQueries}
           leftSection={<Icon name="search" size={12} />}>
           {t`Search`}
