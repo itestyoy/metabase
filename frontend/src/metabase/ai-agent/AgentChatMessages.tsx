@@ -421,44 +421,66 @@ function ContentBlockRenderer({
   }
 }
 
-/* ── Tool call message ───────────────────────────────────────────────────── */
+/* ── Tool call helpers ──────────────────────────────────────────────────── */
 
-function ToolCallMessage({ message }: { message: ChatMessage }) {
+const TOOL_ICON_MAP: Record<string, string> = {
+  run_query: "database",
+  search_items: "search",
+  list_databases: "database",
+  get_database_schema: "database",
+  get_table_details: "table2",
+  list_questions: "question",
+  execute_card: "play",
+  create_question: "add",
+  create_notebook_question: "notebook",
+  create_dashboard: "dashboard",
+  create_document: "document",
+  get_document: "document",
+  append_to_document: "document",
+  list_metrics: "metric",
+  get_metrics_guide: "metric",
+  get_card_details: "question",
+  get_dashboard_details: "dashboard",
+};
+
+function getToolIcon(toolName?: string): string {
+  if (!toolName) return "gear";
+  return TOOL_ICON_MAP[toolName] ?? "gear";
+}
+
+function formatToolName(toolName?: string): string {
+  return toolName?.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) ?? "Tool";
+}
+
+/* ── Single tool call row (used inside the group) ─────────────────────── */
+
+function ToolCallRow({ message }: { message: ChatMessage }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const isRunning = message.toolStatus === "running";
   const isError = message.toolStatus === "error";
-  const toolLabel =
-    message.toolName
-      ?.replace(/_/g, " ")
-      .replace(/\b\w/g, c => c.toUpperCase()) ?? "Tool";
 
   return (
-    <Paper
-      className={S.toolMessage}
-      withBorder
-      radius="sm"
-      p={0}
-    >
+    <Box className={S.toolRow}>
       <Group
-        className={S.toolHeader}
+        className={S.toolRowHeader}
         gap={6}
-        px={10}
-        py={6}
         align="center"
+        wrap="nowrap"
+        onClick={message.toolResult ? () => setIsExpanded(v => !v) : undefined}
         style={message.toolResult ? { cursor: "pointer" } : undefined}
-        onClick={message.toolResult ? () => setIsExpanded((v: boolean) => !v) : undefined}
       >
         {isRunning ? (
-          <Loader size={12} />
+          <Loader size={11} />
         ) : (
           <Icon
             name={isError ? "warning" : "check"}
-            size={12}
+            size={11}
             color={isError ? "var(--mb-color-error)" : "var(--mb-color-success)"}
           />
         )}
-        <Text size="xs" c="text-secondary" fs="italic" lh={1} style={{ flex: 1 }}>
-          {toolLabel}{isRunning ? "…" : ""}
+        <Icon name={getToolIcon(message.toolName)} size={12} color="var(--mb-color-text-tertiary)" />
+        <Text size="xs" c="text-secondary" lh={1} style={{ flex: 1 }} truncate>
+          {formatToolName(message.toolName)}{isRunning ? "…" : ""}
         </Text>
         {message.toolResult && (
           <Icon
@@ -469,9 +491,76 @@ function ToolCallMessage({ message }: { message: ChatMessage }) {
         )}
       </Group>
       {message.toolResult && isExpanded && (
-        <Code className={S.toolResult} block>
-          {message.toolResult}
-        </Code>
+        <ScrollArea className={S.toolResultScroll} scrollbarSize={4}>
+          <Code className={S.toolResult} block>
+            {message.toolResult}
+          </Code>
+        </ScrollArea>
+      )}
+    </Box>
+  );
+}
+
+/* ── Grouped tool calls block ─────────────────────────────────────────── */
+
+function ToolCallGroup({ messages }: { messages: ChatMessage[] }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const runningCount = messages.filter(m => m.toolStatus === "running").length;
+  const errorCount = messages.filter(m => m.toolStatus === "error").length;
+  const doneCount = messages.length - runningCount;
+  const isAllDone = runningCount === 0;
+  const currentTool = !isAllDone
+    ? messages.find(m => m.toolStatus === "running")
+    : null;
+
+  const summaryLabel = !isAllDone
+    ? t`Running ${formatToolName(currentTool?.toolName)}…`
+    : errorCount > 0
+      ? t`Used ${messages.length} tools (${errorCount} failed)`
+      : t`Used ${messages.length} tools`;
+
+  // Auto-expand while running for visibility
+  const showTools = isExpanded || !isAllDone;
+
+  return (
+    <Paper className={S.toolGroup} withBorder radius="sm" p={0}>
+      <Group
+        className={S.toolGroupHeader}
+        gap={6}
+        px={10}
+        py={6}
+        align="center"
+        wrap="nowrap"
+        onClick={() => setIsExpanded(v => !v)}
+        style={{ cursor: "pointer" }}
+      >
+        {!isAllDone ? (
+          <Loader size={12} />
+        ) : errorCount > 0 ? (
+          <Icon name="warning" size={12} color="var(--mb-color-error)" />
+        ) : (
+          <Icon name="check" size={12} color="var(--mb-color-success)" />
+        )}
+        <Text size="xs" c="text-secondary" lh={1} style={{ flex: 1 }}>
+          {summaryLabel}
+        </Text>
+        {isAllDone && (
+          <Text size="xs" c="text-tertiary" lh={1}>
+            {doneCount}/{messages.length}
+          </Text>
+        )}
+        <Icon
+          name={showTools ? "chevronup" : "chevrondown"}
+          size={10}
+          color="var(--mb-color-text-tertiary)"
+        />
+      </Group>
+      {showTools && (
+        <Stack gap={0} className={S.toolGroupBody}>
+          {messages.map(msg => (
+            <ToolCallRow key={msg.id} message={msg} />
+          ))}
+        </Stack>
       )}
     </Paper>
   );
@@ -543,8 +632,9 @@ function MessageBubble({
   message: ChatMessage;
   onSaveAsQuestion?: (sql: string) => void;
 }) {
+  // Tools are rendered via ToolCallGroup, not individually
   if (message.role === "tool") {
-    return <ToolCallMessage message={message} />;
+    return null;
   }
 
   // Skip the optimistic placeholder added while waiting for the server response
@@ -674,13 +764,34 @@ export function AgentChatMessages({
       onScrollPositionChange={handleScroll}
     >
       <Stack className={S.messagesInner} gap={4} p="12px 16px">
-        {messages.map(msg => (
-          <MessageBubble
-            key={msg.id}
-            message={msg}
-            onSaveAsQuestion={onSaveAsQuestion}
-          />
-        ))}
+        {(() => {
+          const elements: React.ReactNode[] = [];
+          let i = 0;
+          while (i < messages.length) {
+            const msg = messages[i];
+            if (msg.role === "tool") {
+              // Collect consecutive tool messages into a group
+              const toolGroup: ChatMessage[] = [];
+              while (i < messages.length && messages[i].role === "tool") {
+                toolGroup.push(messages[i]);
+                i++;
+              }
+              elements.push(
+                <ToolCallGroup key={`tools-${toolGroup[0].id}`} messages={toolGroup} />,
+              );
+            } else {
+              elements.push(
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  onSaveAsQuestion={onSaveAsQuestion}
+                />,
+              );
+              i++;
+            }
+          }
+          return elements;
+        })()}
         {isLoading && (
           <Flex justify="flex-start" className={S.messageBubbleRow}>
             <Paper className={S.loadingBubble} radius="xl">
