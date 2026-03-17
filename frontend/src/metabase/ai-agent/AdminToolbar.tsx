@@ -331,7 +331,9 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
     try {
       const params = new URLSearchParams();
       if (selectedUserId) params.set("user_id", selectedUserId);
-      const dateStr = dateValue ? dateValue.toISOString().slice(0, 10) : null;
+      const dateStr = dateValue instanceof Date && !isNaN(dateValue.getTime())
+        ? dateValue.toISOString().slice(0, 10)
+        : null;
       if (dateStr) params.set("date", dateStr);
       if (cardIdFilter) params.set("card_id", String(cardIdFilter));
       if (dashboardIdFilter) params.set("dashboard_id", String(dashboardIdFilter));
