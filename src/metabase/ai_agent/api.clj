@@ -748,6 +748,7 @@
                           :qe.card_id
                           :qe.context
                           :qe.native
+                          :qe.json_query
                           [:c.name :card_name]
                           [:u.email :user_email]]
                :from     [[:query_execution :qe]]
@@ -758,21 +759,40 @@
                :limit    limit})))
 
 #_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
-(api.macros/defendpoint :post "/admin/compile-cards"
-  "Compile multiple saved questions (cards) to SQL. Superuser only."
-  [:as {{card-ids :card_ids} :body}]
+(api.macros/defendpoint :post "/admin/compile-queries"
+  "Compile saved questions (by card_id) or ad-hoc queries (by json_query) to SQL.
+  Superuser only. Body: {items: [{card_id: N} | {json_query: {...}, label: \"...\"}]}"
+  [:as {{items :items} :body}]
   (api/check-superuser)
-  (vec
-   (for [card-id card-ids
-         :let [card (t2/select-one :model/Card :id card-id)]
-         :when card]
-     {:card_id   card-id
-      :card_name (:name card)
-      :query     (try
-                   (let [qp-ns   (requiring-resolve 'metabase.query-processor.compile/compile)
-                         compiled (qp-ns (:dataset_query card))]
-                     (if (map? compiled) (:query compiled) (str compiled)))
-                   (catch Exception e
-                     (str "Error: " (.getMessage e))))})))
+  (let [compile-fn (requiring-resolve 'metabase.query-processor.compile/compile)]
+    (vec
+     (for [item items]
+       (let [card-id    (:card_id item)
+             json-query (:json_query item)
+             label      (:label item)]
+         (cond
+           ;; Saved question — fetch dataset_query from card
+           card-id
+           (let [card (t2/select-one :model/Card :id card-id)]
+             {:card_id   card-id
+              :card_name (or (:name card) (str "Card " card-id))
+              :query     (if card
+                           (try
+                             (let [compiled (compile-fn (:dataset_query card))]
+                               (if (map? compiled) (:query compiled) (str compiled)))
+                             (catch Exception e (str "Error: " (.getMessage e))))
+                           "Error: card not found")})
+
+           ;; Ad-hoc — compile the json_query directly
+           json-query
+           {:card_id   nil
+            :card_name (or label "Ad-hoc query")
+            :query     (try
+                         (let [compiled (compile-fn json-query)]
+                           (if (map? compiled) (:query compiled) (str compiled)))
+                         (catch Exception e (str "Error: " (.getMessage e))))}
+
+           :else
+           {:card_id nil :card_name "Unknown" :query "Error: no card_id or json_query provided"}))))))
 
 (def routes (api.macros/ns-handler))

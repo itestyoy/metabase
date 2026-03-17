@@ -183,6 +183,7 @@ interface QueryRow {
   user_email: string | null;
   context: string | null;
   native: boolean;
+  json_query: Record<string, unknown> | null;
 }
 interface CompiledCard { card_id: number; card_name: string; query: string; }
 
@@ -192,7 +193,8 @@ function QueriesTab() {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [queries, setQueries] = useState<QueryRow[]>([]);
   const [isLoadingQueries, setIsLoadingQueries] = useState(false);
-  const [selectedCardIds, setSelectedCardIds] = useState<Set<number>>(new Set());
+  // Selection by row index (works for both card and ad-hoc)
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [compiledResults, setCompiledResults] = useState<CompiledCard[]>([]);
   const [isCompiling, setIsCompiling] = useState(false);
 
@@ -207,7 +209,7 @@ function QueriesTab() {
   const fetchQueries = useCallback(async () => {
     setIsLoadingQueries(true);
     setQueries([]);
-    setSelectedCardIds(new Set());
+    setSelectedIndices(new Set());
     setCompiledResults([]);
     try {
       const params = new URLSearchParams();
@@ -221,41 +223,49 @@ function QueriesTab() {
     finally { setIsLoadingQueries(false); }
   }, [selectedUserId, date]);
 
-  const toggleCard = useCallback((cardId: number) => {
-    setSelectedCardIds(prev => {
+  const toggleIndex = useCallback((idx: number) => {
+    setSelectedIndices(prev => {
       const next = new Set(prev);
-      if (next.has(cardId)) next.delete(cardId); else next.add(cardId);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
       return next;
     });
   }, []);
 
-  const selectableQueries = useMemo(
-    () => queries.filter(q => q.card_id != null),
+  // All queries are selectable (card or ad-hoc with json_query)
+  const selectableIndices = useMemo(
+    () => queries.map((q, i) => (q.card_id != null || q.json_query != null) ? i : -1).filter(i => i >= 0),
     [queries],
   );
 
   const toggleAll = useCallback(() => {
-    const allIds = selectableQueries.map(q => q.card_id!);
-    setSelectedCardIds(prev =>
-      prev.size === allIds.length ? new Set() : new Set(allIds),
+    setSelectedIndices(prev =>
+      prev.size === selectableIndices.length ? new Set() : new Set(selectableIndices),
     );
-  }, [selectableQueries]);
+  }, [selectableIndices]);
 
   const compileSelected = useCallback(async () => {
-    if (selectedCardIds.size === 0) return;
+    if (selectedIndices.size === 0) return;
     setIsCompiling(true);
     setCompiledResults([]);
     try {
-      const resp = await fetch("/api/ai-agent/admin/compile-cards", {
+      const items = [...selectedIndices].map(idx => {
+        const q = queries[idx];
+        if (q.card_id) return { card_id: q.card_id };
+        return {
+          json_query: q.json_query,
+          label: q.card_name ?? (q.native ? "Ad-hoc SQL" : "Ad-hoc query") + ` (${new Date(q.started_at).toLocaleTimeString()})`,
+        };
+      });
+      const resp = await fetch("/api/ai-agent/admin/compile-queries", {
         method: "POST",
         headers: apiHeaders(),
-        body: JSON.stringify({ card_ids: [...selectedCardIds] }),
+        body: JSON.stringify({ items }),
       });
       const data = await resp.json();
       if (Array.isArray(data)) setCompiledResults(data);
     } catch { /* ignore */ }
     finally { setIsCompiling(false); }
-  }, [selectedCardIds]);
+  }, [selectedIndices, queries]);
 
   const allSql = useMemo(
     () => compiledResults.map(r => `-- ${r.card_name} (ID: ${r.card_id})\n${r.query}`).join("\n\n"),
@@ -287,10 +297,10 @@ function QueriesTab() {
           leftSection={<Icon name="search" size={12} />}>
           {t`Search`}
         </Button>
-        {selectedCardIds.size > 0 && (
+        {selectedIndices.size > 0 && (
           <Button size="xs" variant="light" onClick={compileSelected} loading={isCompiling}
             leftSection={<Icon name="notebook" size={12} />} ml="auto">
-            {t`Get SQL`} ({selectedCardIds.size})
+            {t`Get SQL`} ({selectedIndices.size})
           </Button>
         )}
       </Flex>
@@ -299,41 +309,43 @@ function QueriesTab() {
       {queries.length > 0 && (
         <Box className={S.resultContainer}>
           <Flex className={S.resultHeader} align="center" px="md" py={4} gap={8}>
-            <Checkbox size="xs" checked={selectedCardIds.size === selectableQueries.length && selectableQueries.length > 0}
-              indeterminate={selectedCardIds.size > 0 && selectedCardIds.size < selectableQueries.length}
+            <Checkbox size="xs" checked={selectedIndices.size === selectableIndices.length && selectableIndices.length > 0}
+              indeterminate={selectedIndices.size > 0 && selectedIndices.size < selectableIndices.length}
               onChange={toggleAll} />
             <Text size="xs" fw={500} c="text-secondary" style={{ flex: 1 }}>{t`Query`}</Text>
             <Text size="xs" fw={500} c="text-secondary" w={60} ta="right">{t`Rows`}</Text>
             <Text size="xs" fw={500} c="text-secondary" w={60} ta="right">{t`Time`}</Text>
           </Flex>
           <ScrollArea mah={260} scrollbarSize={4}>
-            {queries.map((q, i) => (
-              <UnstyledButton key={`${q.hash}-${i}`} className={S.queryRow}
-                onClick={q.card_id ? () => toggleCard(q.card_id!) : undefined}
-              >
-                <Flex align="center" px="md" py={5} gap={8}>
-                  {q.card_id ? (
-                    <Checkbox size="xs" checked={selectedCardIds.has(q.card_id)}
-                      onChange={() => toggleCard(q.card_id!)}
-                      onClick={e => e.stopPropagation()} />
-                  ) : (
-                    <Box w={20} />
-                  )}
-                  <Flex direction="column" style={{ flex: 1, minWidth: 0 }}>
-                    <Text size="xs" truncate fw={q.card_id ? 500 : 400}
-                      c={q.card_id ? "text-primary" : "text-tertiary"}>
-                      {q.card_name ?? (q.native ? t`Ad-hoc SQL` : t`Ad-hoc query`)}
-                    </Text>
-                    <Text size="xs" c="text-tertiary" truncate>
-                      {q.user_email} · {new Date(q.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                      {q.context ? ` · ${q.context}` : ""}
-                    </Text>
+            {queries.map((q, i) => {
+              const selectable = q.card_id != null || q.json_query != null;
+              return (
+                <UnstyledButton key={`${q.hash}-${i}`} className={S.queryRow}
+                  onClick={selectable ? () => toggleIndex(i) : undefined}
+                >
+                  <Flex align="center" px="md" py={5} gap={8}>
+                    {selectable ? (
+                      <Checkbox size="xs" checked={selectedIndices.has(i)}
+                        onChange={() => toggleIndex(i)}
+                        onClick={e => e.stopPropagation()} />
+                    ) : (
+                      <Box w={20} />
+                    )}
+                    <Flex direction="column" style={{ flex: 1, minWidth: 0 }}>
+                      <Text size="xs" truncate fw={500}>
+                        {q.card_name ?? (q.native ? t`Ad-hoc SQL` : t`Ad-hoc query`)}
+                      </Text>
+                      <Text size="xs" c="text-tertiary" truncate>
+                        {q.user_email} · {new Date(q.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                        {q.context ? ` · ${q.context}` : ""}
+                      </Text>
+                    </Flex>
+                    <Text size="xs" c="text-secondary" w={60} ta="right">{q.result_rows ?? "—"}</Text>
+                    <Text size="xs" c="text-secondary" w={60} ta="right">{q.running_time != null ? `${q.running_time}ms` : "—"}</Text>
                   </Flex>
-                  <Text size="xs" c="text-secondary" w={60} ta="right">{q.result_rows ?? "—"}</Text>
-                  <Text size="xs" c="text-secondary" w={60} ta="right">{q.running_time != null ? `${q.running_time}ms` : "—"}</Text>
-                </Flex>
-              </UnstyledButton>
-            ))}
+                </UnstyledButton>
+              );
+            })}
           </ScrollArea>
         </Box>
       )}
