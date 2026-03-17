@@ -1,6 +1,6 @@
 import { t } from "ttag";
 
-import { Button, Icon } from "metabase/ui";
+import { ActionIcon, Icon, Tooltip } from "metabase/ui";
 
 import { AgentModal } from "./AgentModal";
 import S from "./AgentButton.module.css";
@@ -15,19 +15,25 @@ export function AgentButton() {
     return null;
   }
 
+  const label = t`BI Agent`;
+
   return (
     <>
-      <Button
-        variant="subtle"
-        h="2.25rem"
-        px="sm"
-        leftSection={<Icon name="ai" size={16} className={S.aiIcon} />}
-        aria-label={t`BI Agent`}
-        onClick={open}
-        className={`${S.aiButton} ${isOpen ? S.aiButtonActive : ""}`}
-      >
-        <span className={S.aiButtonLabel}>{t`BI Agent`}</span>
-      </Button>
+      <Tooltip label={label}>
+        <ActionIcon
+          variant="subtle"
+          c="text-primary"
+          bd="1px solid var(--mb-color-border)"
+          p="sm"
+          h="2.25rem"
+          w="2.25rem"
+          aria-label={label}
+          onClick={isOpen ? close : open}
+          className={`${S.aiButton} ${isOpen ? S.aiButtonActive : ""}`}
+        >
+          <Icon name="ai" className={isOpen ? S.aiIconActive : S.aiIcon} />
+        </ActionIcon>
+      </Tooltip>
 
       {isOpen && <AgentModal onClose={close} />}
     </>
