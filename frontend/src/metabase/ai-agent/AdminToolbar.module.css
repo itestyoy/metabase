@@ -1,0 +1,58 @@
+/* Admin Toolbar — command palette style modal */
+
+.card {
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.input {
+  padding: var(--mantine-spacing-lg);
+  padding-left: 3.75rem;
+  font-size: 17px;
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--mb-color-border);
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
+  color: var(--mb-color-text-primary);
+  line-height: 1rem;
+  outline: none;
+  background-color: transparent;
+  font-family: monospace;
+}
+
+.input::placeholder {
+  color: var(--mb-color-text-tertiary);
+  font-family: inherit;
+}
+
+.iconContainer {
+  pointer-events: none;
+}
+
+.hintBar {
+  background: var(--mb-color-background-secondary);
+  border-bottom: 1px solid var(--mb-color-border);
+}
+
+/* ── Result ──────────────────────────────────────── */
+.resultContainer {
+  border-top: 1px solid var(--mb-color-border);
+}
+
+.resultHeader {
+  background: var(--mb-color-background-secondary);
+  border-bottom: 1px solid var(--mb-color-border);
+}
+
+.resultCode {
+  font-size: 12px !important;
+  line-height: 1.5;
+  background: var(--mb-color-background-primary) !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 12px 16px !important;
+  color: var(--mb-color-text-primary) !important;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

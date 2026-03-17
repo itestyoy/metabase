@@ -37,6 +37,7 @@ import { AppContainer, AppContent, AppContentContainer } from "./App.styled";
 import ErrorBoundary from "./ErrorBoundary";
 import { useTokenRefresh } from "./api/utils/use-token-refresh";
 import { NewModals } from "./new/components/NewModals/NewModals";
+import { AdminToolbar, useAdminToolbar } from "metabase/ai-agent";
 import { Palette } from "./palette/components/Palette";
 
 const getErrorComponent = ({ status, data, context }: AppErrorDescriptor) => {
@@ -104,6 +105,7 @@ function App({
 
   usePageTitle(applicationName, { titleIndex: 0 });
   useTokenRefresh();
+  const adminToolbar = useAdminToolbar();
 
   useEffect(() => {
     initializeIframeResizer();
@@ -133,6 +135,7 @@ function App({
             </AppContentContainer>
           </AppContainer>
           <Palette />
+          {adminToolbar.isOpen && <AdminToolbar onClose={adminToolbar.close} />}
         </KBarProvider>
       </ScrollToTop>
     </ErrorBoundary>
