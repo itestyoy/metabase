@@ -618,19 +618,26 @@
   min-width: 0;
 }
 
-/* Right panel in bottom dock: input + toolbar, vertically centered */
+/* Right panel in bottom dock: input centered, toolbar at bottom */
 .inputPanelRight {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   width: 440px;
   min-width: 340px;
   flex-shrink: 0;
   border-left: 1px solid var(--mb-color-border);
 }
 
+/* Push inputArea to vertical center */
 .inputPanelRight .inputArea {
   border-top: none;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+/* Pin bottom bar to the bottom */
+.inputPanelRight .bottomBar {
+  margin-top: auto;
 }
 
 /* Bottom panel in vertical mode: unchanged */
