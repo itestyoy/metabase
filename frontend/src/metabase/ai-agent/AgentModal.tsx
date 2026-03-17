@@ -453,6 +453,11 @@ export function AgentModal({ onClose }: AgentModalProps) {
                     onPointerDown={onInputPanelResizePointerDown}
                   />
                 )}
+                {isBottomDock && (
+                  <div className={S.inputPanelIcon}>
+                    <Icon name="ai" size={48} />
+                  </div>
+                )}
                 <div className={S.inputArea}>
                   <div className={S.composer}>
                     <Textarea
