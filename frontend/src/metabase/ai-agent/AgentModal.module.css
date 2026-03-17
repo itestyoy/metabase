@@ -618,7 +618,7 @@
   min-width: 0;
 }
 
-/* Right panel in bottom dock: input centered, toolbar at bottom */
+/* Right panel in bottom dock: icon top, input + toolbar at bottom */
 .inputPanelRight {
   position: relative;
   display: flex;
@@ -627,16 +627,18 @@
   border-left: 1px solid var(--mb-color-border);
 }
 
-/* Push inputArea to vertical center */
 .inputPanelRight .inputArea {
   border-top: none;
   margin-top: auto;
-  margin-bottom: auto;
 }
 
-/* Pin bottom bar to the bottom */
-.inputPanelRight .bottomBar {
-  margin-top: auto;
+/* AI icon centered in the empty space above input */
+.inputPanelIcon {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.15;
 }
 
 /* Bottom panel in vertical mode: unchanged */
