@@ -108,6 +108,18 @@
   border-bottom: 1px solid var(--mb-color-border);
 }
 
+/* ── Context chip (auto-detected page filter) ──── */
+.contextChip {
+  padding: 2px 8px 2px 6px;
+  background: color-mix(in srgb, var(--mb-color-brand) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mb-color-brand) 30%, transparent);
+  border-radius: 12px;
+  color: var(--mb-color-brand);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* ── Result ──────────────────────────────────────── */
 .resultCode {
   font-size: 12px !important;
   line-height: 1.5;

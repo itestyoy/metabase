@@ -730,33 +730,42 @@
                       :metabase/validate-defendpoint-query-params-use-kebab-case]}
 (api.macros/defendpoint :get "/admin/query-history"
   "Fetch recent query executions. Superuser only.
-  Params: user_id (optional), date (optional, YYYY-MM-DD), limit (optional, default 50)."
-  [user_id :- [:maybe ms/PositiveInt]
-   date    :- [:maybe :string]
-   limit   :- [:maybe ms/PositiveInt]]
+  Params: user_id, date (YYYY-MM-DD), card_id, dashboard_id, limit — all optional."
+  [user_id      :- [:maybe ms/PositiveInt]
+   date         :- [:maybe :string]
+   card_id      :- [:maybe ms/PositiveInt]
+   dashboard_id :- [:maybe ms/PositiveInt]
+   limit        :- [:maybe ms/PositiveInt]]
   (api/check-superuser)
-  (let [limit  (or limit 50)
-        wheres (cond-> [:and [:= 1 1]]
-                 user_id (conj [:= :executor_id user_id])
-                 date    (conj [:>= :started_at (str date " 00:00:00")]
-                               [:<  :started_at (str date " 23:59:59")]))]
-    (t2/query {:select   [:qe.hash
-                          :qe.started_at
-                          :qe.running_time
-                          :qe.result_rows
-                          :qe.executor_id
-                          :qe.card_id
-                          :qe.context
-                          :qe.native
-                          :qe.json_query
-                          [:c.name :card_name]
-                          [:u.email :user_email]]
-               :from     [[:query_execution :qe]]
+  (let [limit      (or limit 50)
+        ;; When filtering by dashboard, find all card IDs on that dashboard
+        dash-cards (when dashboard_id
+                     (map :card_id
+                          (t2/select [:model/DashboardCard :card_id]
+                                     :dashboard_id dashboard_id)))
+        wheres     (cond-> [:and [:= 1 1]]
+                     user_id      (conj [:= :executor_id user_id])
+                     date         (conj [:>= :started_at (str date " 00:00:00")]
+                                        [:<  :started_at (str date " 23:59:59")])
+                     card_id      (conj [:= :qe.card_id card_id])
+                     (seq dash-cards) (conj [:in :qe.card_id dash-cards]))]
+    (t2/query {:select    [:qe.hash
+                           :qe.started_at
+                           :qe.running_time
+                           :qe.result_rows
+                           :qe.executor_id
+                           :qe.card_id
+                           :qe.context
+                           :qe.native
+                           :qe.json_query
+                           [:c.name :card_name]
+                           [:u.email :user_email]]
+               :from      [[:query_execution :qe]]
                :left-join [[:report_card :c] [:= :qe.card_id :c.id]
                            [:core_user :u]   [:= :qe.executor_id :u.id]]
-               :where    wheres
-               :order-by [[:qe.started_at :desc]]
-               :limit    limit})))
+               :where     wheres
+               :order-by  [[:qe.started_at :desc]]
+               :limit     limit})))
 
 #_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
 (api.macros/defendpoint :post "/admin/compile-queries"
