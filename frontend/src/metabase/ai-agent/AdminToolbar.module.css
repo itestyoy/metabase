@@ -101,6 +101,25 @@
   background: var(--mb-color-background-secondary);
 }
 
+/* ── Entity picker trigger button ─────────────────── */
+.entityPickerButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--mb-color-border);
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--mb-color-background-primary);
+  transition: border-color 0.12s;
+  white-space: nowrap;
+  height: 28px;
+}
+
+.entityPickerButton:hover {
+  border-color: var(--mb-color-brand);
+}
+
 /* ── Error bar ───────────────────────────────────── */
 .errorBar {
   background: color-mix(in srgb, var(--mb-color-error) 8%, transparent);
