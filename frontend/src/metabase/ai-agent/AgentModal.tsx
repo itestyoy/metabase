@@ -27,28 +27,48 @@ const PANEL_CONSTRAINTS = {
   edgeBuffer: 5,
 } as const;
 
+type DockMode = "none" | "right" | "bottom";
+
 const DOCK_WIDTH_DEFAULT = 420;
 const DOCK_WIDTH_MIN = 320;
 const DOCK_WIDTH_MAX = 800;
+const DOCK_HEIGHT_DEFAULT = 340;
+const DOCK_HEIGHT_MIN = 220;
+const DOCK_HEIGHT_MAX = 600;
 const DOCK_STORAGE_KEY = "bi-agent-dock";
 
-function readDockState(): { isDocked: boolean; width: number } {
+interface DockState {
+  mode: DockMode;
+  width: number;
+  height: number;
+}
+
+function readDockState(): DockState {
   try {
     const raw = localStorage.getItem(DOCK_STORAGE_KEY);
-    if (!raw) return { isDocked: false, width: DOCK_WIDTH_DEFAULT };
+    if (!raw) return { mode: "none", width: DOCK_WIDTH_DEFAULT, height: DOCK_HEIGHT_DEFAULT };
     const parsed = JSON.parse(raw);
+    // Migrate old format
+    if (typeof parsed.isDocked === "boolean") {
+      return {
+        mode: parsed.isDocked ? "right" : "none",
+        width: typeof parsed.width === "number" ? parsed.width : DOCK_WIDTH_DEFAULT,
+        height: DOCK_HEIGHT_DEFAULT,
+      };
+    }
     return {
-      isDocked: !!parsed.isDocked,
+      mode: parsed.mode === "right" || parsed.mode === "bottom" ? parsed.mode : "none",
       width: typeof parsed.width === "number" ? parsed.width : DOCK_WIDTH_DEFAULT,
+      height: typeof parsed.height === "number" ? parsed.height : DOCK_HEIGHT_DEFAULT,
     };
   } catch {
-    return { isDocked: false, width: DOCK_WIDTH_DEFAULT };
+    return { mode: "none", width: DOCK_WIDTH_DEFAULT, height: DOCK_HEIGHT_DEFAULT };
   }
 }
 
-function saveDockState(isDocked: boolean, width: number) {
+function saveDockState(state: DockState) {
   try {
-    localStorage.setItem(DOCK_STORAGE_KEY, JSON.stringify({ isDocked, width }));
+    localStorage.setItem(DOCK_STORAGE_KEY, JSON.stringify(state));
   } catch {
     // storage unavailable
   }
@@ -68,8 +88,12 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const isDatasourceManual = useRef(false);
   const [safeMode, setSafeMode] = useState(false);
   const [saveLocation, setSaveLocation] = useState<SaveLocation | null>(null);
-  const [isDocked, setIsDocked] = useState(() => readDockState().isDocked);
+  const [dockMode, setDockMode] = useState<DockMode>(() => readDockState().mode);
   const [dockedWidth, setDockedWidth] = useState(() => readDockState().width);
+  const [dockedHeight, setDockedHeight] = useState(() => readDockState().height);
+  const isDocked = dockMode !== "none";
+  const isBottomDock = dockMode === "bottom";
+  const isRightDock = dockMode === "right";
   const isContextManual = useRef(false);
 
   const { messages, isLoading, error, agentSettings, chatCollectionId, chatCollectionName, sendMessage, clearMessages, stopGeneration, retryLastMessage } =
@@ -95,55 +119,78 @@ export function AgentModal({ onClose }: AgentModalProps) {
     }
   }, [chatCollectionId, chatCollectionName, saveLocation]);
 
-  // When docked, set a CSS variable so the main app content shrinks to make room
+  // When docked, set CSS variables so the main app content shrinks
   useEffect(() => {
-    if (isDocked) {
+    if (isRightDock) {
       document.documentElement.style.setProperty("--agent-dock-width", `${dockedWidth}px`);
+      document.documentElement.style.removeProperty("--agent-dock-height");
+    } else if (isBottomDock) {
+      document.documentElement.style.setProperty("--agent-dock-height", `${dockedHeight}px`);
+      document.documentElement.style.removeProperty("--agent-dock-width");
     } else {
       document.documentElement.style.removeProperty("--agent-dock-width");
+      document.documentElement.style.removeProperty("--agent-dock-height");
     }
     return () => {
       document.documentElement.style.removeProperty("--agent-dock-width");
+      document.documentElement.style.removeProperty("--agent-dock-height");
     };
-  }, [isDocked]);
+  }, [dockMode, dockedWidth, dockedHeight, isRightDock, isBottomDock]);
 
   // Persist dock state to localStorage
   useEffect(() => {
-    saveDockState(isDocked, dockedWidth);
-  }, [isDocked, dockedWidth]);
+    saveDockState({ mode: dockMode, width: dockedWidth, height: dockedHeight });
+  }, [dockMode, dockedWidth, dockedHeight]);
 
-  const toggleDocked = useCallback(() => {
-    setIsDocked((d: boolean) => !d);
+  const cycleDockMode = useCallback(() => {
+    setDockMode((m: DockMode) => (m === "none" ? "right" : m === "right" ? "bottom" : "none"));
   }, []);
 
-  // ── Docked left-edge resize ─────────────────────────────────────────
+  // ── Docked edge resize (right dock: left edge, bottom dock: top edge) ──
   const onDockedResizePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
-      const startX = e.clientX;
-      const startWidth = dockedWidth;
       const el = e.currentTarget;
       el.setPointerCapture(e.pointerId);
       document.body.style.userSelect = "none";
 
-      const onMove = (ev: PointerEvent) => {
-        const delta = startX - ev.clientX;
-        const w = Math.min(DOCK_WIDTH_MAX, Math.max(DOCK_WIDTH_MIN, startWidth + delta));
-        setDockedWidth(w);
-        document.documentElement.style.setProperty("--agent-dock-width", `${w}px`);
-      };
-      const onUp = (ev: PointerEvent) => {
-        el.releasePointerCapture(ev.pointerId);
-        el.removeEventListener("pointermove", onMove);
-        el.removeEventListener("pointerup", onUp);
-        document.body.style.userSelect = "";
-      };
-      el.addEventListener("pointermove", onMove);
-      el.addEventListener("pointerup", onUp);
+      if (isRightDock) {
+        const startX = e.clientX;
+        const startW = dockedWidth;
+        const onMove = (ev: PointerEvent) => {
+          const w = Math.min(DOCK_WIDTH_MAX, Math.max(DOCK_WIDTH_MIN, startW + (startX - ev.clientX)));
+          setDockedWidth(w);
+          document.documentElement.style.setProperty("--agent-dock-width", `${w}px`);
+        };
+        const onUp = (ev: PointerEvent) => {
+          el.releasePointerCapture(ev.pointerId);
+          el.removeEventListener("pointermove", onMove);
+          el.removeEventListener("pointerup", onUp);
+          document.body.style.userSelect = "";
+        };
+        el.addEventListener("pointermove", onMove);
+        el.addEventListener("pointerup", onUp);
+      } else if (isBottomDock) {
+        const startY = e.clientY;
+        const startH = dockedHeight;
+        const onMove = (ev: PointerEvent) => {
+          const h = Math.min(DOCK_HEIGHT_MAX, Math.max(DOCK_HEIGHT_MIN, startH + (startY - ev.clientY)));
+          setDockedHeight(h);
+          document.documentElement.style.setProperty("--agent-dock-height", `${h}px`);
+        };
+        const onUp = (ev: PointerEvent) => {
+          el.releasePointerCapture(ev.pointerId);
+          el.removeEventListener("pointermove", onMove);
+          el.removeEventListener("pointerup", onUp);
+          document.body.style.userSelect = "";
+        };
+        el.addEventListener("pointermove", onMove);
+        el.addEventListener("pointerup", onUp);
+      }
     },
-    [dockedWidth],
+    [isRightDock, isBottomDock, dockedWidth, dockedHeight],
   );
 
   const handleClearMessages = useCallback(() => {
@@ -221,19 +268,32 @@ export function AgentModal({ onClose }: AgentModalProps) {
 
   const modalClassName = [
     S.floatingModal,
-    isDocked && S.floatingModalDocked,
+    isRightDock && S.floatingModalDocked,
+    isBottomDock && S.floatingModalDockedBottom,
     !isDocked && isMinimized && S.floatingModalMinimized,
     !isDocked && isInteracting && S.floatingModalInteracting,
   ]
     .filter(Boolean)
     .join(" ");
 
+  const modalStyle = isRightDock
+    ? { width: dockedWidth }
+    : isBottomDock
+      ? { height: dockedHeight }
+      : panelStyle;
+
   const modal = (
-    <div className={modalClassName} style={isDocked ? { width: dockedWidth } : panelStyle}>
-      {/* ── Docked left resize handle ──── */}
-      {isDocked && (
+    <div className={modalClassName} style={modalStyle}>
+      {/* ── Docked resize handle ──── */}
+      {isRightDock && (
         <div
           className={`${S.resizeHandle} ${S.resizeHandleLeft}`}
+          onPointerDown={onDockedResizePointerDown}
+        />
+      )}
+      {isBottomDock && (
+        <div
+          className={`${S.resizeHandle} ${S.resizeHandleTop}`}
           onPointerDown={onDockedResizePointerDown}
         />
       )}
@@ -279,15 +339,15 @@ export function AgentModal({ onClose }: AgentModalProps) {
               </ActionIcon>
             </Tooltip>
           )}
-          <Tooltip label={isDocked ? t`Undock` : t`Dock to right`}>
+          <Tooltip label={dockMode === "none" ? t`Dock to right` : dockMode === "right" ? t`Dock to bottom` : t`Undock`}>
             <ActionIcon
               variant="transparent"
               c={isDocked ? "var(--mb-color-text-secondary)" : "rgba(255,255,255,0.8)"}
               size="sm"
-              onClick={toggleDocked}
-              aria-label={isDocked ? t`Undock` : t`Dock to right`}
+              onClick={cycleDockMode}
+              aria-label={t`Change dock mode`}
             >
-              <Icon name={isDocked ? "sidebar_open" : "sidebar_closed"} size={14} />
+              <Icon name={dockMode === "none" ? "sidebar_closed" : dockMode === "right" ? "arrow_down" : "sidebar_open"} size={14} />
             </ActionIcon>
           </Tooltip>
           {!isDocked && (
@@ -338,7 +398,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
               </div>
             </Stack>
           ) : (
-            <>
+            <div className={isBottomDock ? S.bodyHorizontal : S.bodyVertical}>
               <AgentChatMessages
                 messages={messages}
                 isLoading={isLoading}
@@ -348,76 +408,78 @@ export function AgentModal({ onClose }: AgentModalProps) {
                 onRetry={retryLastMessage}
               />
 
-              <div className={S.inputArea}>
-                <div className={S.composer}>
-                  <Textarea
-                    ref={textareaRef}
-                    value={inputText}
-                    onChange={e => setInputText(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={t`Ask me anything about your data…`}
-                    minRows={1}
-                    maxRows={5}
-                    autosize
-                    disabled={isLoading}
-                    variant="unstyled"
-                    size="sm"
-                    className={S.composerTextarea}
-                  />
-                  <div className={S.composerFooter}>
-                    <Text size="xs" c="text-tertiary" className={S.inputHint}>
-                      {t`Enter to send · Shift+Enter for new line`}
-                    </Text>
-                    {isLoading ? (
-                      <Tooltip label={t`Stop generating`}>
+              <div className={isBottomDock ? S.inputPanelRight : S.inputPanelBottom}>
+                <div className={S.inputArea}>
+                  <div className={S.composer}>
+                    <Textarea
+                      ref={textareaRef}
+                      value={inputText}
+                      onChange={e => setInputText(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder={t`Ask me anything about your data…`}
+                      minRows={isBottomDock ? 3 : 1}
+                      maxRows={isBottomDock ? 8 : 5}
+                      autosize
+                      disabled={isLoading}
+                      variant="unstyled"
+                      size="sm"
+                      className={S.composerTextarea}
+                    />
+                    <div className={S.composerFooter}>
+                      <Text size="xs" c="text-tertiary" className={S.inputHint}>
+                        {t`Enter to send · Shift+Enter for new line`}
+                      </Text>
+                      {isLoading ? (
+                        <Tooltip label={t`Stop generating`}>
+                          <ActionIcon
+                            variant="transparent"
+                            size="sm"
+                            onClick={stopGeneration}
+                            aria-label={t`Stop generating`}
+                          >
+                            <Icon name="close" size={14} color="var(--mb-color-error)" />
+                          </ActionIcon>
+                        </Tooltip>
+                      ) : (
                         <ActionIcon
                           variant="transparent"
                           size="sm"
-                          onClick={stopGeneration}
-                          aria-label={t`Stop generating`}
+                          onClick={handleSend}
+                          disabled={!inputText.trim()}
+                          aria-label={t`Send message`}
                         >
-                          <Icon name="close" size={14} color="var(--mb-color-error)" />
+                          <Icon
+                            name="send"
+                            size={14}
+                            color={!inputText.trim() ? "var(--mb-color-text-tertiary)" : "var(--mb-color-brand)"}
+                          />
                         </ActionIcon>
-                      </Tooltip>
-                    ) : (
-                      <ActionIcon
-                        variant="transparent"
-                        size="sm"
-                        onClick={handleSend}
-                        disabled={!inputText.trim()}
-                        aria-label={t`Send message`}
-                      >
-                        <Icon
-                          name="send"
-                          size={14}
-                          color={!inputText.trim() ? "var(--mb-color-text-tertiary)" : "var(--mb-color-brand)"}
-                        />
-                      </ActionIcon>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* ── Bottom bar: context, save location, safe mode ── */}
-              <div className={S.bottomBar}>
-                <Tooltip label={safeMode ? t`Safe mode ON — write tools disabled` : t`Safe mode OFF — all tools enabled`}>
-                  <ActionIcon
-                    variant={safeMode ? "light" : "subtle"}
-                    color={safeMode ? "green" : "gray"}
-                    size="sm"
-                    onClick={() => setSafeMode((v: boolean) => !v)}
-                    aria-label={t`Toggle safe mode`}
-                  >
-                    <Icon name="lock" size={14} color={safeMode ? "var(--mb-color-success)" : undefined} />
-                  </ActionIcon>
-                </Tooltip>
-                <div className={S.bottomBarDivider} />
-                <AgentContextPicker value={context} onChange={handleContextChange} />
-                <AgentDatasourcePicker value={datasource} onChange={handleDatasourceChange} />
-                <AgentSaveLocationPicker value={saveLocation} onChange={setSaveLocation} />
-                <AgentMcpServers />
+                {/* ── Bottom bar: context, save location, safe mode ── */}
+                <div className={`${S.bottomBar} ${isBottomDock ? S.bottomBarVertical : ""}`}>
+                  <Tooltip label={safeMode ? t`Safe mode ON — write tools disabled` : t`Safe mode OFF — all tools enabled`}>
+                    <ActionIcon
+                      variant={safeMode ? "light" : "subtle"}
+                      color={safeMode ? "green" : "gray"}
+                      size="sm"
+                      onClick={() => setSafeMode((v: boolean) => !v)}
+                      aria-label={t`Toggle safe mode`}
+                    >
+                      <Icon name="lock" size={14} color={safeMode ? "var(--mb-color-success)" : undefined} />
+                    </ActionIcon>
+                  </Tooltip>
+                  <div className={S.bottomBarDivider} />
+                  <AgentContextPicker value={context} onChange={handleContextChange} />
+                  <AgentDatasourcePicker value={datasource} onChange={handleDatasourceChange} />
+                  <AgentSaveLocationPicker value={saveLocation} onChange={setSaveLocation} />
+                  <AgentMcpServers />
+                </div>
               </div>
-            </>
+            </div>
           )}
         </>
       )}

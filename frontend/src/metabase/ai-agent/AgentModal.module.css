@@ -19,9 +19,9 @@
   overflow: hidden;
 }
 
-/* Docked to right edge: below app bar, headers aligned */
+/* Docked to right edge */
 .floatingModalDocked {
-  top: 0; /* sits beside the app bar, not below it */
+  top: 0;
   right: 0;
   bottom: 0;
   border-radius: 0;
@@ -29,6 +29,18 @@
   border-top: none;
   border-bottom: none;
   transition: width 0.2s ease;
+}
+
+/* Docked to bottom edge */
+.floatingModalDockedBottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  transition: height 0.2s ease;
 }
 
 .floatingModalMinimized {
@@ -579,6 +591,69 @@
   cursor: default;
   background: var(--mb-color-background-primary);
   border-bottom: 1px solid var(--mb-color-border);
+}
+
+/* ── Body layout modes ───────────────────────────── */
+
+/* Default vertical layout: messages on top, input below */
+.bodyVertical {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Bottom dock: horizontal layout — messages left, input right */
+.bodyHorizontal {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+}
+
+/* In horizontal layout, messages take left side */
+.bodyHorizontal .messagesScroll {
+  flex: 1;
+  min-width: 0;
+  border-right: 1px solid var(--mb-color-border);
+}
+
+/* Right panel in bottom dock: input + toolbar stacked vertically */
+.inputPanelRight {
+  display: flex;
+  flex-direction: column;
+  width: 340px;
+  min-width: 280px;
+  flex-shrink: 0;
+}
+
+.inputPanelRight .inputArea {
+  flex: 1;
+  border-top: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.inputPanelRight .composer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.inputPanelRight .composerTextarea {
+  flex: 1;
+}
+
+/* Bottom panel in vertical mode: unchanged */
+.inputPanelBottom {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+/* Bottom bar in bottom dock: wrap items vertically */
+.bottomBarVertical {
+  flex-wrap: wrap;
 }
 
 /* ── Message timestamps ──────────────────────────── */
