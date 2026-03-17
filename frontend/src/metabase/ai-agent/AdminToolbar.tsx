@@ -185,7 +185,6 @@ interface QueryRow {
   user_email: string | null;
   context: string | null;
   native: boolean;
-  json_query: Record<string, unknown> | null;
 }
 interface CompiledCard { card_id: number; card_name: string; query: string; }
 
@@ -251,9 +250,9 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
     });
   }, []);
 
-  // All queries are selectable (card or ad-hoc with json_query)
+  // Only saved questions (with card_id) are selectable for SQL compilation
   const selectableIndices = useMemo(
-    () => queries.map((q, i) => (q.card_id != null || q.json_query != null) ? i : -1).filter(i => i >= 0),
+    () => queries.map((q, i) => q.card_id != null ? i : -1).filter(i => i >= 0),
     [queries],
   );
 
@@ -268,14 +267,10 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
     setIsCompiling(true);
     setCompiledResults([]);
     try {
-      const items = [...selectedIndices].map(idx => {
-        const q = queries[idx];
-        if (q.card_id) return { card_id: q.card_id };
-        return {
-          json_query: q.json_query,
-          label: q.card_name ?? (q.native ? "Ad-hoc SQL" : "Ad-hoc query") + ` (${new Date(q.started_at).toLocaleTimeString()})`,
-        };
-      });
+      const items = [...selectedIndices]
+        .map(idx => queries[idx])
+        .filter(q => q.card_id != null)
+        .map(q => ({ card_id: q.card_id }));
       const resp = await fetch("/api/ai-agent/admin/compile-queries", {
         method: "POST",
         headers: apiHeaders(),
@@ -348,7 +343,7 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
           </Flex>
           <ScrollArea mah={260} scrollbarSize={4}>
             {queries.map((q, i) => {
-              const selectable = q.card_id != null || q.json_query != null;
+              const selectable = q.card_id != null;
               return (
                 <UnstyledButton key={`${q.hash}-${i}`} className={S.queryRow}
                   onClick={selectable ? () => toggleIndex(i) : undefined}
