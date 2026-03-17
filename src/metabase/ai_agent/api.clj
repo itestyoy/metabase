@@ -747,8 +747,8 @@
                                      :dashboard_id dashboard_id)))
         wheres     (cond-> [:and [:= 1 1]]
                      user_id      (conj [:= :executor_id user_id])
-                     date         (conj [:>= :started_at (str date " 00:00:00")]
-                                        [:<  :started_at (str date " 23:59:59")])
+                     date         (conj [:>= :started_at [:cast (str date " 00:00:00") :timestamp]]
+                                        [:<  :started_at [:cast (str date " 23:59:59") :timestamp]])
                      card_id      (conj [:= :qe.card_id card_id])
                      (seq dash-cards) (conj [:in :qe.card_id dash-cards]))]
     (t2/query {:select    [:qe.hash
