@@ -35,18 +35,22 @@ const DOCK_WIDTH_MAX = 800;
 const DOCK_HEIGHT_DEFAULT = 340;
 const DOCK_HEIGHT_MIN = 220;
 const DOCK_HEIGHT_MAX = 600;
+const INPUT_PANEL_WIDTH_DEFAULT = 440;
+const INPUT_PANEL_WIDTH_MIN = 300;
+const INPUT_PANEL_WIDTH_MAX = 700;
 const DOCK_STORAGE_KEY = "bi-agent-dock";
 
 interface DockState {
   mode: DockMode;
   width: number;
   height: number;
+  inputPanelWidth?: number;
 }
 
 function readDockState(): DockState {
   try {
     const raw = localStorage.getItem(DOCK_STORAGE_KEY);
-    if (!raw) return { mode: "none", width: DOCK_WIDTH_DEFAULT, height: DOCK_HEIGHT_DEFAULT };
+    if (!raw) return { mode: "none", width: DOCK_WIDTH_DEFAULT, height: DOCK_HEIGHT_DEFAULT, inputPanelWidth: INPUT_PANEL_WIDTH_DEFAULT };
     const parsed = JSON.parse(raw);
     // Migrate old format
     if (typeof parsed.isDocked === "boolean") {
@@ -54,12 +58,14 @@ function readDockState(): DockState {
         mode: parsed.isDocked ? "right" : "none",
         width: typeof parsed.width === "number" ? parsed.width : DOCK_WIDTH_DEFAULT,
         height: DOCK_HEIGHT_DEFAULT,
+        inputPanelWidth: INPUT_PANEL_WIDTH_DEFAULT,
       };
     }
     return {
       mode: parsed.mode === "right" || parsed.mode === "bottom" ? parsed.mode : "none",
       width: typeof parsed.width === "number" ? parsed.width : DOCK_WIDTH_DEFAULT,
       height: typeof parsed.height === "number" ? parsed.height : DOCK_HEIGHT_DEFAULT,
+      inputPanelWidth: typeof parsed.inputPanelWidth === "number" ? parsed.inputPanelWidth : INPUT_PANEL_WIDTH_DEFAULT,
     };
   } catch {
     return { mode: "none", width: DOCK_WIDTH_DEFAULT, height: DOCK_HEIGHT_DEFAULT };
@@ -91,6 +97,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const [dockMode, setDockMode] = useState<DockMode>(() => readDockState().mode);
   const [dockedWidth, setDockedWidth] = useState(() => readDockState().width);
   const [dockedHeight, setDockedHeight] = useState(() => readDockState().height);
+  const [inputPanelWidth, setInputPanelWidth] = useState(() => readDockState().inputPanelWidth ?? INPUT_PANEL_WIDTH_DEFAULT);
   const isDocked = dockMode !== "none";
   const isBottomDock = dockMode === "bottom";
   const isRightDock = dockMode === "right";
@@ -139,8 +146,8 @@ export function AgentModal({ onClose }: AgentModalProps) {
 
   // Persist dock state to localStorage
   useEffect(() => {
-    saveDockState({ mode: dockMode, width: dockedWidth, height: dockedHeight });
-  }, [dockMode, dockedWidth, dockedHeight]);
+    saveDockState({ mode: dockMode, width: dockedWidth, height: dockedHeight, inputPanelWidth });
+  }, [dockMode, dockedWidth, dockedHeight, inputPanelWidth]);
 
   const cycleDockMode = useCallback(() => {
     setDockMode((m: DockMode) => (m === "none" ? "right" : m === "right" ? "bottom" : "none"));
@@ -191,6 +198,34 @@ export function AgentModal({ onClose }: AgentModalProps) {
       }
     },
     [isRightDock, isBottomDock, dockedWidth, dockedHeight],
+  );
+
+  // ── Input panel left-edge resize (bottom dock only) ──
+  const onInputPanelResizePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startW = inputPanelWidth;
+      const el = e.currentTarget;
+      el.setPointerCapture(e.pointerId);
+      document.body.style.userSelect = "none";
+
+      const onMove = (ev: PointerEvent) => {
+        const w = Math.min(INPUT_PANEL_WIDTH_MAX, Math.max(INPUT_PANEL_WIDTH_MIN, startW + (startX - ev.clientX)));
+        setInputPanelWidth(w);
+      };
+      const onUp = (ev: PointerEvent) => {
+        el.releasePointerCapture(ev.pointerId);
+        el.removeEventListener("pointermove", onMove);
+        el.removeEventListener("pointerup", onUp);
+        document.body.style.userSelect = "";
+      };
+      el.addEventListener("pointermove", onMove);
+      el.addEventListener("pointerup", onUp);
+    },
+    [inputPanelWidth],
   );
 
   const handleClearMessages = useCallback(() => {
@@ -408,7 +443,16 @@ export function AgentModal({ onClose }: AgentModalProps) {
                 onRetry={retryLastMessage}
               />
 
-              <div className={isBottomDock ? S.inputPanelRight : S.inputPanelBottom}>
+              <div
+                className={isBottomDock ? S.inputPanelRight : S.inputPanelBottom}
+                style={isBottomDock ? { width: inputPanelWidth } : undefined}
+              >
+                {isBottomDock && (
+                  <div
+                    className={`${S.resizeHandle} ${S.resizeHandleLeft}`}
+                    onPointerDown={onInputPanelResizePointerDown}
+                  />
+                )}
                 <div className={S.inputArea}>
                   <div className={S.composer}>
                     <Textarea
