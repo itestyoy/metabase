@@ -759,7 +759,6 @@
                            :qe.card_id
                            :qe.context
                            :qe.native
-                           :qe.json_query
                            [:c.name :card_name]
                            [:u.email :user_email]]
                :from      [[:query_execution :qe]]
