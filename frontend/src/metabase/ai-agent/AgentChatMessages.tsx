@@ -512,18 +512,8 @@ function ToolCallGroup({ messages }: { messages: ChatMessage[] }) {
     ? messages.find(m => m.toolStatus === "running")
     : null;
 
-  // Start expanded; user can collapse only after all tools finish
-  const [userCollapsed, setUserCollapsed] = useState(false);
-  // Reset userCollapsed when new tools start running
-  const prevAllDone = useRef(isAllDone);
-  useEffect(() => {
-    if (prevAllDone.current && !isAllDone) {
-      setUserCollapsed(false);
-    }
-    prevAllDone.current = isAllDone;
-  }, [isAllDone]);
-
-  const showTools = !userCollapsed;
+  const [isExpanded, setIsExpanded] = useState(false);
+  const showTools = isExpanded;
 
   const summaryLabel = !isAllDone
     ? t`Running ${formatToolName(currentTool?.toolName)}…`
@@ -540,8 +530,8 @@ function ToolCallGroup({ messages }: { messages: ChatMessage[] }) {
         py={6}
         align="center"
         wrap="nowrap"
-        onClick={isAllDone ? () => setUserCollapsed(v => !v) : undefined}
-        style={{ cursor: isAllDone ? "pointer" : "default" }}
+        onClick={() => setIsExpanded(v => !v)}
+        style={{ cursor: "pointer" }}
       >
         {!isAllDone ? (
           <Loader size={12} />
