@@ -60,8 +60,6 @@ export function useAdminToolbar() {
 /*  Shared types & helpers                                                   */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
-type Tab = "mbql" | "queries";
-
 interface ToolResult {
   type: "sql" | "error" | "json";
   content: string;
@@ -120,127 +118,7 @@ function OpenInEditorButton({ sql, databaseId }: { sql: string; databaseId?: num
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
-/*  Tab 1: MBQL → SQL                                                        */
-/* ═══════════════════════════════════════════════════════════════════════════ */
-
-function MbqlTab() {
-  const [input, setInput] = useState("");
-  const [formattedInput, setFormattedInput] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<ToolResult | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 50); }, []);
-
-  const handleSubmit = useCallback(async () => {
-    const text = input.trim();
-    if (!text || isLoading) return;
-
-    // Validate JSON before sending to backend
-    let mbql: unknown;
-    try {
-      mbql = JSON.parse(text);
-    } catch {
-      setResult({ type: "error", content: "Invalid JSON — paste a valid MBQL query object" });
-      setFormattedInput(null);
-      return;
-    }
-
-    setFormattedInput(JSON.stringify(mbql, null, 2));
-    setInput("");
-    setIsLoading(true);
-    setResult(null);
-    try {
-      const resp = await fetch("/api/dataset/native", {
-        method: "POST", headers: apiHeaders(), body: JSON.stringify(mbql),
-      });
-      if (!resp.ok) {
-        setResult({ type: "error", content: `HTTP ${resp.status}: ${await resp.text()}` });
-        return;
-      }
-      const data = await resp.json();
-      if (data.query) {
-        try {
-          setResult({ type: "sql", content: formatSql(data.query, { language: "sql" }) });
-        } catch {
-          setResult({ type: "sql", content: data.query });
-        }
-      } else {
-        setResult({ type: "json", content: JSON.stringify(data, null, 2) });
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      setResult({ type: "error", content: msg });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [input, isLoading]);
-
-  return (
-    <>
-      <Box pos="relative">
-        <input ref={inputRef} className={S.input} value={input}
-          placeholder={t`Paste MBQL JSON to compile to SQL…`}
-          onChange={e => { setInput(e.target.value); setFormattedInput(null); }}
-          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
-        />
-        <Stack className={S.iconContainer} align="center" left={36} pos="absolute" top={26}>
-          <Icon c="text-primary" name="notebook" />
-        </Stack>
-      </Box>
-      <Flex className={S.hintBar} align="center" justify="space-between" px="md" py={6}>
-        <Text size="xs" c="text-tertiary">{t`MBQL → SQL`}</Text>
-        <Text size="xs" c="text-tertiary">{t`Enter to run`}</Text>
-      </Flex>
-      {/* Formatted input JSON */}
-      {formattedInput && (
-        <Box className={S.formattedInputContainer}>
-          <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={4}>
-            <Text size="xs" fw={500} c="text-tertiary">{t`Input MBQL`}</Text>
-            <CopyButton text={formattedInput} />
-          </Flex>
-          <Box mah={170} className={S.codeEditorScroll}>
-            <CodeEditor value={formattedInput} language="json" readOnly lineNumbers={false} className={S.codeEditor} />
-          </Box>
-        </Box>
-      )}
-      {isLoading && (
-        <Flex align="center" justify="center" p="lg" gap={8}>
-          <Loader size="sm" /><Text size="sm" c="text-tertiary">{t`Compiling…`}</Text>
-        </Flex>
-      )}
-      {result && (
-        <Box className={S.resultContainer}>
-          <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={6}>
-            <Flex align="center" gap={6}>
-              <Icon name={result.type === "error" ? "warning" : "check"} size={14}
-                color={result.type === "error" ? "var(--mb-color-error)" : "var(--mb-color-success)"} />
-              <Text size="xs" fw={500} c={result.type === "error" ? "error" : "text-secondary"}>
-                {result.type === "sql" ? "SQL" : result.type === "error" ? t`Error` : "JSON"}
-              </Text>
-            </Flex>
-            <Flex gap={4}>
-              {result.type === "sql" && <OpenInEditorButton sql={result.content} />}
-              <CopyButton text={result.content} />
-            </Flex>
-          </Flex>
-          <Box mah="min(50vh, 700px)" className={S.codeEditorScroll}>
-            <CodeEditor
-              value={result.content}
-              language={result.type === "sql" ? "sql" : result.type === "json" ? "json" : undefined}
-              readOnly
-              lineNumbers={result.type === "sql"}
-              className={S.codeEditor}
-            />
-          </Box>
-        </Box>
-      )}
-    </>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════ */
-/*  Tab 2: Query Explorer                                                    */
+/*  Unified Query Explorer (MBQL input + query history)                      */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
 interface UserOption { id: number; first_name: string; last_name: string; email: string; }
@@ -265,7 +143,47 @@ interface PageContext {
   name: string;
 }
 
-function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
+function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
+  // ── MBQL → SQL input state ──
+  const [mbqlInput, setMbqlInput] = useState("");
+  const [mbqlFormatted, setMbqlFormatted] = useState<string | null>(null);
+  const [mbqlLoading, setMbqlLoading] = useState(false);
+  const [mbqlResult, setMbqlResult] = useState<ToolResult | null>(null);
+  const mbqlInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setTimeout(() => mbqlInputRef.current?.focus(), 50); }, []);
+
+  const handleMbqlSubmit = useCallback(async () => {
+    const text = mbqlInput.trim();
+    if (!text || mbqlLoading) return;
+    let mbql: unknown;
+    try { mbql = JSON.parse(text); } catch {
+      setMbqlResult({ type: "error", content: "Invalid JSON — paste a valid MBQL query object" });
+      setMbqlFormatted(null);
+      return;
+    }
+    setMbqlFormatted(JSON.stringify(mbql, null, 2));
+    setMbqlInput("");
+    setMbqlLoading(true);
+    setMbqlResult(null);
+    try {
+      const resp = await fetch("/api/dataset/native", {
+        method: "POST", headers: apiHeaders(), body: JSON.stringify(mbql),
+      });
+      if (!resp.ok) { setMbqlResult({ type: "error", content: `HTTP ${resp.status}: ${await resp.text()}` }); return; }
+      const data = await resp.json();
+      if (data.query) {
+        try { setMbqlResult({ type: "sql", content: formatSql(data.query, { language: "sql" }) }); }
+        catch { setMbqlResult({ type: "sql", content: data.query }); }
+      } else {
+        setMbqlResult({ type: "json", content: JSON.stringify(data, null, 2) });
+      }
+    } catch (err) {
+      setMbqlResult({ type: "error", content: err instanceof Error ? err.message : "Unknown error" });
+    } finally { setMbqlLoading(false); }
+  }, [mbqlInput, mbqlLoading]);
+
+  // ── Query history state ──
   const [users, setUsers] = useState<UserOption[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [dateValue, setDateValue] = useState<Date | null>(() => new Date());
@@ -444,7 +362,61 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
 
   return (
     <>
-      {/* ── Filters ──── */}
+      {/* ── MBQL → SQL input ──── */}
+      <Box pos="relative">
+        <input ref={mbqlInputRef} className={S.input} value={mbqlInput}
+          placeholder={t`Paste MBQL JSON to compile to SQL, or search queries below…`}
+          onChange={e => { setMbqlInput(e.target.value); setMbqlFormatted(null); }}
+          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleMbqlSubmit(); } }}
+        />
+        <Stack className={S.iconContainer} align="center" left={36} pos="absolute" top={26}>
+          <Icon c="text-primary" name="notebook" />
+        </Stack>
+      </Box>
+
+      {/* ── MBQL formatted input ──── */}
+      {mbqlFormatted && (
+        <Box className={S.formattedInputContainer}>
+          <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={4}>
+            <Text size="xs" fw={500} c="text-tertiary">{t`Input MBQL`}</Text>
+            <CopyButton text={mbqlFormatted} />
+          </Flex>
+          <Box mah={170} className={S.codeEditorScroll}>
+            <CodeEditor value={mbqlFormatted} language="json" readOnly lineNumbers={false} className={S.codeEditor} />
+          </Box>
+        </Box>
+      )}
+
+      {/* ── MBQL compile result ──── */}
+      {mbqlLoading && (
+        <Flex align="center" justify="center" p="md" gap={8}>
+          <Loader size="sm" /><Text size="sm" c="text-tertiary">{t`Compiling…`}</Text>
+        </Flex>
+      )}
+      {mbqlResult && (
+        <Box className={S.resultContainer}>
+          <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={6}>
+            <Flex align="center" gap={6}>
+              <Icon name={mbqlResult.type === "error" ? "warning" : "check"} size={14}
+                color={mbqlResult.type === "error" ? "var(--mb-color-error)" : "var(--mb-color-success)"} />
+              <Text size="xs" fw={500} c={mbqlResult.type === "error" ? "error" : "text-secondary"}>
+                {mbqlResult.type === "sql" ? "SQL" : mbqlResult.type === "error" ? t`Error` : "JSON"}
+              </Text>
+            </Flex>
+            <Flex gap={4}>
+              {mbqlResult.type === "sql" && <OpenInEditorButton sql={mbqlResult.content} />}
+              <CopyButton text={mbqlResult.content} />
+            </Flex>
+          </Flex>
+          <Box mah="min(40vh, 500px)" className={S.codeEditorScroll}>
+            <CodeEditor value={mbqlResult.content}
+              language={mbqlResult.type === "sql" ? "sql" : mbqlResult.type === "json" ? "json" : undefined}
+              readOnly lineNumbers={mbqlResult.type === "sql"} className={S.codeEditor} />
+          </Box>
+        </Box>
+      )}
+
+      {/* ── Query history filters ──── */}
       <Flex className={S.filtersBar} gap="sm" align="center" px="md" py={8}>
         <Select
           size="xs"
@@ -650,7 +622,6 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
 export function AdminToolbar({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>("mbql");
   const backdropRef = useRef<HTMLDivElement>(null);
   const rawPageContext = usePageContext();
   const pageCtx: PageContext | null = rawPageContext && rawPageContext.id
@@ -672,15 +643,9 @@ export function AdminToolbar({ onClose }: { onClose: () => void }) {
     <Overlay backgroundOpacity={0.5} ref={backdropRef} onClick={handleClickOutside}>
       <Center pt="8vh">
         <Card w="780px" p="0" bd="1px solid var(--mb-color-border)" className={S.card}>
-          {/* ── Tabs ──── */}
+          {/* ── Tabs (extensible) ──── */}
           <Group className={S.tabBar} gap={0}>
-            <UnstyledButton className={`${S.tab} ${tab === "mbql" ? S.tabActive : ""}`}
-              onClick={() => setTab("mbql")}>
-              <Icon name="notebook" size={14} />
-              <Text size="xs" fw={500}>{t`MBQL → SQL`}</Text>
-            </UnstyledButton>
-            <UnstyledButton className={`${S.tab} ${tab === "queries" ? S.tabActive : ""}`}
-              onClick={() => setTab("queries")}>
+            <UnstyledButton className={`${S.tab} ${S.tabActive}`}>
               <Icon name="database" size={14} />
               <Text size="xs" fw={500}>{t`Query Explorer`}</Text>
             </UnstyledButton>
@@ -688,9 +653,7 @@ export function AdminToolbar({ onClose }: { onClose: () => void }) {
             <Text size="xs" c="text-tertiary" pr="md">{t`Esc to close`}</Text>
           </Group>
 
-          {/* ── Tab content (both always mounted, hidden via display) ──── */}
-          <Box display={tab === "mbql" ? undefined : "none"}><MbqlTab /></Box>
-          <Box display={tab === "queries" ? undefined : "none"}><QueriesTab pageContext={pageCtx} /></Box>
+          <QueryExplorer pageContext={pageCtx} />
         </Card>
       </Center>
     </Overlay>,
