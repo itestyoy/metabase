@@ -6,6 +6,50 @@ import type { AgentContextValue } from "../AgentContextPicker";
 import type { AgentDatasource } from "../AgentDatasourcePicker";
 import type { ChatMessage, ContentBlock } from "../types";
 
+const STORAGE_KEY = "ai-agent-chat-state";
+
+interface PersistedChatState {
+  messages: ChatMessage[];
+  previousResponseId: string | null;
+  chatCollectionId: number | null;
+  chatCollectionName: string | null;
+}
+
+function saveChatState(state: PersistedChatState) {
+  try {
+    // Filter out transient tool "running" states before saving
+    const messages = state.messages.filter(
+      m => m.toolStatus !== "running",
+    );
+    sessionStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ ...state, messages }),
+    );
+  } catch {
+    // Storage full or unavailable — silently ignore
+  }
+}
+
+function loadChatState(): PersistedChatState | null {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PersistedChatState;
+    if (!Array.isArray(parsed.messages)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function clearChatState() {
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 function makeId(): string {
   return Math.random().toString(36).slice(2);
 }
@@ -109,18 +153,35 @@ function parseSSE(text: string): Array<{ event: string; data: string }> {
 }
 
 export function useAgentChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const savedState = useRef(loadChatState()).current;
+  const [messages, setMessages] = useState<ChatMessage[]>(
+    savedState?.messages ?? [],
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previousResponseId, setPreviousResponseId] = useState<string | null>(
-    null,
+    savedState?.previousResponseId ?? null,
   );
-  const [chatCollectionId, setChatCollectionId] = useState<number | null>(null);
-  const [chatCollectionName, setChatCollectionName] = useState<string | null>(null);
+  const [chatCollectionId, setChatCollectionId] = useState<number | null>(
+    savedState?.chatCollectionId ?? null,
+  );
+  const [chatCollectionName, setChatCollectionName] = useState<string | null>(
+    savedState?.chatCollectionName ?? null,
+  );
   const [agentSettings, setAgentSettings] = useState<AgentSettings | null>(
     null,
   );
   const abortRef = useRef<AbortController | null>(null);
+
+  // Persist chat state to sessionStorage on every change
+  useEffect(() => {
+    saveChatState({
+      messages,
+      previousResponseId,
+      chatCollectionId,
+      chatCollectionName,
+    });
+  }, [messages, previousResponseId, chatCollectionId, chatCollectionName]);
 
   // Fetch agent settings from backend (is it configured, what model)
   useEffect(() => {
@@ -157,6 +218,7 @@ export function useAgentChat() {
     setPreviousResponseId(null);
     setChatCollectionId(null);
     setChatCollectionName(null);
+    clearChatState();
   }, []);
 
   const sendMessage = useCallback(
