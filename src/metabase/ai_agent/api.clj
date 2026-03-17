@@ -759,10 +759,12 @@
                            :qe.card_id
                            :qe.context
                            :qe.native
+                           [:q.query :raw_query]
                            [:c.name :card_name]
                            [:u.email :user_email]]
                :from      [[:query_execution :qe]]
-               :left-join [[:report_card :c] [:= :qe.card_id :c.id]
+               :left-join [[:query :q]       [:= :qe.hash :q.query_hash]
+                           [:report_card :c] [:= :qe.card_id :c.id]
                            [:core_user :u]   [:= :qe.executor_id :u.id]]
                :where     wheres
                :order-by  [[:qe.started_at :desc]]
@@ -779,11 +781,10 @@
   (let [compile-fn (requiring-resolve 'metabase.query-processor.compile/compile)]
     (vec
      (for [item items]
-       (let [card-id    (:card_id item)
-             json-query (:json_query item)
-             label      (:label item)]
+       (let [card-id (:card_id item)
+             label   (:label item)]
          (cond
-           ;; Saved question — fetch dataset_query from card
+           ;; Saved question — fetch dataset_query from card and compile
            card-id
            (let [card (t2/select-one :model/Card :id card-id)]
              {:card_id   card-id
@@ -795,16 +796,13 @@
                              (catch Exception e (str "Error: " (.getMessage e))))
                            "Error: card not found")})
 
-           ;; Ad-hoc — compile the json_query directly
-           json-query
+           ;; Ad-hoc — raw SQL already available from the query table
+           (:raw_query item)
            {:card_id   nil
             :card_name (or label "Ad-hoc query")
-            :query     (try
-                         (let [compiled (compile-fn json-query)]
-                           (if (map? compiled) (:query compiled) (str compiled)))
-                         (catch Exception e (str "Error: " (.getMessage e))))}
+            :query     (:raw_query item)}
 
            :else
-           {:card_id nil :card_name "Unknown" :query "Error: no card_id or json_query provided"}))))))
+           {:card_id nil :card_name "Unknown" :query "Error: no card_id or raw_query provided"}))))))
 
 (def routes (api.macros/ns-handler))
