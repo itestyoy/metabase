@@ -107,13 +107,21 @@ function MbqlTab() {
   const handleSubmit = useCallback(async () => {
     const text = input.trim();
     if (!text || isLoading) return;
+
+    // Validate JSON before sending to backend
+    let mbql: unknown;
+    try {
+      mbql = JSON.parse(text);
+    } catch {
+      setResult({ type: "error", content: "Invalid JSON — paste a valid MBQL query object" });
+      setFormattedInput(null);
+      return;
+    }
+
+    setFormattedInput(JSON.stringify(mbql, null, 2));
     setIsLoading(true);
     setResult(null);
-    setFormattedInput(null);
     try {
-      const mbql = JSON.parse(text);
-      // Show formatted JSON after successful parse
-      setFormattedInput(JSON.stringify(mbql, null, 2));
       const resp = await fetch("/api/dataset/native", {
         method: "POST", headers: apiHeaders(), body: JSON.stringify(mbql),
       });
@@ -126,10 +134,7 @@ function MbqlTab() {
         ? { type: "sql", content: data.query }
         : { type: "json", content: JSON.stringify(data, null, 2) });
     } catch (err) {
-      const msg = err instanceof SyntaxError
-        ? "Invalid JSON — paste a valid MBQL query object"
-        : err instanceof Error ? err.message : "Unknown error";
-      setFormattedInput(null);
+      const msg = err instanceof Error ? err.message : "Unknown error";
       setResult({ type: "error", content: msg });
     } finally {
       setIsLoading(false);
