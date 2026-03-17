@@ -506,15 +506,26 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                             (if (:description c) (str ", Desc: " (:description c)) "")))
                   cards))))))
 
+(def ^:private ai-type->search-model
+  "Map user-friendly type names (used by the AI) to internal search model names."
+  {"question"   "card"
+   "dashboard"  "dashboard"
+   "collection" "collection"
+   "table"      "table"
+   "metric"     "metric"
+   "model"      "dataset"
+   "document"   "document"})
+
 (defn- search-items [query item-type]
-  (let [ctx     (cond-> {:search-string        query
+  (let [search-model (when item-type (get ai-type->search-model item-type item-type))
+        ctx     (cond-> {:search-string        query
                          :limit                15
                          :current-user-id      api/*current-user-id*
                          :current-user-perms   @api/*current-user-permissions-set*
                          :is-superuser?        api/*is-superuser?*
                          :is-impersonated-user? (perms/impersonated-user?)
                          :is-sandboxed-user?   (perms/sandboxed-user?)}
-                  item-type (assoc :models #{item-type}))
+                  search-model (assoc :models #{search-model}))
         results (try
                   (:data (search/search (search/search-context ctx)))
                   (catch Exception e
