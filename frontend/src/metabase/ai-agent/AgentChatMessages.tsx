@@ -1,3 +1,4 @@
+import type { MouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { t } from "ttag";
@@ -29,6 +30,42 @@ import Visualization from "metabase/visualizations/components/Visualization";
 import S from "./AgentModal.module.css";
 import type { ChatMessage, ContentBlock } from "./types";
 
+/**
+ * A Link that forces a page refresh when navigating to the current URL.
+ * React Router v3 ignores navigation to the same path, so we intercept
+ * the click and use push(replace) trick to force remount.
+ */
+function ForceLink({
+  to,
+  className,
+  style,
+  children,
+}: {
+  to: string;
+  className?: string;
+  style?: Record<string, unknown>;
+  children: ReactNode;
+}) {
+  const handleClick = useCallback(
+    (e: MouseEvent<HTMLAnchorElement>) => {
+      const targetPath = to.split("#")[0].split("?")[0];
+      const currentPath = window.location.pathname;
+      if (targetPath === currentPath) {
+        e.preventDefault();
+        // Navigate away and back to force React Router to remount
+        window.location.href = to;
+      }
+    },
+    [to],
+  );
+
+  return (
+    <Link to={to} className={className} style={style} onClick={handleClick}>
+      {children}
+    </Link>
+  );
+}
+
 const EXAMPLE_PROMPTS = [
   t`Investigate why revenue dropped last week`,
   t`Create a dashboard with key sales metrics`,
@@ -40,14 +77,14 @@ const EXAMPLE_PROMPTS = [
 
 function CardLinkBlock({ block }: { block: Extract<ContentBlock, { type: "card_link" }> }) {
   return (
-    <Link to={`/question/${block.card_id}`} className={S.blockLink}>
+    <ForceLink to={`/question/${block.card_id}`} className={S.blockLink}>
       <Group gap={8} wrap="nowrap">
         <Icon name="table2" size={16} color="var(--mb-color-brand)" />
         <Text size="sm" fw={500} truncate>
           {block.name}
         </Text>
       </Group>
-    </Link>
+    </ForceLink>
   );
 }
 
@@ -102,14 +139,14 @@ function CardPreviewBlock({ block }: { block: Extract<ContentBlock, { type: "car
   return (
     <Box>
       <Group gap={0} wrap="nowrap" className={S.cardPreviewRow}>
-        <Link to={`/question/${block.card_id}`} className={S.blockLink} style={{ flex: 1, minWidth: 0 }}>
+        <ForceLink to={`/question/${block.card_id}`} className={S.blockLink} style={{ flex: 1, minWidth: 0 }}>
           <Group gap={8} wrap="nowrap">
             <Icon name={displayIcon} size={16} color="var(--mb-color-brand)" />
             <Text size="sm" fw={500} truncate>
               {block.name}
             </Text>
           </Group>
-        </Link>
+        </ForceLink>
         <Tooltip label={showPreview ? t`Hide preview` : t`Preview`}>
           <ActionIcon
             variant="subtle"
@@ -137,27 +174,27 @@ function CardPreviewBlock({ block }: { block: Extract<ContentBlock, { type: "car
 
 function DashboardLinkBlock({ block }: { block: Extract<ContentBlock, { type: "dashboard_link" }> }) {
   return (
-    <Link to={`/dashboard/${block.dashboard_id}`} className={S.blockLink}>
+    <ForceLink to={`/dashboard/${block.dashboard_id}`} className={S.blockLink}>
       <Group gap={8} wrap="nowrap">
         <Icon name="dashboard" size={16} color="var(--mb-color-brand)" />
         <Text size="sm" fw={500} truncate>
           {block.name}
         </Text>
       </Group>
-    </Link>
+    </ForceLink>
   );
 }
 
 function DocumentLinkBlock({ block }: { block: Extract<ContentBlock, { type: "document_link" }> }) {
   return (
-    <Link to={`/document/${block.document_id}`} className={S.blockLink}>
+    <ForceLink to={`/document/${block.document_id}`} className={S.blockLink}>
       <Group gap={8} wrap="nowrap">
         <Icon name="document" size={16} color="var(--mb-color-brand)" />
         <Text size="sm" fw={500} truncate>
           {block.name}
         </Text>
       </Group>
-    </Link>
+    </ForceLink>
   );
 }
 
@@ -181,7 +218,7 @@ function NotebookLinkBlock({ block }: { block: Extract<ContentBlock, { type: "no
         : "table2";
 
   return (
-    <Link to={notebookUrl} className={S.blockLink}>
+    <ForceLink to={notebookUrl} className={S.blockLink}>
       <Group gap={8} wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
         <Icon name={displayIcon} size={16} color="var(--mb-color-brand)" />
         <Text size="sm" fw={500} truncate>
@@ -194,7 +231,7 @@ function NotebookLinkBlock({ block }: { block: Extract<ContentBlock, { type: "no
           {t`Open in notebook`}
         </Text>
       </Group>
-    </Link>
+    </ForceLink>
   );
 }
 
