@@ -635,7 +635,7 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
             <Box mah={200} className={S.codeEditorScroll}>
               <CodeEditor
                 value={expandedDetail}
-                language={queries[expandedRow]?.raw_query ? "sql" : "json"}
+                language={queries[expandedRow]?.card_id ? "json" : "sql"}
                 readOnly
                 lineNumbers
                 className={S.codeEditor}
