@@ -4,6 +4,7 @@ import { t } from "ttag";
 
 import { CodeEditor } from "metabase/common/components/CodeEditor";
 import api from "metabase/lib/api";
+import { serializeCardForUrl } from "metabase/lib/card";
 import { format as formatSql } from "sql-formatter";
 import { useSelector } from "metabase/lib/redux";
 import { getUserIsAdmin } from "metabase/selectors/user";
@@ -87,6 +88,34 @@ function CopyButton({ text }: { text: string }) {
       <ActionIcon variant="subtle" size="xs" onClick={handleCopy}>
         <Icon name={copied ? "check" : "copy"} size={12}
           color={copied ? "var(--mb-color-success)" : "var(--mb-color-text-tertiary)"} />
+      </ActionIcon>
+    </Tooltip>
+  );
+}
+
+function buildNativeQuestionUrl(sql: string, databaseId?: number): string {
+  const card = {
+    dataset_query: {
+      type: "native",
+      native: { query: sql },
+      database: databaseId ?? null,
+    },
+    display: "table",
+    visualization_settings: {},
+  };
+  return `/question#${serializeCardForUrl(card)}`;
+}
+
+function OpenInEditorButton({ sql, databaseId }: { sql: string; databaseId?: number }) {
+  const handleClick = useCallback(() => {
+    const url = buildNativeQuestionUrl(sql, databaseId);
+    window.open(url, "_blank");
+  }, [sql, databaseId]);
+
+  return (
+    <Tooltip label={t`Open in query editor`}>
+      <ActionIcon variant="subtle" size="xs" onClick={handleClick}>
+        <Icon name="play" size={12} color="var(--mb-color-brand)" />
       </ActionIcon>
     </Tooltip>
   );
@@ -191,7 +220,10 @@ function MbqlTab() {
                 {result.type === "sql" ? "SQL" : result.type === "error" ? t`Error` : "JSON"}
               </Text>
             </Flex>
-            <CopyButton text={result.content} />
+            <Flex gap={4}>
+              {result.type === "sql" && <OpenInEditorButton sql={result.content} />}
+              <CopyButton text={result.content} />
+            </Flex>
           </Flex>
           <ScrollArea mah="min(50vh, 700px)" scrollbarSize={4}>
             <CodeEditor
@@ -487,7 +519,10 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
                 {t`SQL for ${compiledResults.length} questions`}
               </Text>
             </Flex>
-            <CopyButton text={allSql} />
+            <Flex gap={4}>
+              <OpenInEditorButton sql={allSql} />
+              <CopyButton text={allSql} />
+            </Flex>
           </Flex>
           <ScrollArea mah="min(50vh, 700px)" scrollbarSize={4}>
             <CodeEditor value={allSql} language="sql" readOnly lineNumbers className={S.codeEditor} />
