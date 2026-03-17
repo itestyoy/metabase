@@ -406,6 +406,9 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
           <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={4}>
             <Text size="xs" fw={500} c="text-tertiary">{t`Input MBQL`}</Text>
             <Flex gap={4}>
+              {mbqlFormatted.includes('"type":"query"') || mbqlFormatted.includes('"type": "query"')
+                ? <OpenInNotebookButton datasetQuery={mbqlFormatted} />
+                : null}
               <CopyButton text={mbqlFormatted} />
               <ActionIcon variant="subtle" size="xs" onClick={() => setMbqlFormatted(null)}>
                 <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
@@ -436,7 +439,6 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
             </Flex>
             <Flex gap={4}>
               {mbqlResult.type === "sql" && <OpenInEditorButton sql={mbqlResult.content} />}
-              {mbqlResult.type === "sql" && mbqlFormatted && <OpenInNotebookButton datasetQuery={mbqlFormatted} />}
               <CopyButton text={mbqlResult.content} />
               <ActionIcon variant="subtle" size="xs" onClick={() => setMbqlResult(null)}>
                 <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
@@ -602,7 +604,8 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
                 {queries[expandedRow]?.raw_query && !queries[expandedRow]?.card_id && (
                   <OpenInEditorButton sql={expandedDetail} />
                 )}
-                {queries[expandedRow]?.card_id && !queries[expandedRow]?.raw_query && (
+                {queries[expandedRow]?.card_id && expandedDetail &&
+                  (expandedDetail.includes('"type":"query"') || expandedDetail.includes('"type": "query"')) && (
                   <OpenInNotebookButton datasetQuery={expandedDetail} />
                 )}
                 <CopyButton text={expandedDetail} />
