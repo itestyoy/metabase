@@ -117,6 +117,28 @@ function OpenInEditorButton({ sql, databaseId }: { sql: string; databaseId?: num
   );
 }
 
+function OpenInNotebookButton({ datasetQuery }: { datasetQuery: string }) {
+  const handleClick = useCallback(() => {
+    try {
+      const dq = JSON.parse(datasetQuery);
+      const card = {
+        dataset_query: dq,
+        display: "table",
+        visualization_settings: {},
+      };
+      window.open(`/question/notebook#${serializeCardForUrl(card)}`, "_blank");
+    } catch { /* invalid JSON — ignore */ }
+  }, [datasetQuery]);
+
+  return (
+    <Tooltip label={t`Open in notebook editor`}>
+      <ActionIcon variant="subtle" size="xs" onClick={handleClick}>
+        <Icon name="notebook" size={12} color="var(--mb-color-brand)" />
+      </ActionIcon>
+    </Tooltip>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════ */
 /*  Unified Query Explorer (MBQL input + query history)                      */
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -414,6 +436,7 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
             </Flex>
             <Flex gap={4}>
               {mbqlResult.type === "sql" && <OpenInEditorButton sql={mbqlResult.content} />}
+              {mbqlResult.type === "sql" && mbqlFormatted && <OpenInNotebookButton datasetQuery={mbqlFormatted} />}
               <CopyButton text={mbqlResult.content} />
               <ActionIcon variant="subtle" size="xs" onClick={() => setMbqlResult(null)}>
                 <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
@@ -578,6 +601,9 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
               <Flex gap={4}>
                 {queries[expandedRow]?.raw_query && !queries[expandedRow]?.card_id && (
                   <OpenInEditorButton sql={expandedDetail} />
+                )}
+                {queries[expandedRow]?.card_id && !queries[expandedRow]?.raw_query && (
+                  <OpenInNotebookButton datasetQuery={expandedDetail} />
                 )}
                 <CopyButton text={expandedDetail} />
                 <ActionIcon variant="subtle" size="xs" onClick={() => { setExpandedRow(null); setExpandedDetail(null); }}>
