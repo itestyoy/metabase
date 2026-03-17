@@ -46,7 +46,7 @@ export function useAdminToolbar() {
   useEffect(() => {
     if (!isAdmin) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.metaKey && e.key === "r") {
+      if (e.ctrlKey && e.metaKey && e.code === "KeyR") {
         e.preventDefault();
         setIsOpen(v => !v);
       }
