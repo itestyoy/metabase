@@ -3,6 +3,9 @@
 .card {
   border-radius: 0.5rem;
   overflow: hidden;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Tabs ──────────────────────────────────────────── */
@@ -81,6 +84,12 @@
 
 .queryRow:hover {
   background: color-mix(in srgb, var(--mb-color-brand) 4%, transparent);
+}
+
+/* ── Formatted input JSON ─────────────────────────── */
+.formattedInputContainer {
+  border-top: 1px solid var(--mb-color-border);
+  background: var(--mb-color-background-secondary);
 }
 
 /* ── Result ──────────────────────────────────────── */

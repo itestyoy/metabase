@@ -97,6 +97,7 @@ function CopyButton({ text }: { text: string }) {
 
 function MbqlTab() {
   const [input, setInput] = useState("");
+  const [formattedInput, setFormattedInput] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<ToolResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -108,8 +109,11 @@ function MbqlTab() {
     if (!text || isLoading) return;
     setIsLoading(true);
     setResult(null);
+    setFormattedInput(null);
     try {
       const mbql = JSON.parse(text);
+      // Show formatted JSON after successful parse
+      setFormattedInput(JSON.stringify(mbql, null, 2));
       const resp = await fetch("/api/dataset/native", {
         method: "POST", headers: apiHeaders(), body: JSON.stringify(mbql),
       });
@@ -125,6 +129,7 @@ function MbqlTab() {
       const msg = err instanceof SyntaxError
         ? "Invalid JSON — paste a valid MBQL query object"
         : err instanceof Error ? err.message : "Unknown error";
+      setFormattedInput(null);
       setResult({ type: "error", content: msg });
     } finally {
       setIsLoading(false);
@@ -136,7 +141,7 @@ function MbqlTab() {
       <Box pos="relative">
         <input ref={inputRef} className={S.input} value={input}
           placeholder={t`Paste MBQL JSON to compile to SQL…`}
-          onChange={e => setInput(e.target.value)}
+          onChange={e => { setInput(e.target.value); setFormattedInput(null); }}
           onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
         />
         <Stack className={S.iconContainer} align="center" left={36} pos="absolute" top={26}>
@@ -147,6 +152,18 @@ function MbqlTab() {
         <Text size="xs" c="text-tertiary">{t`MBQL → SQL`}</Text>
         <Text size="xs" c="text-tertiary">{t`Enter to run`}</Text>
       </Flex>
+      {/* Formatted input JSON */}
+      {formattedInput && (
+        <Box className={S.formattedInputContainer}>
+          <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={4}>
+            <Text size="xs" fw={500} c="text-tertiary">{t`Input MBQL`}</Text>
+            <CopyButton text={formattedInput} />
+          </Flex>
+          <ScrollArea mah={170} scrollbarSize={4}>
+            <Code className={S.resultCode} block>{formattedInput}</Code>
+          </ScrollArea>
+        </Box>
+      )}
       {isLoading && (
         <Flex align="center" justify="center" p="lg" gap={8}>
           <Loader size="sm" /><Text size="sm" c="text-tertiary">{t`Compiling…`}</Text>
@@ -164,7 +181,7 @@ function MbqlTab() {
             </Flex>
             <CopyButton text={result.content} />
           </Flex>
-          <ScrollArea mah={320} scrollbarSize={4}>
+          <ScrollArea mah="min(50vh, 700px)" scrollbarSize={4}>
             <Code className={S.resultCode} block>{result.content}</Code>
           </ScrollArea>
         </Box>
@@ -450,7 +467,7 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
             </Flex>
             <CopyButton text={allSql} />
           </Flex>
-          <ScrollArea mah={280} scrollbarSize={4}>
+          <ScrollArea mah="min(50vh, 700px)" scrollbarSize={4}>
             <Code className={S.resultCode} block>{allSql}</Code>
           </ScrollArea>
         </Box>
