@@ -15,6 +15,8 @@ export interface ChatMessage {
   id: string;
   role: MessageRole;
   content: string | null;
+  /** ISO timestamp when the message was created. */
+  timestamp?: string;
   /** Parsed structured blocks from JSON response (assistant only). */
   blocks?: ContentBlock[];
   /** Follow-up suggestions from the AI (assistant only). */

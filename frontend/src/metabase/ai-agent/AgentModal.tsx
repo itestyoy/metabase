@@ -72,8 +72,9 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const [dockedWidth, setDockedWidth] = useState(() => readDockState().width);
   const isContextManual = useRef(false);
 
-  const { messages, isLoading, error, agentSettings, chatCollectionId, chatCollectionName, sendMessage, clearMessages } =
+  const { messages, isLoading, error, agentSettings, chatCollectionId, chatCollectionName, sendMessage, clearMessages, stopGeneration, retryLastMessage } =
     useAgentChat();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-populate datasource from default_database setting
   useEffect(() => {
@@ -168,12 +169,19 @@ export function AgentModal({ onClose }: AgentModalProps) {
     setDatasource(value);
   }, []);
 
+  // Auto-focus textarea on mount
+  useEffect(() => {
+    setTimeout(() => textareaRef.current?.focus(), 100);
+  }, []);
+
   // ── Send ───────────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
     const text = inputText.trim();
     if (!text || isLoading) return;
     setInputText("");
     sendMessage(text, context, safeMode, saveLocation?.id, datasource);
+    // Re-focus textarea after send
+    setTimeout(() => textareaRef.current?.focus(), 50);
   }, [inputText, isLoading, sendMessage, context, safeMode, saveLocation]);
 
   const handleKeyDown = useCallback(
@@ -259,15 +267,15 @@ export function AgentModal({ onClose }: AgentModalProps) {
 
         <div className={S.modalHeaderActions}>
           {!isMinimized && messages.length > 0 && (
-            <Tooltip label={t`Clear conversation`}>
+            <Tooltip label={t`New chat`}>
               <ActionIcon
                 variant="transparent"
                 c={isDocked ? "var(--mb-color-text-secondary)" : "rgba(255,255,255,0.8)"}
                 size="sm"
                 onClick={handleClearMessages}
-                aria-label={t`Clear conversation`}
+                aria-label={t`New chat`}
               >
-                <Icon name="trash" size={14} />
+                <Icon name="add" size={14} />
               </ActionIcon>
             </Tooltip>
           )}
@@ -334,21 +342,16 @@ export function AgentModal({ onClose }: AgentModalProps) {
               <AgentChatMessages
                 messages={messages}
                 isLoading={isLoading}
+                error={error}
                 onSelectPrompt={handleSelectPrompt}
                 onSaveAsQuestion={handleSaveAsQuestion}
+                onRetry={retryLastMessage}
               />
-
-              {error && (
-                <div className={S.errorBanner}>
-                  <Text size="xs" c="error">
-                    {error}
-                  </Text>
-                </div>
-              )}
 
               <div className={S.inputArea}>
                 <div className={S.composer}>
                   <Textarea
+                    ref={textareaRef}
                     value={inputText}
                     onChange={e => setInputText(e.target.value)}
                     onKeyDown={handleKeyDown}
@@ -365,23 +368,32 @@ export function AgentModal({ onClose }: AgentModalProps) {
                     <Text size="xs" c="text-tertiary" className={S.inputHint}>
                       {t`Enter to send · Shift+Enter for new line`}
                     </Text>
-                    <ActionIcon
-                      variant="transparent"
-                      size="sm"
-                      onClick={handleSend}
-                      disabled={isLoading || !inputText.trim()}
-                      aria-label={t`Send message`}
-                    >
-                      <Icon
-                        name="send"
-                        size={14}
-                        color={
-                          isLoading || !inputText.trim()
-                            ? "var(--mb-color-text-tertiary)"
-                            : "var(--mb-color-brand)"
-                        }
-                      />
-                    </ActionIcon>
+                    {isLoading ? (
+                      <Tooltip label={t`Stop generating`}>
+                        <ActionIcon
+                          variant="transparent"
+                          size="sm"
+                          onClick={stopGeneration}
+                          aria-label={t`Stop generating`}
+                        >
+                          <Icon name="close" size={14} color="var(--mb-color-error)" />
+                        </ActionIcon>
+                      </Tooltip>
+                    ) : (
+                      <ActionIcon
+                        variant="transparent"
+                        size="sm"
+                        onClick={handleSend}
+                        disabled={!inputText.trim()}
+                        aria-label={t`Send message`}
+                      >
+                        <Icon
+                          name="send"
+                          size={14}
+                          color={!inputText.trim() ? "var(--mb-color-text-tertiary)" : "var(--mb-color-brand)"}
+                        />
+                      </ActionIcon>
+                    )}
                   </div>
                 </div>
               </div>
