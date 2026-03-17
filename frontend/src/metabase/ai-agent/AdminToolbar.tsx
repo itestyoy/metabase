@@ -233,6 +233,7 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
   const [isLoadingQueries, setIsLoadingQueries] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filtersStale, setFiltersStale] = useState(false);
   // Selected row detail
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [expandedDetail, setExpandedDetail] = useState<string | null>(null);
@@ -274,6 +275,7 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
 
   const doFetch = useCallback(async (before?: string) => {
     setIsLoadingQueries(true);
+    setFiltersStale(false);
     if (!before) {
       setQueries([]);
       setExpandedRow(null);
@@ -488,7 +490,11 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
           />
         </Box>
 
-        <Button size="xs" variant="filled" onClick={fetchQueries} loading={isLoadingQueries} ml="auto"
+        {filtersStale && queries.length > 0 && (
+          <Text size="xs" c="warning" ml="auto">{t`Filters changed`}</Text>
+        )}
+        <Button size="xs" variant="filled" onClick={fetchQueries} loading={isLoadingQueries}
+          ml={filtersStale && queries.length > 0 ? undefined : "auto"}
           leftSection={<Icon name="search" size={12} />}>
           {t`Search`}
         </Button>
@@ -585,7 +591,7 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
                 setCardIdFilter(queries[expandedRow]!.card_id);
                 setDashboardIdFilter(null);
                 setContextLabel(queries[expandedRow]!.card_name ?? `Card ${queries[expandedRow]!.card_id}`);
-                setTimeout(() => fetchQueries(), 100);
+                setFiltersStale(true);
               }}>
               {t`Filter by card`}
             </Button>
@@ -597,7 +603,7 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
                 setDashboardIdFilter(queries[expandedRow]!.dashboard_id);
                 setCardIdFilter(null);
                 setContextLabel(queries[expandedRow]!.dashboard_name ?? `Dashboard ${queries[expandedRow]!.dashboard_id}`);
-                setTimeout(() => fetchQueries(), 100);
+                setFiltersStale(true);
               }}>
               {t`Filter by dashboard`}
             </Button>
