@@ -602,9 +602,9 @@ export function AdminToolbar({ onClose }: { onClose: () => void }) {
             <Text size="xs" c="text-tertiary" pr="md">{t`Esc to close`}</Text>
           </Group>
 
-          {/* ── Tab content ──── */}
-          {tab === "mbql" && <MbqlTab />}
-          {tab === "queries" && <QueriesTab pageContext={pageCtx} />}
+          {/* ── Tab content (both always mounted, hidden via display) ──── */}
+          <Box display={tab === "mbql" ? undefined : "none"}><MbqlTab /></Box>
+          <Box display={tab === "queries" ? undefined : "none"}><QueriesTab pageContext={pageCtx} /></Box>
         </Card>
       </Center>
     </Overlay>,
