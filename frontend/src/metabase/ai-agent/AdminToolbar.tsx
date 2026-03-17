@@ -40,7 +40,7 @@ export function useAdminToolbar() {
   useEffect(() => {
     if (!isAdmin) return;
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "k") {
+      if (e.ctrlKey && e.metaKey && e.key === "r") {
         e.preventDefault();
         setIsOpen(v => !v);
       }
@@ -185,6 +185,7 @@ interface QueryRow {
   user_email: string | null;
   context: string | null;
   native: boolean;
+  raw_query: string | null;
 }
 interface CompiledCard { card_id: number; card_name: string; query: string; }
 
@@ -250,9 +251,9 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
     });
   }, []);
 
-  // Only saved questions (with card_id) are selectable for SQL compilation
+  // Selectable: saved questions (card_id) or any query with raw_query
   const selectableIndices = useMemo(
-    () => queries.map((q, i) => q.card_id != null ? i : -1).filter(i => i >= 0),
+    () => queries.map((q, i) => (q.card_id != null || q.raw_query) ? i : -1).filter(i => i >= 0),
     [queries],
   );
 
@@ -267,10 +268,14 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
     setIsCompiling(true);
     setCompiledResults([]);
     try {
-      const items = [...selectedIndices]
-        .map(idx => queries[idx])
-        .filter(q => q.card_id != null)
-        .map(q => ({ card_id: q.card_id }));
+      const items = [...selectedIndices].map(idx => {
+        const q = queries[idx];
+        if (q.card_id) return { card_id: q.card_id };
+        return {
+          raw_query: q.raw_query,
+          label: q.card_name ?? (q.native ? "Ad-hoc SQL" : "Ad-hoc query"),
+        };
+      });
       const resp = await fetch("/api/ai-agent/admin/compile-queries", {
         method: "POST",
         headers: apiHeaders(),
@@ -343,7 +348,7 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
           </Flex>
           <ScrollArea mah={260} scrollbarSize={4}>
             {queries.map((q, i) => {
-              const selectable = q.card_id != null;
+              const selectable = q.card_id != null || !!q.raw_query;
               return (
                 <UnstyledButton key={`${q.hash}-${i}`} className={S.queryRow}
                   onClick={selectable ? () => toggleIndex(i) : undefined}
