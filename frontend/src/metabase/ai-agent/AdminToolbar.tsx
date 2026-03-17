@@ -588,7 +588,9 @@ function QueriesTab({ pageContext }: { pageContext: PageContext | null }) {
             </Flex>
             {expandedDetail && (
               <Flex gap={4}>
-                {queries[expandedRow]?.raw_query && <OpenInEditorButton sql={expandedDetail} />}
+                {queries[expandedRow]?.raw_query && !queries[expandedRow]?.card_id && (
+                  <OpenInEditorButton sql={expandedDetail} />
+                )}
                 <CopyButton text={expandedDetail} />
               </Flex>
             )}
