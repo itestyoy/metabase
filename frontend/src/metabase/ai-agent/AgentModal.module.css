@@ -593,6 +593,12 @@
   border-bottom: 1px solid var(--mb-color-border);
 }
 
+/* Bottom dock header: compact to save vertical space */
+.modalHeaderDockedBottom {
+  height: 36px;
+  padding: 0 10px;
+}
+
 /* ── Body layout modes ───────────────────────────── */
 
 /* Default vertical layout: messages on top, input below */
