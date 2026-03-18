@@ -62,8 +62,9 @@
 
 /* ── Filters bar (Query Explorer) ─────────────────── */
 .filtersBar {
-  background: var(--mb-color-background-primary);
+  background: var(--mb-color-background-secondary);
   border-bottom: 1px solid var(--mb-color-border);
+  flex-shrink: 0;
 }
 
 /* ── Query list (scrollable) ──────────────────────── */
@@ -92,23 +93,30 @@
   border-left: 3px solid var(--mb-color-brand) !important;
 }
 
-/* ── Entity picker trigger button ─────────────────── */
+/* ── Entity picker trigger button (matches Select xs) ── */
 .entityPickerButton {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 0 10px;
   border: 1px solid var(--mb-color-border);
-  border-radius: 6px;
-  font-size: 12px;
+  border-radius: var(--mantine-radius-sm, 4px);
+  font-size: var(--mantine-font-size-xs, 12px);
   background: var(--mb-color-background-primary);
   transition: border-color 0.12s;
   white-space: nowrap;
-  height: 28px;
+  height: 30px;
 }
 
 .entityPickerButton:hover {
   border-color: var(--mb-color-brand);
+}
+
+/* Context chip inside filters bar — match Select xs height */
+.filtersBar .contextChip {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
 }
 
 /* ── Load more bar ────────────────────────────────── */

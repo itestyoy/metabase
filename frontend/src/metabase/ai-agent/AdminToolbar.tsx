@@ -490,11 +490,11 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
           />
         </Box>
 
+        <Box style={{ flex: 1 }} />
         {filtersStale && queries.length > 0 && (
-          <Text size="xs" c="warning" ml="auto">{t`Filters changed`}</Text>
+          <Text size="xs" c="warning" fw={500}>{t`Filters changed`}</Text>
         )}
         <Button size="xs" variant="filled" onClick={fetchQueries} loading={isLoadingQueries}
-          ml={filtersStale && queries.length > 0 ? undefined : "auto"}
           leftSection={<Icon name="search" size={12} />}>
           {t`Search`}
         </Button>
@@ -630,7 +630,7 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
         <Box className={S.resultContainer}>
           <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={4}>
             <Text size="xs" fw={500} c="text-tertiary">
-              {queries[expandedRow]?.native ? "dataset_query (native)" : "dataset_query (MBQL)"}
+              {queries[expandedRow]?.native ? "Native" : "MBQL"}
             </Text>
             <CopyButton text={expandedDetail} />
           </Flex>
