@@ -6,6 +6,10 @@ import { Icon, Text, Tooltip } from "metabase/ui";
 
 import S from "./AgentMcpServers.module.css";
 
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 interface McpTool {
   name: string;
   description: string;
@@ -43,14 +47,14 @@ export function AgentMcpServers() {
         {servers.map(server => (
           <Tooltip
             key={server.name}
-            label={server.name}
+            label={capitalize(server.name)}
             multiline
             maw={300}
           >
             <div className={S.mcpChip}>
               <Icon name="bolt" size={10} />
               <Text size="xs" lh={1} component="span" className={S.mcpChipName}>
-                {server.name}
+                {capitalize(server.name)}
               </Text>
             </div>
           </Tooltip>
