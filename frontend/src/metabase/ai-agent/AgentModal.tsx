@@ -349,7 +349,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
       )}
 
       {/* ── Header ─────────────────────────────────── */}
-      <div className={`${S.modalHeader} ${isDocked ? S.modalHeaderDocked : ""}`} {...(isDocked ? {} : headerProps)}>
+      <div className={`${S.modalHeader} ${isDocked ? S.modalHeaderDocked : ""} ${isBottomDock ? S.modalHeaderDockedBottom : ""}`} {...(isDocked ? {} : headerProps)}>
         <div className={S.modalHeaderTitle}>
           <Icon name="ai" size={18} c={isDocked ? "var(--mb-color-text-primary)" : "white"} />
           <Text size="sm" fw={600} c={isDocked ? "text-primary" : "white"}>
