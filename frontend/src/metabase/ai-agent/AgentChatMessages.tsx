@@ -633,60 +633,66 @@ function UserMessageContent({ content, className }: { content: string; className
     return <Markdown className={className}>{content}</Markdown>;
   }
 
-  // Split content into text segments and metric chips
-  const parts: ReactNode[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  const regex = new RegExp(METRIC_PATTERN);
+  // Replace metric references with placeholder, render as Markdown, then inject chips
+  // Use a unique placeholder that Markdown won't mangle
+  const PLACEHOLDER_PREFIX = "\u200B__METRIC_";
+  const PLACEHOLDER_SUFFIX = "__\u200B";
+  const metricNames: string[] = [];
+  const cleanContent = content.replace(new RegExp(METRIC_PATTERN), (_match, _id, name) => {
+    const idx = metricNames.length;
+    metricNames.push(name);
+    return `${PLACEHOLDER_PREFIX}${idx}${PLACEHOLDER_SUFFIX}`;
+  });
 
-  while ((match = regex.exec(content)) !== null) {
-    // Text before this match
-    if (match.index > lastIndex) {
+  // Render markdown to get proper formatting
+  const rendered = <Markdown className={className}>{cleanContent}</Markdown>;
+
+  // If no metrics were found, just return markdown
+  if (metricNames.length === 0) {
+    return rendered;
+  }
+
+  // Split the rendered markdown's text and inject chips
+  // We need to post-process the HTML string to replace placeholders
+  const chipStyle = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 3,
+    background: "color-mix(in srgb, var(--mb-color-brand) 15%, transparent)",
+    color: "var(--mb-color-brand)",
+    border: "1px solid color-mix(in srgb, var(--mb-color-brand) 30%, transparent)",
+    borderRadius: 6,
+    padding: "2px 8px",
+    margin: "0 2px",
+    verticalAlign: "baseline" as const,
+    whiteSpace: "nowrap" as const,
+  };
+
+  // Simpler approach: split cleanContent by placeholders, render parts
+  const SPLIT_REGEX = new RegExp(`${PLACEHOLDER_PREFIX.replace(/\u200B/g, "\\u200B")}(\\d+)${PLACEHOLDER_SUFFIX.replace(/\u200B/g, "\\u200B")}`);
+  const segments = cleanContent.split(SPLIT_REGEX);
+
+  const parts: ReactNode[] = [];
+  for (let i = 0; i < segments.length; i++) {
+    if (i % 2 === 0) {
+      // Text segment
+      if (segments[i]) {
+        parts.push(<span key={`t${i}`}>{segments[i]}</span>);
+      }
+    } else {
+      // Metric index
+      const metricIdx = parseInt(segments[i], 10);
+      const name = metricNames[metricIdx] ?? "?";
       parts.push(
-        <Markdown key={`t${lastIndex}`} className={className}>
-          {content.slice(lastIndex, match.index)}
-        </Markdown>,
+        <Text key={`m${i}`} component="span" size="xs" fw={600} style={chipStyle}>
+          <Icon name="metric" size={12} />
+          {name}
+        </Text>,
       );
     }
-    // Metric chip
-    const name = match[2];
-    parts.push(
-      <Text
-        key={`m${match.index}`}
-        component="span"
-        size="xs"
-        fw={600}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 3,
-          background: "color-mix(in srgb, var(--mb-color-brand) 15%, transparent)",
-          color: "var(--mb-color-brand)",
-          border: "1px solid color-mix(in srgb, var(--mb-color-brand) 30%, transparent)",
-          borderRadius: 6,
-          padding: "2px 8px",
-          margin: "0 2px",
-          verticalAlign: "baseline",
-          whiteSpace: "nowrap",
-        }}
-      >
-        <Icon name="metric" size={12} />
-        {name}
-      </Text>,
-    );
-    lastIndex = match.index + match[0].length;
   }
 
-  // Remaining text after last match
-  if (lastIndex < content.length) {
-    parts.push(
-      <Markdown key={`t${lastIndex}`} className={className}>
-        {content.slice(lastIndex)}
-      </Markdown>,
-    );
-  }
-
-  return <span>{parts}</span>;
+  return <span className={className}>{parts}</span>;
 }
 
 /* ── Message bubble ──────────────────────────────────────────────────────── */
