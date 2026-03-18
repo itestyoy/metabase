@@ -61,15 +61,48 @@
     [{:role    "user"
       :content (str message)}]))
 
+(def ^:private response-json-schema
+  "JSON schema for structured output — guarantees the model returns valid blocks + suggestions format."
+  {:type                 "object"
+   :properties           {:blocks      {:type  "array"
+                                        :items {:type                 "object"
+                                                :properties           {:type    {:type "string"}
+                                                :content {:type ["string" "null"]}
+                                                :card_id {:type ["integer" "null"]}
+                                                :card_ids {:type ["array" "null"]
+                                                           :items {:type "integer"}}
+                                                :dashboard_id {:type ["integer" "null"]}
+                                                :document_id {:type ["integer" "null"]}
+                                                :name    {:type ["string" "null"]}
+                                                :display {:type ["string" "null"]}
+                                                :dataset_query {:type ["object" "null"]}
+                                                :columns {:type ["array" "null"]
+                                                          :items {:type "string"}}
+                                                :rows    {:type ["array" "null"]
+                                                          :items {:type "array"
+                                                                  :items {}}}}
+                                                :required             ["type"]
+                                                :additionalProperties false}}
+                          :suggestions {:type  "array"
+                                        :items {:type "string"}}}
+   :required             ["blocks" "suggestions"]
+   :additionalProperties false})
+
 (defn- build-request-body
   "Build the complete POST body for /v1/responses."
-  [{:keys [model tools previous-response-id] :as opts}]
+  [{:keys [model tools previous-response-id instructions text-format] :as opts}]
   (cond-> {:model             model
-           ;; System prompt via `instructions` (not inside `input`)
-           :instructions      (effective-system-instructions)
+           ;; System prompt via `instructions` — use override if provided, else load from file
+           :instructions      (or instructions (effective-system-instructions))
            :input             (build-input opts)
            :store             true       ; store=true is required for previous_response_id to work
-           :max_output_tokens 65536}     ; large limit so tool call arguments (e.g. ProseMirror AST) aren't truncated
+           :max_output_tokens 65536      ; large limit so tool call arguments (e.g. ProseMirror AST) aren't truncated
+           ;; Structured output — use override if provided, else default agent_response schema
+           :text              {:format (or text-format
+                                           {:type   "json_schema"
+                                            :name   "agent_response"
+                                            :strict true
+                                            :schema response-json-schema})}}
     previous-response-id (assoc :previous_response_id previous-response-id)
     (seq tools)          (assoc :tools        tools
                                 :tool_choice  "auto")))

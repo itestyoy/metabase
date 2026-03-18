@@ -67,9 +67,8 @@ Useful to check whether a similar question already exists before creating one."
     :parameters  {:type                 "object"
                   :properties           {:query {:type        "string"
                                                  :description "Search query string."}
-                                         :type  {:anyOf       [{:type "string"
-                                                                :enum ["question" "dashboard" "collection" "table" "metric"]}
-                                                               {:type "null"}]
+                                         :type  {:type ["string" "null"]
+                                                 :enum ["question" "dashboard" "collection" "table" "metric" "model" "document" nil]
                                                  :description "Optional: restrict results to this item type. Pass null to search all types."}}
                   :required             ["query" "type"]
                   :additionalProperties false}}
@@ -163,48 +162,29 @@ or when you need column details for a single table without fetching the entire d
 
    {:type        "function"
     :name        "create_question"
-    :description "Create and save a new question (saved query) in Metabase.
-After creating, always provide the URL /question/<id> to the user."
+    :description "Create and save a new SQL question in Metabase. Use this ONLY for native SQL. For structured queries use create_notebook_question."
     :strict      true
     :parameters  {:type                 "object"
-                  :properties           {:name          {:type        "string"
-                                                         :description "Question title."}
-                                         :database_id   {:type        "integer"
-                                                         :description "Database ID this question queries."}
-                                         :sql           {:type        "string"
-                                                         :description "Native SQL query."}
-                                         :description   {:type        ["string" "null"]
-                                                         :description "Optional description of the question. Pass null if none."}
-                                         :collection_id {:type        ["integer" "null"]
-                                                         :description "Optional collection ID to save the question into. Pass null for default collection."}
-                                         :display       {:anyOf       [{:type "string"
-                                                                        :enum ["table" "bar" "line" "pie" "scalar" "area" "row" "progress" "funnel" "scatter"]}
-                                                                       {:type "null"}]
-                                                         :description "Visualization type. Pass null to use default (table)."}}
+                  :properties           {:name          {:type "string" :description "Question title."}
+                                         :database_id   {:type "integer" :description "Database ID."}
+                                         :sql           {:type "string" :description "Native SQL query."}
+                                         :description   {:type ["string" "null"] :description "Optional description."}
+                                         :collection_id {:type ["integer" "null"] :description "Collection ID."}
+                                         :display       {:type ["string" "null"] :enum ["table" "bar" "line" "pie" "scalar" "area" "row" "progress" "funnel" "scatter" nil] :description "Visualization type."}}
                   :required             ["name" "database_id" "sql" "description" "collection_id" "display"]
                   :additionalProperties false}}
 
    {:type        "function"
     :name        "update_question"
-    :description "Update an existing saved question (card). You can change its name, description, SQL query,
-visualization type, or move it to another collection. Only pass the fields you want to change — omitted
-fields (null) stay unchanged. Use get_card_details first to see the current state."
+    :description "Update an existing saved question. Pass null for fields you don't want to change."
     :strict      true
     :parameters  {:type                 "object"
-                  :properties           {:card_id        {:type        "integer"
-                                                          :description "ID of the question to update."}
-                                         :name           {:type        ["string" "null"]
-                                                          :description "New question title. Pass null to keep current."}
-                                         :description    {:type        ["string" "null"]
-                                                          :description "New description. Pass null to keep current."}
-                                         :sql            {:type        ["string" "null"]
-                                                          :description "New native SQL query. Pass null to keep current."}
-                                         :display        {:anyOf       [{:type "string"
-                                                                         :enum ["table" "bar" "line" "pie" "scalar" "area" "row"]}
-                                                                        {:type "null"}]
-                                                          :description "New visualization type. Pass null to keep current."}
-                                         :collection_id  {:type        ["integer" "null"]
-                                                          :description "Move to this collection. Pass null to keep current."}}
+                  :properties           {:card_id        {:type "integer" :description "ID of the question to update."}
+                                         :name           {:type ["string" "null"] :description "New title."}
+                                         :description    {:type ["string" "null"] :description "New description."}
+                                         :sql            {:type ["string" "null"] :description "New SQL query."}
+                                         :display        {:type ["string" "null"] :enum ["table" "bar" "line" "pie" "scalar" "area" "row" "progress" "funnel" "scatter" nil] :description "New visualization type."}
+                                         :collection_id  {:type ["integer" "null"] :description "Move to this collection."}}
                   :required             ["card_id" "name" "description" "sql" "display" "collection_id"]
                   :additionalProperties false}}
 
@@ -308,17 +288,6 @@ Returns metric IDs, names, descriptions, and their source tables."
                   :required             ["metric_id"]
                   :additionalProperties false}}
    {:type        "function"
-    :name        "get_mbql_guide"
-    :description "Get the full MBQL (Metabase Query Language) syntax reference for building structured queries.
-Returns field reference formats, aggregation types, filter operators, join syntax, order-by, expressions,
-and display types. You MUST call this before building any MBQL query for notebook_link or create_notebook_question."
-    :strict      true
-    :parameters  {:type                 "object"
-                  :properties           {}
-                  :required             []
-                  :additionalProperties false}}
-
-   {:type        "function"
     :name        "get_sql_guide"
     :description "Get SQL syntax guide for a specific database engine. Returns quoting rules, date/time functions,
 string functions, and other dialect-specific best practices. You MUST call this before writing any SQL query
@@ -328,17 +297,6 @@ to ensure correct syntax for the target database."
                   :properties           {:database_id {:type        "integer"
                                                        :description "ID of the database you will write SQL for."}}
                   :required             ["database_id"]
-                  :additionalProperties false}}
-
-   {:type        "function"
-    :name        "get_document_guide"
-    :description "Get the full Metabase Document authoring guide: ProseMirror AST node types, text formatting marks,
-embedded cards, smart links, and best practices. You MUST call this before creating or updating any document
-to ensure the AST structure is valid."
-    :strict      true
-    :parameters  {:type                 "object"
-                  :properties           {}
-                  :required             []
                   :additionalProperties false}}
 
    {:type        "function"
@@ -374,51 +332,116 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
 
    {:type        "function"
     :name        "create_notebook_question"
-    :description "Create and save a new question using a structured MBQL query (notebook mode).
-Use this instead of create_question when you want to save a question with a structured query
-rather than raw SQL. The dataset_query must be a valid Metabase MBQL structured query object.
-This is the PREFERRED way to create questions — use create_question (SQL) only when the user explicitly asks for SQL."
+    :description "Create and save a question using structured params. The backend builds MBQL automatically. PREFERRED way to create questions."
     :strict      true
     :parameters  {:type                 "object"
-                  :properties           {:name          {:type        "string"
-                                                         :description "Question title."}
-                                         :database_id   {:type        "integer"
-                                                         :description "Database ID this question queries."}
-                                         :dataset_query {:type        "string"
-                                                         :description "The MBQL inner query as a JSON string. Must contain EXACTLY ONE of: \"source-table\": <table_id> (for raw tables) OR \"source-card\": <card_id> (for saved questions/models) — NEVER both. Optional keys: aggregation, breakout, filter, order-by, limit, joins, expressions. Pass ONLY the inner query object, NOT the outer {type,database,query} wrapper. Example: {\"source-table\": 5, \"aggregation\": [[\"count\"]], \"breakout\": [[\"field\", 12, {\"temporal-unit\": \"month\"}]]}"}
-                                         :display       {:anyOf       [{:type "string"
-                                                                        :enum ["table" "bar" "line" "pie" "scalar" "area" "row" "progress" "funnel" "scatter"]}
-                                                                       {:type "null"}]
-                                                         :description "Visualization type. Pass null to use default (table)."}
-                                         :description   {:type        ["string" "null"]
-                                                         :description "Optional description of the question. Pass null if none."}
-                                         :collection_id {:type        ["integer" "null"]
-                                                         :description "Optional collection ID to save the question into. Pass null for default collection."}}
-                  :required             ["name" "database_id" "dataset_query" "display" "description" "collection_id"]
+                  :properties           {:name          {:type "string" :description "Question title."}
+                                         :database_id   {:type "integer" :description "Database ID."}
+                                         :source_table  {:type ["integer" "null"] :description "Table ID to query. Use this OR source_card, never both."}
+                                         :source_card   {:type ["integer" "null"] :description "Saved question/model ID to query. Use this OR source_table, never both."}
+                                         :aggregations  {:type ["array" "null"]
+                                                         :items {:type "object"
+                                                                 :properties {:type       {:type "string" :enum ["count" "sum" "avg" "min" "max" "distinct" "metric" "divide" "multiply" "subtract" "add"]}
+                                                                              :field_id   {:type ["integer" "null"] :description "Field ID for sum/avg/min/max/distinct."}
+                                                                              :metric_id  {:type ["integer" "null"] :description "Metric ID for type=metric."}
+                                                                              :metric_id_1 {:type ["integer" "null"] :description "First metric for divide/multiply/subtract/add."}
+                                                                              :metric_id_2 {:type ["integer" "null"] :description "Second metric for divide/multiply/subtract/add."}
+                                                                              :scalar     {:type ["number" "null"] :description "Multiply result by this number (e.g. 1000 for eCPM)."}}
+                                                                 :required ["type" "field_id" "metric_id" "metric_id_1" "metric_id_2" "scalar"]
+                                                                 :additionalProperties false}
+                                                         :description "Aggregations. Use type=metric for saved metrics, type=divide for metric1/metric2."}
+                                         :breakouts     {:type ["array" "null"]
+                                                         :items {:type "object"
+                                                                 :properties {:field_id      {:type "integer"}
+                                                                              :temporal_unit {:type ["string" "null"] :enum ["minute" "hour" "day" "week" "month" "quarter" "year" nil]}}
+                                                                 :required ["field_id" "temporal_unit"]
+                                                                 :additionalProperties false}
+                                                         :description "Group by fields. Use temporal_unit for date fields."}
+                                         :filters       {:type ["array" "null"]
+                                                         :items {:type "object"
+                                                                 :properties {:operator {:type "string" :enum ["=" "!=" ">" "<" ">=" "<=" "between" "contains" "does-not-contain" "starts-with" "ends-with" "is-null" "not-null" "is-empty" "not-empty" "time-interval"]}
+                                                                              :field_id {:type "integer"}
+                                                                              :value    {:type ["string" "number" "boolean" "null"] :description "Filter value. For time-interval: number of units (e.g. -7 for last 7)."}
+                                                                              :value2   {:type ["string" "number" "null"] :description "Second value for between. For time-interval: unit string (day/week/month/year)."}
+                                                                              }
+                                                                 :required ["operator" "field_id" "value" "value2"]
+                                                                 :additionalProperties false}
+                                                         :description "Filters. For time-interval: value=-7, value2=\"day\" means last 7 days."}
+                                         :order_by      {:type ["array" "null"]
+                                                         :items {:type "object"
+                                                                 :properties {:field_id          {:type ["integer" "null"] :description "Field ID to sort by. null if sorting by aggregation."}
+                                                                              :aggregation_index {:type ["integer" "null"] :description "Aggregation index (0-based) to sort by. null if sorting by field."}
+                                                                              :direction         {:type "string" :enum ["asc" "desc"]}}
+                                                                 :required ["field_id" "aggregation_index" "direction"]
+                                                                 :additionalProperties false}}
+                                         :limit         {:type ["integer" "null"] :description "Max rows to return."}
+                                         :display       {:type ["string" "null"] :enum ["table" "bar" "line" "pie" "scalar" "area" "row" "progress" "funnel" "scatter" nil] :description "Visualization type."}
+                                         :description   {:type ["string" "null"] :description "Optional description."}
+                                         :collection_id {:type ["integer" "null"] :description "Collection ID to save into."}}
+                  :required             ["name" "database_id" "source_table" "source_card" "aggregations" "breakouts" "filters" "order_by" "limit" "display" "description" "collection_id"]
                   :additionalProperties false}}
    {:type        "function"
     :name        "run_mbql_query"
-    :description "Run a structured MBQL query and return the results without saving. Use this to preview notebook-mode query results before saving with create_notebook_question."
+    :description "Run a structured query and return results without saving. The backend builds MBQL from structured params."
     :strict      true
     :parameters  {:type                 "object"
-                  :properties           {:database_id   {:type        "integer"
-                                                         :description "Database ID to run the query against."}
-                                         :dataset_query {:type        "string"
-                                                         :description "The MBQL inner query as a JSON string. Must contain EXACTLY ONE of: \"source-table\": <table_id> (for raw tables) OR \"source-card\": <card_id> (for saved questions/models) — NEVER both. Optional keys: aggregation, breakout, filter, order-by, limit, joins, expressions. Pass ONLY the inner query object, NOT the outer {type,database,query} wrapper. Example: {\"source-table\": 5, \"aggregation\": [[\"count\"]], \"breakout\": [[\"field\", 12, {\"temporal-unit\": \"month\"}]]}"}}
-                  :required             ["database_id" "dataset_query"]
+                  :properties           {:database_id   {:type "integer" :description "Database ID."}
+                                         :source_table  {:type ["integer" "null"] :description "Table ID. Use this OR source_card."}
+                                         :source_card   {:type ["integer" "null"] :description "Saved question/model ID. Use this OR source_table."}
+                                         :aggregations  {:type ["array" "null"]
+                                                         :items {:type "object"
+                                                                 :properties {:type       {:type "string" :enum ["count" "sum" "avg" "min" "max" "distinct" "metric" "divide" "multiply" "subtract" "add"]}
+                                                                              :field_id   {:type ["integer" "null"]}
+                                                                              :metric_id  {:type ["integer" "null"]}
+                                                                              :metric_id_1 {:type ["integer" "null"]}
+                                                                              :metric_id_2 {:type ["integer" "null"]}
+                                                                              :scalar     {:type ["number" "null"]}}
+                                                                 :required ["type" "field_id" "metric_id" "metric_id_1" "metric_id_2" "scalar"]
+                                                                 :additionalProperties false}}
+                                         :breakouts     {:type ["array" "null"]
+                                                         :items {:type "object"
+                                                                 :properties {:field_id {:type "integer"} :temporal_unit {:type ["string" "null"] :enum ["minute" "hour" "day" "week" "month" "quarter" "year" nil]}}
+                                                                 :required ["field_id" "temporal_unit"]
+                                                                 :additionalProperties false}}
+                                         :filters       {:type ["array" "null"]
+                                                         :items {:type "object"
+                                                                 :properties {:operator {:type "string" :enum ["=" "!=" ">" "<" ">=" "<=" "between" "contains" "does-not-contain" "starts-with" "ends-with" "is-null" "not-null" "is-empty" "not-empty" "time-interval"]}
+                                                                              :field_id {:type "integer"}
+                                                                              :value    {:type ["string" "number" "boolean" "null"]}
+                                                                              :value2   {:type ["string" "number" "null"]}}
+                                                                 :required ["operator" "field_id" "value" "value2"]
+                                                                 :additionalProperties false}}
+                                         :order_by      {:type ["array" "null"]
+                                                         :items {:type "object"
+                                                                 :properties {:field_id {:type ["integer" "null"]} :aggregation_index {:type ["integer" "null"]} :direction {:type "string" :enum ["asc" "desc"]}}
+                                                                 :required ["field_id" "aggregation_index" "direction"]
+                                                                 :additionalProperties false}}
+                                         :limit         {:type ["integer" "null"]}}
+                  :required             ["database_id" "source_table" "source_card" "aggregations" "breakouts" "filters" "order_by" "limit"]
                   :additionalProperties false}}
    {:type        "function"
     :name        "create_document"
-    :description "Create a new Metabase Document — a rich-text page that can embed questions (cards) and smart links. Use this when the user asks to create a report, writeup, analysis page, or document. The content is a ProseMirror AST as a JSON string."
+    :description "Create a new Metabase Document. Pass structured nodes — the backend converts to ProseMirror AST automatically. Start with title + 1-2 nodes, use append_to_document for the rest."
     :strict      true
     :parameters  {:type                 "object"
                   :properties           {:name          {:type        "string"
                                                          :description "Document title."}
-                                         :content       {:type        "string"
-                                                         :description "The document body as a ProseMirror AST JSON string. Structure: {\"type\":\"doc\",\"content\":[...nodes]}. Supported node types: paragraph ({\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"...\"}]}), heading ({\"type\":\"heading\",\"attrs\":{\"level\":2},\"content\":[...]}), bulletList/orderedList with listItem children, codeBlock, blockquote, cardEmbed ({\"type\":\"cardEmbed\",\"attrs\":{\"id\":<card_id>}}). For simple text documents, wrap paragraphs in a doc node."}
+                                         :nodes         {:type  "array"
+                                                         :items {:type                 "object"
+                                                                 :properties           {:type     {:type "string" :enum ["heading" "paragraph" "bullet_list" "ordered_list" "card_embed" "code_block" "blockquote" "horizontal_rule" "image"]}
+                                                                                        :text     {:type ["string" "null"] :description "Text content. For paragraph, heading, code_block, blockquote."}
+                                                                                        :level    {:type ["integer" "null"] :description "Heading level 1-6. Only for type=heading."}
+                                                                                        :items    {:type ["array" "null"] :items {:type "string"} :description "List items as strings. Only for bullet_list/ordered_list."}
+                                                                                        :card_id  {:type ["integer" "null"] :description "Card ID to embed. Only for type=card_embed."}
+                                                                                        :src      {:type ["string" "null"] :description "Image URL. Only for type=image."}
+                                                                                        :alt      {:type ["string" "null"] :description "Image alt text. Only for type=image."}
+                                                                                        :language {:type ["string" "null"] :description "Code language. Only for type=code_block."}}
+                                                                 :required             ["type" "text" "level" "items" "card_id" "src" "alt" "language"]
+                                                                 :additionalProperties false}
+                                                         :description "Array of content nodes. Each node has a type and relevant fields."}
                                          :collection_id {:type        ["integer" "null"]
                                                          :description "Collection ID to save the document into. Pass null for default."}}
-                  :required             ["name" "content" "collection_id"]
+                  :required             ["name" "nodes" "collection_id"]
                   :additionalProperties false}}
    {:type        "function"
     :name        "get_document"
@@ -431,60 +454,70 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                   :additionalProperties false}}
    {:type        "function"
     :name        "update_document"
-    :description "Update an existing Metabase Document. You can change the name, content, collection, or archive it."
+    :description "Update an existing Metabase Document. Pass null for fields you don't want to change. To replace content, pass structured nodes — backend converts to ProseMirror AST."
     :strict      true
     :parameters  {:type                 "object"
-                  :properties           {:document_id   {:type        "integer"
-                                                         :description "The document ID to update."}
-                                         :name          {:type        ["string" "null"]
-                                                         :description "New document name. Pass null to keep unchanged."}
-                                         :content       {:type        ["string" "null"]
-                                                         :description "New ProseMirror AST JSON string. Pass null to keep unchanged."}
-                                         :collection_id {:type        ["integer" "null"]
-                                                         :description "New collection ID. Pass null to keep unchanged."}
-                                         :archived      {:type        ["boolean" "null"]
-                                                         :description "Set to true to archive, false to unarchive. Pass null to keep unchanged."}}
-                  :required             ["document_id" "name" "content" "collection_id" "archived"]
+                  :properties           {:document_id   {:type "integer" :description "The document ID to update."}
+                                         :name          {:type ["string" "null"] :description "New document name."}
+                                         :nodes         {:type ["array" "null"]
+                                                         :items {:type "object"
+                                                                 :properties {:type {:type "string" :enum ["heading" "paragraph" "bullet_list" "ordered_list" "card_embed" "code_block" "blockquote" "horizontal_rule" "image"]}
+                                                                              :text {:type ["string" "null"]}
+                                                                              :level {:type ["integer" "null"]}
+                                                                              :items {:type ["array" "null"] :items {:type "string"}}
+                                                                              :card_id {:type ["integer" "null"]}
+                                                                              :src {:type ["string" "null"]}
+                                                                              :alt {:type ["string" "null"]}
+                                                                              :language {:type ["string" "null"]}}
+                                                                 :required ["type" "text" "level" "items" "card_id" "src" "alt" "language"]
+                                                                 :additionalProperties false}
+                                                         :description "New document content as structured nodes. Pass null to keep unchanged."}
+                                         :collection_id {:type ["integer" "null"] :description "New collection ID."}
+                                         :archived      {:type ["boolean" "null"] :description "Archive/unarchive."}}
+                  :required             ["document_id" "name" "nodes" "collection_id" "archived"]
                   :additionalProperties false}}
    {:type        "function"
     :name        "append_to_document"
-    :description "Append new sections to the END of an existing Metabase Document. Use this to build documents incrementally — add 1-3 sections at a time without reading or rewriting the full document. Much more efficient than get_document + update_document for long documents."
+    :description "Append new sections to the END of an existing Metabase Document. Pass structured nodes — the backend converts to ProseMirror AST automatically. Send 1-3 nodes per call."
     :strict      true
     :parameters  {:type                 "object"
                   :properties           {:document_id {:type        "integer"
                                                        :description "The document ID to append to."}
-                                         :nodes       {:type        "string"
-                                                       :description "A JSON array of ProseMirror nodes to append. Example: [{\"type\":\"heading\",\"attrs\":{\"level\":2},\"content\":[{\"type\":\"text\",\"text\":\"New Section\"}]},{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Some text.\"}]}]"}}
+                                         :nodes       {:type  "array"
+                                                       :items {:type                 "object"
+                                                               :properties           {:type     {:type "string" :enum ["heading" "paragraph" "bullet_list" "ordered_list" "card_embed" "code_block" "blockquote" "horizontal_rule" "image"]}
+                                                                                      :text     {:type ["string" "null"] :description "Text content."}
+                                                                                      :level    {:type ["integer" "null"] :description "Heading level 1-6."}
+                                                                                      :items    {:type ["array" "null"] :items {:type "string"} :description "List items as strings."}
+                                                                                      :card_id  {:type ["integer" "null"] :description "Card ID to embed."}
+                                                                                      :src      {:type ["string" "null"] :description "Image URL."}
+                                                                                      :alt      {:type ["string" "null"] :description "Image alt text."}
+                                                                                      :language {:type ["string" "null"] :description "Code language."}}
+                                                               :required             ["type" "text" "level" "items" "card_id" "src" "alt" "language"]
+                                                               :additionalProperties false}
+                                                       :description "Array of content nodes to append."}}
                   :required             ["document_id" "nodes"]
                   :additionalProperties false}}
    {:type        "function"
-    :name        "validate_document_nodes"
-    :description "Validate ProseMirror AST nodes BEFORE sending them to create_document or append_to_document. Returns OK or a list of errors to fix. You MUST call this before every create_document and append_to_document call."
+    :name        "delegate_task"
+    :description "Delegate a research task to a sub-agent with a clean context. The sub-agent gets its own conversation with AI, has access to ALL the same tools, and returns a concise text result. Use this when you need to: (1) search for specific metrics/questions/dashboards without polluting your context, (2) investigate a specific data question, (3) look up field details or metric definitions, (4) load a guide and extract specific information. The sub-agent has max 10 tool iterations and returns plain text summary."
     :strict      true
     :parameters  {:type                 "object"
-                  :properties           {:nodes {:type        "string"
-                                                 :description "JSON string to validate. For create_document: the full doc node {\"type\":\"doc\",...}. For append_to_document: the array of nodes [{...},{...}]."}}
-                  :required             ["nodes"]
+                  :properties           {:task          {:type        "string"
+                                                         :description "Clear description of what the sub-agent should do. Be specific: include database IDs, table names, metric names, etc. Example: \"Find all metrics related to ad revenue in database 2 and return their IDs and names\""}
+                                         :response_format {:type        "string"
+                                                           :description "How the sub-agent should format its response. Example: \"Return a numbered list of metric ID: name pairs\" or \"Return ONLY the JSON template for heading + paragraph + card embed, nothing else\" or \"Return a bullet list with field_id, field_name, field_type for each column\""}}
+                  :required             ["task" "response_format"]
                   :additionalProperties false}}
-   {:type        "function"
-    :name        "validate_mbql_query"
-    :description "Validate an MBQL query by compiling it to SQL WITHOUT executing. Returns the compiled SQL if valid, or an error message describing what's wrong. You MUST call this before every run_mbql_query, create_notebook_question, and notebook_link to catch structural errors early."
-    :strict      true
-    :parameters  {:type                 "object"
-                  :properties           {:database_id   {:type        "integer"
-                                                         :description "Database ID to compile the query against."}
-                                         :dataset_query {:type        "string"
-                                                         :description "JSON string of the MBQL dataset_query to validate. Same format as run_mbql_query."}}
-                  :required             ["database_id" "dataset_query"]
-                  :additionalProperties false}}])
+   ])
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Tool implementations
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
-(defn- run-search
-  "Run Metabase search engine with the given query, model filter, and limit."
-  [query & {:keys [models table-db-id limit] :or {limit 50}}]
+(defn- run-search-single
+  "Run a single search query."
+  [query {:keys [models table-db-id limit] :or {limit 50}}]
   (let [ctx (cond-> {:search-string         query
                      :limit                 limit
                      :current-user-id       api/*current-user-id*
@@ -495,10 +528,41 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
               models      (assoc :models models)
               table-db-id (assoc :table-db-id table-db-id))]
     (try
-      (:data (search/search (search/search-context ctx)))
+      (or (:data (search/search (search/search-context ctx))) [])
       (catch Exception e
         (log/warn e "Search failed" {:term query})
         []))))
+
+(defn- run-search
+  "Run Metabase search engine with word-level splitting and union.
+   First tries the full query. If no results, splits into individual words
+   and searches each, then deduplicates by :id."
+  [query & {:keys [models table-db-id limit] :as opts-map}]
+  (let [opts   (or opts-map {})
+        ;; Try full query first
+        full-results (run-search-single query opts)]
+    (if (seq full-results)
+      full-results
+      ;; No results — split into words and search each
+      (let [words (->> (str/split (str/trim query) #"[\s_\-]+")
+                       (filter #(>= (count %) 2))
+                       distinct)
+            limit-per-word (max 10 (quot (or limit 50) (max 1 (count words))))]
+        (if (<= (count words) 1)
+          full-results ;; single word already tried
+          (let [all-results (->> words
+                                 (mapcat #(run-search-single % (assoc opts :limit limit-per-word)))
+                                 ;; deduplicate by id
+                                 (reduce (fn [acc item]
+                                           (if (contains? (:seen acc) (:id item))
+                                             acc
+                                             (-> acc
+                                                 (update :seen conj (:id item))
+                                                 (update :items conj item))))
+                                         {:seen #{} :items []})
+                                 :items
+                                 (take (or limit 50)))]
+            all-results))))))
 
 (defn- list-databases [search-term]
   (let [dbs (if (seq search-term)
@@ -648,34 +712,94 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                    {:error (.getMessage e)}))]
     (format-qp-result result)))
 
-(defn- parse-dataset-query
-  "Parse the dataset_query string the AI provides.
-   Returns {:query-map <inner-query-map> :database-id <id-or-nil>}.
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;; Simplified params → MBQL converter
+;;; ─────────────────────────────────────────────────────────────────────────────
 
-   Handles two shapes the AI may send:
-   1. Inner query only: {\"source-table\": 5, ...}
-      → query-map = that map, database-id = nil (caller must supply it)
-   2. Full outer wrapper: {\"type\":\"query\",\"database\":2,\"query\":{\"source-table\":5,...}}
-      → query-map = the inner :query value, database-id = 2 (extracted from wrapper)"
-  [dataset-query-str]
-  (let [raw (if (string? dataset-query-str)
-              (json/parse-string dataset-query-str)
-              dataset-query-str)]
-    (if (contains? raw "query")
-      {:query-map   (get raw "query")
-       :database-id (get raw "database")}
-      {:query-map   raw
-       :database-id nil})))
+(defn- field-ref
+  "Build a field reference from field_id and optional temporal_unit."
+  ([field-id] ["field" field-id nil])
+  ([field-id temporal-unit]
+   (if temporal-unit
+     ["field" field-id {"temporal-unit" temporal-unit}]
+     ["field" field-id nil])))
 
-(defn- run-mbql-query [database-id dataset-query-str]
-  (let [{:keys [query-map] db-from-json :database-id} (parse-dataset-query dataset-query-str)
-        effective-db-id (or database-id db-from-json)
-        _  (when-not effective-db-id
-             (throw (ex-info "database_id is required: pass it as the database_id argument or include \"database\" in the outer query wrapper." {})))
-        db (t2/select-one :model/Database :id effective-db-id)
+(defn- build-aggregation
+  "Convert a simplified aggregation map to MBQL clause."
+  [{:strs [type field_id metric_id metric_id_1 metric_id_2 scalar]}]
+  (let [agg (case type
+              "count"    ["count"]
+              "sum"      ["sum" (field-ref field_id)]
+              "avg"      ["avg" (field-ref field_id)]
+              "min"      ["min" (field-ref field_id)]
+              "max"      ["max" (field-ref field_id)]
+              "distinct" ["distinct" (field-ref field_id)]
+              "metric"   ["metric" metric_id]
+              "divide"   ["/" ["metric" metric_id_1] ["metric" metric_id_2]]
+              "multiply" ["*" ["metric" metric_id_1] ["metric" metric_id_2]]
+              "subtract" ["-" ["metric" metric_id_1] ["metric" metric_id_2]]
+              "add"      ["+" ["metric" metric_id_1] ["metric" metric_id_2]]
+              ["count"])]
+    (if (and scalar (not= type "metric") (#{"divide" "multiply" "subtract" "add"} type))
+      ["*" agg scalar]
+      agg)))
+
+(defn- build-filter
+  "Convert a simplified filter map to MBQL clause."
+  [{:strs [operator field_id value value2]}]
+  (case operator
+    ("=" "!=" ">" "<" ">=" "<=")
+    [operator (field-ref field_id) value]
+
+    "between"
+    ["between" (field-ref field_id) value value2]
+
+    ("contains" "does-not-contain" "starts-with" "ends-with")
+    [operator (field-ref field_id) value]
+
+    ("is-null" "not-null" "is-empty" "not-empty")
+    [operator (field-ref field_id)]
+
+    "time-interval"
+    ["time-interval" (field-ref field_id) value value2]
+
+    ;; fallback
+    ["=" (field-ref field_id) value]))
+
+(defn- build-order-by
+  "Convert a simplified order-by map to MBQL clause."
+  [{:strs [field_id aggregation_index direction]}]
+  (let [dir (or direction "asc")]
+    (if aggregation_index
+      [dir ["aggregation" aggregation_index]]
+      [dir (field-ref field_id)])))
+
+(defn- structured-params->mbql-query
+  "Convert structured tool params to an MBQL inner query map."
+  [{:strs [source_table source_card aggregations breakouts filters order_by limit]}]
+  (cond-> {}
+    source_table           (assoc "source-table" source_table)
+    source_card            (assoc "source-card" source_card)
+    (seq aggregations)     (assoc "aggregation" (mapv build-aggregation aggregations))
+    (seq breakouts)        (assoc "breakout" (mapv (fn [{:strs [field_id temporal_unit]}]
+                                                     (field-ref field_id temporal_unit))
+                                                   breakouts))
+    (seq filters)          (assoc "filter" (if (= 1 (count filters))
+                                             (build-filter (first filters))
+                                             (into ["and"] (mapv build-filter filters))))
+    (seq order_by)         (assoc "order-by" (mapv build-order-by order_by))
+    limit                  (assoc "limit" limit)))
+
+
+(defn- run-mbql-query [args]
+  (let [query-map   (structured-params->mbql-query args)
+        database-id (get args "database_id")
+        _  (when-not database-id
+             (throw (ex-info "database_id is required." {})))
+        db (t2/select-one :model/Database :id database-id)
         _  (api/check-404 db)
         _  (api/check-403 (mi/can-read? db))
-        query  {:database effective-db-id
+        query  {:database database-id
                 :type     :query
                 :query    query-map}
         result (try
@@ -1053,8 +1177,6 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                       {:env-var env-var :path path})))
     (slurp f)))
 
-(defn- get-mbql-guide []
-  (load-guide-file! "MB_AI_AGENT_MBQL_GUIDE_FILE"))
 
 (defn- parse-sql-guide-sections
   "Parse the SQL guide file into a map of engine-name -> section-text.
@@ -1082,8 +1204,6 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                  (:name db) (:id db) engine)
          (or guide "No specific SQL guide available for this engine."))))
 
-(defn- get-document-guide []
-  (load-guide-file! "MB_AI_AGENT_DOCUMENT_GUIDE_FILE"))
 
 (defn- get-metrics-guide []
   (load-guide-file! "MB_AI_AGENT_METRICS_GUIDE_FILE"))
@@ -1094,198 +1214,17 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
 (defn- get-analytical-guide []
   (load-guide-file! "MB_AI_AGENT_ANALYTICAL_GUIDE_FILE"))
 
-;;; ─────────────────────────────────────────────────────────────────────────────
-;;; ProseMirror AST validator
-;;; ─────────────────────────────────────────────────────────────────────────────
 
-(def ^:private valid-block-types
-  #{"paragraph" "heading" "bulletList" "orderedList" "blockquote"
-    "codeBlock" "horizontalRule" "resizeNode" "image" "table"})
-
-(def ^:private valid-inline-types #{"text"})
-
-(def ^:private camel-case-types
-  {"bullet_list"     "bulletList"
-   "ordered_list"    "orderedList"
-   "list_item"       "listItem"
-   "code_block"      "codeBlock"
-   "horizontal_rule" "horizontalRule"
-   "card_embed"      "cardEmbed"
-   "resize_node"     "resizeNode"
-   "table_row"       "tableRow"
-   "table_cell"      "tableCell"
-   "table_header"    "tableHeader"})
-
-(def ^:private no-content-types #{"horizontalRule" "image"})
-
-(defn- validate-node
-  "Validate a single ProseMirror node. Returns a vector of error strings (empty = valid)."
-  [node path]
-  (if-not (map? node)
-    [(str path ": node must be a JSON object, got " (type node))]
-    (let [t    (or (get node "type") (get node :type))
-          errs (transient [])]
-      ;; Check type exists
-      (when-not t
-        (conj! errs (str path ": missing \"type\" field")))
-
-      (when t
-        ;; Check snake_case
-        (when-let [fix (get camel-case-types (name t))]
-          (conj! errs (str path ": wrong type \"" t "\" (snake_case). Use \"" fix "\"")))
-
-        ;; Heading must have attrs.level as integer
-        (when (= (name t) "heading")
-          (let [attrs (or (get node "attrs") (get node :attrs))]
-            (when-not attrs
-              (conj! errs (str path ": heading missing \"attrs\":{\"level\":N}")))
-            (when attrs
-              (let [level (or (get attrs "level") (get attrs :level))]
-                (when-not (integer? level)
-                  (conj! errs (str path ": heading level must be integer 1-6, got " (pr-str level))))))))
-
-        ;; cardEmbed must have attrs.id, must be inside resizeNode
-        (when (= (name t) "cardEmbed")
-          (let [attrs (or (get node "attrs") (get node :attrs))
-                id    (when attrs (or (get attrs "id") (get attrs :id)))]
-            (when-not id
-              (conj! errs (str path ": cardEmbed missing attrs.id (use \"id\", not \"card_id\")")))
-            (when (or (get attrs "card_id") (get attrs :card_id))
-              (conj! errs (str path ": cardEmbed uses \"card_id\" — must be \"id\"")))))
-
-        ;; No content on leaf nodes
-        (when (contains? no-content-types (name t))
-          (let [content (or (get node "content") (get node :content))]
-            (when (some? content)
-              (conj! errs (str path ": " t " must NOT have a \"content\" field")))))
-
-        ;; text node checks
-        (when (= (name t) "text")
-          (let [text-val (or (get node "text") (get node :text))]
-            (when-not (string? text-val)
-              (conj! errs (str path ": text node missing \"text\" string field")))
-            (when (or (get node "content") (get node :content))
-              (conj! errs (str path ": text node must NOT have \"content\"")))))
-
-        ;; listItem must contain paragraph
-        (when (= (name t) "listItem")
-          (let [content (or (get node "content") (get node :content))]
-            (when (or (not (sequential? content)) (empty? content))
-              (conj! errs (str path ": listItem must have content with at least one paragraph")))
-            (when (sequential? content)
-              (doseq [child content]
-                (let [ct (or (get child "type") (get child :type))]
-                  (when (= (name (or ct "")) "text")
-                    (conj! errs (str path ": text directly inside listItem — wrap in paragraph"))))))))
-
-        ;; bulletList/orderedList must contain only listItem
-        (when (#{"bulletList" "orderedList"} (name t))
-          (let [content (or (get node "content") (get node :content))]
-            (when (or (not (sequential? content)) (empty? content))
-              (conj! errs (str path ": " t " must have at least one listItem")))
-            (when (sequential? content)
-              (doseq [child content]
-                (let [ct (name (or (get child "type") (get child :type) ""))]
-                  (when-not (= ct "listItem")
-                    (conj! errs (str path ": " t " can only contain listItem, found \"" ct "\""))))))))
-
-        ;; paragraph/heading should only contain text nodes
-        (when (#{"paragraph" "heading"} (name t))
-          (let [content (or (get node "content") (get node :content))]
-            (when (sequential? content)
-              (doseq [child content]
-                (let [ct (name (or (get child "type") (get child :type) ""))]
-                  (when-not (valid-inline-types ct)
-                    (conj! errs (str path ": " t " can only contain text nodes, found \"" ct "\""))))))))
-
-        ;; marks only on text nodes
-        (when (and (not= (name t) "text")
-                   (or (get node "marks") (get node :marks)))
-          (conj! errs (str path ": \"marks\" only allowed on text nodes, found on \"" t "\"")))
-
-        ;; Recurse into content
-        (let [content (or (get node "content") (get node :content))]
-          (when (sequential? content)
-            (doseq [[i child] (map-indexed vector content)]
-              (let [child-errs (validate-node child (str path ".content[" i "]"))]
-                (doseq [e child-errs] (conj! errs e)))))))
-
-      (persistent! errs))))
-
-(defn- validate-mbql-query [{:strs [database_id dataset_query]}]
-  (let [{:keys [query-map] db-from-json :database-id} (parse-dataset-query dataset_query)
-        effective-db-id (or database_id db-from-json)]
-    (when-not effective-db-id
-      (throw (ex-info "database_id is required." {})))
-    (let [db (t2/select-one :model/Database :id effective-db-id)
-          _  (api/check-404 db)
-          _  (api/check-403 (mi/can-read? db))
-          query    {:database effective-db-id
-                    :type     :query
-                    :query    query-map}
-          compile-fn (requiring-resolve 'metabase.query-processor.compile/compile)]
-      (try
-        (let [compiled (compile-fn query)
-              sql      (if (map? compiled) (:query compiled) (str compiled))]
-          (str "OK — query is valid.\n\nCompiled SQL:\n" sql))
-        (catch Exception e
-          (str "INVALID MBQL — compilation failed:\n" (.getMessage e)
-               "\n\nFix the error and call validate_mbql_query again."))))))
-
-(defn- validate-document-nodes [{:strs [nodes]}]
-  (let [parsed (try
-                 (json/parse-string nodes)
-                 (catch Exception e
-                   (str "INVALID JSON: " (.getMessage e))))]
-    (if (string? parsed)
-      parsed
-      (let [node-list (if (and (map? parsed) (= (get parsed "type") "doc"))
-                        ;; create_document format: validate children of doc
-                        (let [content (get parsed "content")]
-                          (if (sequential? content)
-                            content
-                            [{:error "doc node must have \"content\" array"}]))
-                        ;; append_to_document format: array of nodes
-                        (if (sequential? parsed)
-                          parsed
-                          [{:error (str "Expected JSON array or {\"type\":\"doc\",...}, got " (type parsed))}]))
-            ;; Check for top-level errors
-            top-errors (when-let [e (:error (first node-list))]
-                         [e])
-            ;; Validate doc-level if wrapped in doc
-            doc-errors (when (and (map? parsed) (= (get parsed "type") "doc"))
-                         (let [content (get parsed "content")]
-                           (when (sequential? content)
-                             (->> content
-                                  (keep-indexed (fn [i child]
-                                                  (let [ct (or (get child "type") (get child :type) "")]
-                                                    (when (= (name ct) "text")
-                                                      (str "doc.content[" i "]: text directly inside doc — wrap in paragraph")))))
-                                  vec))))
-            ;; Validate each node
-            all-errors (if top-errors
-                         top-errors
-                         (into (vec doc-errors)
-                               (mapcat (fn [[i node]]
-                                         (validate-node node (str "node[" i "]")))
-                                       (map-indexed vector node-list))))]
-        (if (empty? all-errors)
-          "OK — all nodes are valid."
-          (str "ERRORS FOUND (" (count all-errors) "):\n"
-               (str/join "\n" (map-indexed (fn [i e] (str (inc i) ". " e)) all-errors))
-               "\n\nFix these errors and call validate_document_nodes again before submitting."))))))
-
-(defn- create-notebook-question [{:strs [name description database_id dataset_query display collection_id]}]
+(defn- create-notebook-question [{:strs [name description database_id display collection_id] :as args}]
   (when collection_id
     (let [coll (t2/select-one :model/Collection :id collection_id)]
       (api/check-404 coll)
       (api/check-403 (mi/can-write? coll))))
-  (let [{:keys [query-map] db-from-json :database-id} (parse-dataset-query dataset_query)
-        effective-db-id (or database_id db-from-json)
-        _  (when-not effective-db-id
-             (throw (ex-info "database_id is required: pass it as the database_id argument or include \"database\" in the outer query wrapper." {})))
+  (let [query-map (structured-params->mbql-query args)
+        _  (when-not database_id
+             (throw (ex-info "database_id is required." {})))
         card-data (cond-> {:name          name
-                           :dataset_query {:database effective-db-id
+                           :dataset_query {:database database_id
                                            :type     :query
                                            :query    query-map}
                            :display       (keyword (or display "table"))
@@ -1300,18 +1239,77 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
 ;;; Document tools
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
-(defn- create-document [{:strs [name content collection_id]}]
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;; Simplified node → ProseMirror AST converter
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+(defn- text-node [text]
+  {:type "text" :text text})
+
+(defn- paragraph-node [text]
+  (if text
+    {:type "paragraph" :content [(text-node text)]}
+    {:type "paragraph"}))
+
+(defn- simplified->ast-node
+  "Convert a simplified node map to a ProseMirror AST node."
+  [{:strs [type text level items card_id src alt language]
+    :keys [type text level items card_id src alt language]
+    :as   node}]
+  (let [t (or (get node "type") (get node :type) type)
+        txt (or (get node "text") (get node :text) text)
+        lvl (or (get node "level") (get node :level) level)
+        itms (or (get node "items") (get node :items) items)
+        cid (or (get node "card_id") (get node :card_id) card_id)
+        img-src (or (get node "src") (get node :src) src)
+        img-alt (or (get node "alt") (get node :alt) alt)
+        lang (or (get node "language") (get node :language) language)]
+    (case t
+      "heading"          {:type "heading"
+                          :attrs {:level (or lvl 2)}
+                          :content [(text-node (or txt ""))]}
+      "paragraph"        (paragraph-node txt)
+      "bullet_list"      {:type "bulletList"
+                          :content (mapv (fn [item]
+                                          {:type "listItem"
+                                           :content [(paragraph-node item)]})
+                                        (or itms []))}
+      "ordered_list"     {:type "orderedList"
+                          :content (mapv (fn [item]
+                                          {:type "listItem"
+                                           :content [(paragraph-node item)]})
+                                        (or itms []))}
+      "card_embed"       {:type "resizeNode"
+                          :content [{:type "cardEmbed"
+                                     :attrs {:id cid :name nil}}]}
+      "code_block"       (cond-> {:type "codeBlock"
+                                  :content [(text-node (or txt ""))]}
+                           lang (assoc :attrs {:language lang}))
+      "blockquote"       {:type "blockquote"
+                          :content [(paragraph-node (or txt ""))]}
+      "horizontal_rule"  {:type "horizontalRule"}
+      "image"            {:type "image"
+                          :attrs {:src (or img-src "") :alt (or img-alt "")}}
+      ;; fallback
+      (paragraph-node (or txt (str "Unknown node type: " t))))))
+
+(defn- simplified-nodes->ast
+  "Convert an array of simplified nodes to a complete ProseMirror doc AST."
+  [nodes]
+  {:type "doc"
+   :content (mapv simplified->ast-node nodes)})
+
+(defn- simplified-nodes->ast-nodes
+  "Convert an array of simplified nodes to ProseMirror AST nodes (without doc wrapper)."
+  [nodes]
+  (mapv simplified->ast-node nodes))
+
+(defn- create-document [{:strs [name nodes collection_id]}]
   (when collection_id
     (let [coll (t2/select-one :model/Collection :id collection_id)]
       (api/check-404 coll)
       (api/check-403 (mi/can-write? coll))))
-  (let [ast (try
-              (json/parse-string content)
-              (catch Exception e
-                (throw (ex-info (str "Error: the `content` parameter is not valid JSON. "
-                                     "Make sure the ProseMirror AST is a complete, well-formed JSON string. "
-                                     "Parse error: " (.getMessage e))
-                                {:content-preview (subs content 0 (min 200 (count content)))}))))
+  (let [ast (simplified-nodes->ast nodes)
         doc (t2/insert-returning-instance! :model/Document
               {:name          name
                :document      ast
@@ -1339,18 +1337,13 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
          (format "- URL: /document/%d\n" (:id doc))
          (format "- Content (ProseMirror AST JSON):\n%s" (json/generate-string ast)))))
 
-(defn- update-document [{:strs [document_id name content collection_id archived]}]
+(defn- update-document [{:strs [document_id name nodes collection_id archived]}]
   (let [doc (t2/select-one :model/Document :id document_id)
         _   (api/check-404 doc)
         _   (api/check-403 (mi/can-write? doc))
-        parsed-content (when (some? content)
-                         (try
-                           (json/parse-string content)
-                           (catch Exception _
-                             (throw (ex-info "The `content` parameter is not valid JSON. Provide a valid ProseMirror AST JSON string." {})))))
         updates (cond-> {}
                   (some? name)          (assoc :name name)
-                  (some? content)       (assoc :document parsed-content
+                  (some? nodes)         (assoc :document (simplified-nodes->ast nodes)
                                                :content_type prose-mirror/prose-mirror-content-type)
                   (some? collection_id) (assoc :collection_id collection_id)
                   (some? archived)      (assoc :archived archived))]
@@ -1360,20 +1353,11 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
             document_id document_id)))
 
 (defn- append-to-document [{:strs [document_id nodes]}]
-  (let [doc       (t2/select-one :model/Document :id document_id)
-        _         (api/check-404 doc)
-        _         (api/check-403 (mi/can-write? doc))
-        new-nodes (try
-                    ;; Parse with keyword keys to match mi/transform-json keywordization
-                    (json/parse-string nodes true)
-                    (catch Exception e
-                      (throw (ex-info (str "Error: `nodes` is not valid JSON array. Parse error: "
-                                           (.getMessage e))
-                                      {}))))
-        _         (when-not (sequential? new-nodes)
-                    (throw (ex-info "Error: `nodes` must be a JSON array of ProseMirror nodes." {})))
+  (let [doc         (t2/select-one :model/Document :id document_id)
+        _           (api/check-404 doc)
+        _           (api/check-403 (mi/can-write? doc))
+        new-nodes   (simplified-nodes->ast-nodes nodes)
         current-ast (:document doc)
-        ;; Use keyword key :content — mi/transform-json deserializes with keywordization
         updated-ast (update current-ast :content
                             (fn [existing] (into (vec existing) new-nodes)))]
     (t2/update! :model/Document :id document_id
@@ -1388,7 +1372,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                   (let [results (run-search search-term
                                   :models #{"metric"}
                                   :table-db-id database-id
-                                  :limit 50)]
+                                  :limit 20)]
                     (cond->> results
                       table-id (filter #(= (:table_id %) table-id))))
                   ;; Direct DB query (no search term)
@@ -1450,18 +1434,124 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
   [tools]
   (vec (remove #(write-tool-names (:name %)) tools)))
 
+(def ^:private subagent-system-prompt
+  "You are a research sub-agent. Find information and return a CONCISE summary.
+You have access to Metabase tools (search, list, get details, guides).
+Rules:
+- Be concise — return just the key findings (IDs, names, values).
+- Do NOT call delegate_task (no recursive sub-agents).
+- Do NOT create/modify anything (read-only).
+- Max 10 tool calls then return what you have.
+- Follow the RESPONSE FORMAT instructions from the task.")
+
+(def ^:private max-subagent-iterations 10)
+
+(def ^:private subagent-excluded-tools
+  "Tools excluded from sub-agent to prevent recursion and unnecessary calls."
+  #{"delegate_task"
+    "create_document" "append_to_document" "update_document"
+    "create_notebook_question" "create_question" "create_dashboard"
+    "add_card_to_dashboard" "archive_item" "move_item"
+    "run_mbql_query"})
+
+(defn- subagent-tool-definitions
+  "Tool definitions for sub-agent — read-only, no recursion, no validators."
+  []
+  (vec (remove #(subagent-excluded-tools (:name %)) tool-definitions)))
+
+(def ^:private subagent-response-schema
+  "Structured output schema for sub-agent — plain text result."
+  {:type                 "object"
+   :properties           {:result {:type "string" :description "The research findings."}}
+   :required             ["result"]
+   :additionalProperties false})
+
+(defn- delegate-task [task response-format]
+  (let [openai-create  (requiring-resolve 'metabase.ai-agent.openai/create-response)
+        openai-id      (requiring-resolve 'metabase.ai-agent.openai/response-id)
+        openai-failed? (requiring-resolve 'metabase.ai-agent.openai/failed?)
+        openai-tools?  (requiring-resolve 'metabase.ai-agent.openai/has-tool-calls?)
+        openai-calls   (requiring-resolve 'metabase.ai-agent.openai/extract-tool-calls)
+        openai-text    (requiring-resolve 'metabase.ai-agent.openai/extract-text)
+        api-key        ((requiring-resolve 'metabase.ai-agent.settings/ai-agent-openai-api-key))
+        model          (or ((requiring-resolve 'metabase.ai-agent.settings/ai-agent-openai-model)) "gpt-5.4")
+        tools          (subagent-tool-definitions)]
+    (loop [opts       {:message      (str task "\n\nRESPONSE FORMAT: " response-format)
+                       :text-format  {:type   "json_schema"
+                                      :name   "subagent_response"
+                                      :strict true
+                                      :schema subagent-response-schema}}
+           iterations 0]
+      (if (>= iterations max-subagent-iterations)
+        "Sub-agent reached iteration limit. Partial results may be incomplete."
+        (let [response (openai-create (assoc opts
+                                             :api-key      api-key
+                                             :model        model
+                                             :tools        tools
+                                             :instructions subagent-system-prompt))]
+          (when (openai-failed? response)
+            (throw (ex-info "Sub-agent OpenAI call failed" {})))
+          (if (openai-tools? response)
+            (let [tool-calls (openai-calls response)
+                  _          (log/debug "Sub-agent executing tools" {:tools (map :name tool-calls)})
+                  results    (mapv (fn [{:keys [call-id name arguments]}]
+                                    {:call-id call-id
+                                     :output  (execute-tool name arguments)})
+                                  tool-calls)]
+              (recur (-> opts
+                         (dissoc :message :text-format)
+                         (assoc :previous-response-id (openai-id response)
+                                :tool-results results))
+                     (inc iterations)))
+            ;; Text response — extract result from structured output
+            (let [raw (openai-text response)]
+              (try
+                (get (json/parse-string raw) "result" raw)
+                (catch Exception _ raw)))))))))
+
+;; Tools that are always loaded (high-frequency, core workflow)
+(def ^:private immediate-tool-names
+  #{"list_databases" "get_database_tables" "get_table_details" "list_metrics" "get_metric"
+    "search_items" "list_questions" "list_collections"
+    "run_mbql_query" "create_notebook_question" "run_query"
+    "execute_card" "get_card_details" "delegate_task"})
+
+;; Tools loaded on demand via tool_search (lower frequency)
+(def ^:private deferred-tool-names
+  #{"get_database_schema" "get_collection_contents" "get_dashboard_details"
+    "create_question" "update_question" "create_dashboard" "add_card_to_dashboard"
+    "archive_item" "move_item"
+    "create_document" "get_document" "update_document" "append_to_document"
+    "get_sql_guide" "get_analytical_guide" "get_metrics_guide" "get_search_guide"})
+
+(def ^:private tool-search-entry
+  "The tool_search hosted entry — enables GPT to request deferred tools."
+  {:type "tool_search"})
+
 (defn all-tool-definitions
   "Return built-in tool definitions combined with MCP server tools.
-   MCP tools are discovered from configured external MCP servers.
+   Immediate tools are loaded directly. Deferred tools are marked with defer_loading.
+   A tool_search entry enables the model to request deferred tools on demand.
    When safe-mode? is true, all write/modify tools are excluded."
   ([] (all-tool-definitions false))
   ([safe-mode?]
-   (let [built-in (if safe-mode? (read-only-tools tool-definitions) tool-definitions)
-         mcp-tools (try (mcp/mcp-tool-definitions) (catch Exception _ nil))
-         ;; In safe mode, also exclude MCP tools (external tools may write data)
-         all-tools (if (seq mcp-tools)
-                     (into built-in (if safe-mode? [] mcp-tools))
-                     built-in)]
+   (let [built-in   (if safe-mode? (read-only-tools tool-definitions) tool-definitions)
+         ;; Mark deferred tools
+         marked     (mapv (fn [tool]
+                            (if (deferred-tool-names (:name tool))
+                              (assoc tool :defer_loading true)
+                              tool))
+                          built-in)
+         ;; Add tool_search entry
+         with-search (conj marked tool-search-entry)
+         ;; Add MCP tools (always deferred since they're external)
+         mcp-tools  (try (mcp/mcp-tool-definitions) (catch Exception _ nil))
+         all-tools  (if (seq mcp-tools)
+                      (into with-search
+                            (if safe-mode?
+                              []
+                              (mapv #(assoc % :defer_loading true) mcp-tools)))
+                      with-search)]
      all-tools)))
 
 (defn execute-tool
@@ -1498,18 +1588,15 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
         "get_metric"         (get-metric (get args "metric_id"))
         "create_notebook_question" (create-notebook-question args)
         "get_sql_guide"  (get-sql-guide (get args "database_id"))
-        "get_mbql_guide" (get-mbql-guide)
-        "get_document_guide" (get-document-guide)
         "get_analytical_guide" (get-analytical-guide)
         "get_metrics_guide"    (get-metrics-guide)
         "get_search_guide"     (get-search-guide)
-        "run_mbql_query"  (run-mbql-query (get args "database_id") (get args "dataset_query"))
+        "run_mbql_query"  (run-mbql-query args)
         "create_document" (create-document args)
         "get_document"    (get-document-details (get args "document_id"))
         "update_document" (update-document args)
         "append_to_document" (append-to-document args)
-        "validate_document_nodes" (validate-document-nodes args)
-        "validate_mbql_query" (validate-mbql-query args)
+        "delegate_task"      (delegate-task (get args "task") (get args "response_format"))
         (str "Unknown tool: " tool-name)))
     (catch Exception e
       (log/warn e "AI Agent tool execution failed" {:tool tool-name})

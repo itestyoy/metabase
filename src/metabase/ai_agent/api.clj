@@ -573,10 +573,9 @@
                               :datasource           datasource
                               :safe-mode            safe-mode
                               :chat-collection-id   chat-collection-id})
-        raw-result (run-tool-loop api-key model opts
-                                  :safe-mode? safe-mode?
-                                  :ensure-chat-coll! ensure-chat-coll!)
-        result     (validate-and-retry api-key model raw-result :safe-mode? safe-mode?)]
+        result (run-tool-loop api-key model opts
+                              :safe-mode? safe-mode?
+                              :ensure-chat-coll! ensure-chat-coll!)]
     {:response_id         (:response-id result)
      :content             (:content result)
      :chat_collection_id   @chat-coll-id-atom
@@ -640,11 +639,10 @@
         (let [{:keys [api-key model opts safe-mode? ensure-chat-coll!
                       chat-coll-id-atom chat-coll-name]} params
               emit!      (fn [event data] (sse-write! os event data))
-              raw-result (run-tool-loop api-key model opts
-                                        :safe-mode? safe-mode?
-                                        :ensure-chat-coll! ensure-chat-coll!
-                                        :emit! emit!)
-              result     (validate-and-retry api-key model raw-result :safe-mode? safe-mode?)]
+              result (run-tool-loop api-key model opts
+                                   :safe-mode? safe-mode?
+                                   :ensure-chat-coll! ensure-chat-coll!
+                                   :emit! emit!)]
           (sse-write! os "done"
                       {:response_id         (:response-id result)
                        :content             (:content result)
