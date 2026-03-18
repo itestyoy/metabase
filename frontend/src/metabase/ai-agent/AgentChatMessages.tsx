@@ -403,7 +403,7 @@ function ContentBlockRenderer({
 }) {
   switch (block.type) {
     case "text":
-      return <Markdown>{block.content}</Markdown>;
+      return <MetricAwareText content={block.content} />;
     case "card_link":
       return <CardLinkBlock block={block} />;
     case "card_preview":
@@ -624,75 +624,131 @@ function CopyMessageButton({ message }: { message: ChatMessage }) {
   );
 }
 
-/* ── User message with inline metric chips ──────────────────────────────── */
+/* ── Metric chip rendering in text ───────────────────────────────────────── */
 
-const METRIC_PATTERN = /\["metric",\s*(\d+)\]\s*\/\*\s*(.+?)\s*\*\//g;
+// Matches ["metric", 42] /* Name */ OR ["metric", 42] (without comment)
+const METRIC_PATTERN_FULL = /\["metric",\s*(\d+)\]\s*\/\*\s*(.+?)\s*\*\//g;
+const METRIC_PATTERN_BARE = /\["metric",\s*(\d+)\]/g;
 
-function UserMessageContent({ content, className }: { content: string; className?: string }) {
-  // If no metric references, render plain markdown
+const metricChipStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  background: "color-mix(in srgb, var(--mb-color-brand) 10%, transparent)",
+  color: "var(--mb-color-brand)",
+  border: "1px solid color-mix(in srgb, var(--mb-color-brand) 25%, transparent)",
+  borderRadius: 6,
+  padding: "1px 8px 1px 5px",
+  margin: "0 2px",
+  verticalAlign: "baseline",
+  whiteSpace: "nowrap",
+  textDecoration: "none",
+  cursor: "pointer",
+  transition: "background 0.12s, border-color 0.12s",
+  fontSize: 12,
+  fontWeight: 600,
+  lineHeight: "1.5",
+};
+
+// Cache for metric names fetched by ID
+const metricNameCache = new Map<number, string>();
+
+function MetricChipByName({ id, name }: { id: number; name: string }) {
+  return (
+    <Link
+      to={`/question/${id}`}
+      style={metricChipStyle}
+      onMouseEnter={e => {
+        (e.currentTarget as HTMLElement).style.background = "color-mix(in srgb, var(--mb-color-brand) 20%, transparent)";
+        (e.currentTarget as HTMLElement).style.borderColor = "var(--mb-color-brand)";
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLElement).style.background = "color-mix(in srgb, var(--mb-color-brand) 10%, transparent)";
+        (e.currentTarget as HTMLElement).style.borderColor = "color-mix(in srgb, var(--mb-color-brand) 25%, transparent)";
+      }}
+    >
+      <Icon name="metric" size={12} />
+      {name}
+    </Link>
+  );
+}
+
+function MetricChipById({ id }: { id: number }) {
+  const [name, setName] = useState<string | null>(() => metricNameCache.get(id) ?? null);
+
+  useEffect(() => {
+    if (name) return;
+    fetch(`/api/card/${id}`, { headers: { "Content-Type": "application/json" } })
+      .then(r => r.json())
+      .then(card => {
+        const n = (card?.name as string) ?? `Metric #${id}`;
+        metricNameCache.set(id, n);
+        setName(n);
+      })
+      .catch(() => setName(`Metric #${id}`));
+  }, [id, name]);
+
+  return (
+    <Link
+      to={`/question/${id}`}
+      style={metricChipStyle}
+      onMouseEnter={e => {
+        (e.currentTarget as HTMLElement).style.background = "color-mix(in srgb, var(--mb-color-brand) 20%, transparent)";
+        (e.currentTarget as HTMLElement).style.borderColor = "var(--mb-color-brand)";
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLElement).style.background = "color-mix(in srgb, var(--mb-color-brand) 10%, transparent)";
+        (e.currentTarget as HTMLElement).style.borderColor = "color-mix(in srgb, var(--mb-color-brand) 25%, transparent)";
+      }}
+    >
+      <Icon name="metric" size={12} />
+      {name ?? `#${id}`}
+    </Link>
+  );
+}
+
+/**
+ * Render text with inline metric chips. Works for both:
+ * - ["metric", 42] /* Revenue */ (with name comment)
+ * - ["metric", 42] (bare — fetches name by ID)
+ */
+function MetricAwareText({ content, className }: { content: string; className?: string }) {
   if (!content.includes('["metric"')) {
     return <Markdown className={className}>{content}</Markdown>;
   }
 
-  // Replace metric references with placeholder, render as Markdown, then inject chips
-  // Use a unique placeholder that Markdown won't mangle
-  const PLACEHOLDER_PREFIX = "\u200B__METRIC_";
-  const PLACEHOLDER_SUFFIX = "__\u200B";
-  const metricNames: string[] = [];
-  const cleanContent = content.replace(new RegExp(METRIC_PATTERN), (_match, _id, name) => {
-    const idx = metricNames.length;
-    metricNames.push(name);
-    return `${PLACEHOLDER_PREFIX}${idx}${PLACEHOLDER_SUFFIX}`;
+  // Collect metrics: named ones first, then bare ones
+  const metrics: { name: string | null; id: number }[] = [];
+  let cleaned = content.replace(new RegExp(METRIC_PATTERN_FULL), (_m, id, name) => {
+    const i = metrics.length;
+    metrics.push({ name, id: parseInt(id, 10) });
+    return `\u200B__M${i}__\u200B`;
+  });
+  cleaned = cleaned.replace(new RegExp(METRIC_PATTERN_BARE), (_m, id) => {
+    const i = metrics.length;
+    metrics.push({ name: null, id: parseInt(id, 10) });
+    return `\u200B__M${i}__\u200B`;
   });
 
-  // Render markdown to get proper formatting
-  const rendered = <Markdown className={className}>{cleanContent}</Markdown>;
-
-  // If no metrics were found, just return markdown
-  if (metricNames.length === 0) {
-    return rendered;
+  if (metrics.length === 0) {
+    return <Markdown className={className}>{content}</Markdown>;
   }
 
-  // Split the rendered markdown's text and inject chips
-  // We need to post-process the HTML string to replace placeholders
-  const chipStyle = {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 3,
-    background: "color-mix(in srgb, var(--mb-color-brand) 15%, transparent)",
-    color: "var(--mb-color-brand)",
-    border: "1px solid color-mix(in srgb, var(--mb-color-brand) 30%, transparent)",
-    borderRadius: 6,
-    padding: "2px 8px",
-    margin: "0 2px",
-    verticalAlign: "baseline" as const,
-    whiteSpace: "nowrap" as const,
-  };
-
-  // Simpler approach: split cleanContent by placeholders, render parts
-  const SPLIT_REGEX = new RegExp(`${PLACEHOLDER_PREFIX.replace(/\u200B/g, "\\u200B")}(\\d+)${PLACEHOLDER_SUFFIX.replace(/\u200B/g, "\\u200B")}`);
-  const segments = cleanContent.split(SPLIT_REGEX);
-
+  const segments = cleaned.split(/\u200B__M(\d+)__\u200B/);
   const parts: ReactNode[] = [];
   for (let i = 0; i < segments.length; i++) {
     if (i % 2 === 0) {
-      // Text segment
-      if (segments[i]) {
-        parts.push(<span key={`t${i}`}>{segments[i]}</span>);
-      }
+      if (segments[i]) parts.push(<span key={`t${i}`}>{segments[i]}</span>);
     } else {
-      // Metric index
-      const metricIdx = parseInt(segments[i], 10);
-      const name = metricNames[metricIdx] ?? "?";
-      parts.push(
-        <Text key={`m${i}`} component="span" size="xs" fw={600} style={chipStyle}>
-          <Icon name="metric" size={12} />
-          {name}
-        </Text>,
-      );
+      const mi = parseInt(segments[i], 10);
+      const m = metrics[mi];
+      if (m?.name) {
+        parts.push(<MetricChipByName key={`m${i}`} id={m.id} name={m.name} />);
+      } else if (m) {
+        parts.push(<MetricChipById key={`m${i}`} id={m.id} />);
+      }
     }
   }
-
   return <span className={className}>{parts}</span>;
 }
 
@@ -721,7 +777,7 @@ function MessageBubble({
     return (
       <Flex className={S.messageBubbleRow} justify="flex-end" direction="column" align="flex-end">
         <Paper className={S.userBubble} radius="xl">
-          <UserMessageContent content={message.content ?? ""} className={S.userMarkdown} />
+          <MetricAwareText content={message.content ?? ""} className={S.userMarkdown} />
         </Paper>
         <MessageTimestamp timestamp={message.timestamp} />
       </Flex>
