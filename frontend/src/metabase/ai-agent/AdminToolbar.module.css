@@ -179,12 +179,12 @@
 
 /* ── Context chip (auto-detected page filter) ───── */
 .contextChip {
-  padding: 2px 8px 2px 6px;
-  background: color-mix(in srgb, var(--mb-color-brand) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--mb-color-brand) 30%, transparent);
-  border-radius: 12px;
+  padding: 3px 8px 3px 6px;
+  background: color-mix(in srgb, var(--mb-color-brand) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mb-color-brand) 20%, transparent);
+  border-radius: 10px;
   color: var(--mb-color-brand);
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
   cursor: default;
 }
