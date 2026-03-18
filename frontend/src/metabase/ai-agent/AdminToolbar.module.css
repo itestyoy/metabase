@@ -122,6 +122,40 @@
   border-bottom: 1px solid var(--mb-color-border);
 }
 
+/* ── Action pill buttons ──────────────────────────── */
+.actionPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--mb-color-brand);
+  background: color-mix(in srgb, var(--mb-color-brand) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mb-color-brand) 20%, transparent);
+  transition: background 0.12s, border-color 0.12s;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.actionPill:hover {
+  background: color-mix(in srgb, var(--mb-color-brand) 16%, transparent);
+  border-color: var(--mb-color-brand);
+}
+
+/* Muted variant for filter/close actions */
+.actionPillMuted {
+  color: var(--mb-color-text-tertiary);
+  background: transparent;
+  border-color: var(--mb-color-border);
+}
+
+.actionPillMuted:hover {
+  color: var(--mb-color-text-primary);
+  background: color-mix(in srgb, var(--mb-color-border) 30%, transparent);
+  border-color: var(--mb-color-text-tertiary);
+}
+
 /* ── Error bar ───────────────────────────────────── */
 .errorBar {
   background: color-mix(in srgb, var(--mb-color-error) 8%, transparent);
