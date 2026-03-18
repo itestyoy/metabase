@@ -49,7 +49,7 @@ interface DockState {
 
 function readDockState(): DockState {
   try {
-    const raw = localStorage.getItem(DOCK_STORAGE_KEY);
+    const raw = sessionStorage.getItem(DOCK_STORAGE_KEY);
     if (!raw) return { mode: "none", width: DOCK_WIDTH_DEFAULT, height: DOCK_HEIGHT_DEFAULT, inputPanelWidth: INPUT_PANEL_WIDTH_DEFAULT };
     const parsed = JSON.parse(raw);
     // Migrate old format
@@ -74,7 +74,7 @@ function readDockState(): DockState {
 
 function saveDockState(state: DockState) {
   try {
-    localStorage.setItem(DOCK_STORAGE_KEY, JSON.stringify(state));
+    sessionStorage.setItem(DOCK_STORAGE_KEY, JSON.stringify(state));
   } catch {
     // storage unavailable
   }
