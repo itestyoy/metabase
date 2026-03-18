@@ -623,6 +623,71 @@ function CopyMessageButton({ message }: { message: ChatMessage }) {
   );
 }
 
+/* ── User message with inline metric chips ──────────────────────────────── */
+
+const METRIC_PATTERN = /\["metric",\s*(\d+)\]\s*\/\*\s*(.+?)\s*\*\//g;
+
+function UserMessageContent({ content, className }: { content: string; className?: string }) {
+  // If no metric references, render plain markdown
+  if (!content.includes('["metric"')) {
+    return <Markdown className={className}>{content}</Markdown>;
+  }
+
+  // Split content into text segments and metric chips
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  const regex = new RegExp(METRIC_PATTERN);
+
+  while ((match = regex.exec(content)) !== null) {
+    // Text before this match
+    if (match.index > lastIndex) {
+      parts.push(
+        <Markdown key={`t${lastIndex}`} className={className}>
+          {content.slice(lastIndex, match.index)}
+        </Markdown>,
+      );
+    }
+    // Metric chip
+    const name = match[2];
+    parts.push(
+      <Text
+        key={`m${match.index}`}
+        component="span"
+        size="xs"
+        fw={600}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 3,
+          background: "var(--mb-color-brand-lighter)",
+          color: "var(--mb-color-brand)",
+          borderRadius: 4,
+          padding: "1px 6px",
+          margin: "0 2px",
+          verticalAlign: "baseline",
+          whiteSpace: "nowrap",
+        }}
+      >
+        <Icon name="metric" size={12} />
+        {name}
+      </Text>,
+    );
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Remaining text after last match
+  if (lastIndex < content.length) {
+    parts.push(
+      <Markdown key={`t${lastIndex}`} className={className}>
+        {content.slice(lastIndex)}
+      </Markdown>,
+    );
+  }
+
+  return <span>{parts}</span>;
+}
+
 /* ── Message bubble ──────────────────────────────────────────────────────── */
 
 function MessageBubble({
@@ -648,7 +713,7 @@ function MessageBubble({
     return (
       <Flex className={S.messageBubbleRow} justify="flex-end" direction="column" align="flex-end">
         <Paper className={S.userBubble} radius="xl">
-          <Markdown className={S.userMarkdown}>{message.content ?? ""}</Markdown>
+          <UserMessageContent content={message.content ?? ""} className={S.userMarkdown} />
         </Paper>
         <MessageTimestamp timestamp={message.timestamp} />
       </Flex>

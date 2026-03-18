@@ -21,6 +21,8 @@ interface MetricSlashMenuProps {
   anchorRef: React.RefObject<HTMLElement | null>;
   /** Called when metrics list updates (parent stores the list for Enter handling) */
   onLoaded: (metrics: MetricItem[]) => void;
+  /** Called when user clicks a metric item */
+  onSelect: (metric: MetricItem) => void;
   datasourceId?: number | null;
 }
 
@@ -29,6 +31,7 @@ export function MetricSlashMenu({
   selectedIndex,
   anchorRef,
   onLoaded,
+  onSelect,
   datasourceId,
 }: MetricSlashMenuProps) {
   const [metrics, setMetrics] = useState<MetricItem[]>([]);
@@ -108,6 +111,8 @@ export function MetricSlashMenu({
               gap="xs"
               px="sm"
               py={6}
+              onClick={() => onSelect(m)}
+              style={{ cursor: "pointer" }}
             >
               <Icon name="metric" size={14} className={S.itemIcon} />
               <Box style={{ flex: 1, minWidth: 0 }}>

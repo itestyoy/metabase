@@ -561,6 +561,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                         selectedIndex={slashSelectedIndex}
                         anchorRef={composerDivRef}
                         onLoaded={handleSlashMetricsLoaded}
+                        onSelect={handleMetricSelect}
                         datasourceId={datasource?.id}
                       />
                     )}
