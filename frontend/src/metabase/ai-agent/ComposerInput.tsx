@@ -144,9 +144,13 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
       chip.setAttribute("data-metric-id", String(metric.id));
       chip.setAttribute("data-metric-name", metric.name);
 
-      const icon = document.createElement("span");
-      icon.textContent = "📊";
-      icon.style.fontSize = "11px";
+      const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      icon.setAttribute("viewBox", "0 0 16 16");
+      icon.setAttribute("fill", "none");
+      icon.setAttribute("width", "12");
+      icon.setAttribute("height", "12");
+      icon.style.flexShrink = "0";
+      icon.innerHTML = '<path fill-rule="evenodd" clip-rule="evenodd" d="M10.562 5.499 12.25 3.81v8.439H3.81L5.5 10.562l.915.915 1.063-1.063-.915-.915.937-.937.915.915 1.063-1.063-.915-.915.937-.937.915.915 1.063-1.063-.915-.915Zm3.188-2.775c0-.935-1.131-1.404-1.793-.742l-9.975 9.976c-.662.661-.193 1.792.742 1.792H13.75V2.724Z" fill="currentColor"/>';
       chip.appendChild(icon);
 
       const label = document.createTextNode(metric.name);

@@ -159,7 +159,7 @@ interface QueryRow {
   context: string | null;
   native: boolean;
   error: string | null;
-  raw_query: string | Record<string, unknown> | null;
+  json_query: Record<string, unknown> | null;
 }
 interface CompiledCard { card_id: number | null; card_name: string; query: string; }
 
@@ -330,37 +330,30 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
     setIsLoadingDetail(true);
 
     try {
-      // 1. SQL — raw_query may be a string or an object with {query, params}
-      if (q.raw_query) {
-        const sqlStr = typeof q.raw_query === "object" && q.raw_query !== null
-          ? (q.raw_query as Record<string, unknown>).query as string ?? JSON.stringify(q.raw_query, null, 2)
-          : q.raw_query;
-        if (sqlStr) {
-          try { setExpandedSql(formatSql(sqlStr, { language: "sql" })); }
-          catch { setExpandedSql(sqlStr); }
-        }
-      }
+      const jq = q.json_query;
 
-      // 2. JSON detail — for saved cards, fetch dataset_query
-      if (q.card_id) {
-        const resp = await fetch(`/api/card/${q.card_id}`, { headers: apiHeaders() });
-        const card = await resp.json();
-        const dq = card?.dataset_query;
-        setExpandedDetail(dq ? JSON.stringify(dq, null, 2) : JSON.stringify(card, null, 2));
-
-        // If no raw_query from query table, compile to SQL via API
-        if (!q.raw_query && dq) {
-          try {
-            const sqlResp = await fetch("/api/dataset/native", {
-              method: "POST", headers: apiHeaders(), body: JSON.stringify(dq),
-            });
-            const sqlData = await sqlResp.json();
-            if (sqlData?.query) {
-              try { setExpandedSql(formatSql(sqlData.query, { language: "sql" })); }
-              catch { setExpandedSql(sqlData.query); }
-            }
-          } catch { /* compilation optional */ }
+      if (q.native && jq) {
+        // Native SQL: take sql from json_query.native.query
+        const nativeQuery = (jq as Record<string, unknown>).native as Record<string, unknown> | undefined;
+        const sql = nativeQuery?.query as string | undefined;
+        if (sql) {
+          try { setExpandedSql(formatSql(sql, { language: "sql" })); }
+          catch { setExpandedSql(sql); }
         }
+        setExpandedDetail(JSON.stringify(jq, null, 2));
+      } else if (jq) {
+        // MBQL: show json_query as detail, compile to SQL
+        setExpandedDetail(JSON.stringify(jq, null, 2));
+        try {
+          const sqlResp = await fetch("/api/dataset/native", {
+            method: "POST", headers: apiHeaders(), body: JSON.stringify(jq),
+          });
+          const sqlData = await sqlResp.json();
+          if (sqlData?.query) {
+            try { setExpandedSql(formatSql(sqlData.query, { language: "sql" })); }
+            catch { setExpandedSql(sqlData.query); }
+          }
+        } catch { /* compilation failed */ }
       }
     } catch {
       setExpandedDetail("Failed to load query details");

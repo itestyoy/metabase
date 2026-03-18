@@ -30,11 +30,12 @@
    All tools use strict: true with additionalProperties: false for reliable parameter validation."
   [{:type        "function"
     :name        "list_databases"
-    :description "List all databases in Metabase that the current user has access to."
+    :description "List all databases in Metabase that the current user has access to. Optionally search by name."
     :strict      true
     :parameters  {:type                 "object"
-                  :properties           {}
-                  :required             []
+                  :properties           {:search {:type        ["string" "null"]
+                                                  :description "Search term to filter databases by name. Pass null to list all."}}
+                  :required             ["search"]
                   :additionalProperties false}}
 
    {:type        "function"
@@ -127,12 +128,14 @@ or needs to understand how its filters work."
    {:type        "function"
     :name        "list_collections"
     :description "List Metabase collections the current user has access to.
-Use this to help the user navigate their content or find where items are saved."
+Use this to help the user navigate their content or find where items are saved. Supports search by name."
     :strict      true
     :parameters  {:type                 "object"
                   :properties           {:parent_id {:type        ["integer" "null"]
-                                                     :description "Parent collection ID. Pass null to list root-level collections."}}
-                  :required             ["parent_id"]
+                                                     :description "Parent collection ID. Pass null to list root-level collections."}
+                                         :search    {:type        ["string" "null"]
+                                                     :description "Search collections by name using full-text search. Pass null to list without filtering."}}
+                  :required             ["parent_id" "search"]
                   :additionalProperties false}}
 
    {:type        "function"
@@ -282,17 +285,28 @@ which tables exist, then call get_table_details for specific tables."
    {:type        "function"
     :name        "list_metrics"
     :description "List available metrics (reusable aggregation definitions). Metrics can be used inside
-notebook-mode questions as aggregations via [\"metric\", metric_id]. Optionally filter by table or database.
+notebook-mode questions as aggregations via [\"metric\", metric_id]. Optionally filter by table, database, or search by name.
 Returns metric IDs, names, descriptions, and their source tables."
     :strict      true
     :parameters  {:type                 "object"
                   :properties           {:database_id {:type        ["integer" "null"]
                                                        :description "Filter metrics to this database. Pass null to list all."}
                                          :table_id    {:type        ["integer" "null"]
-                                                       :description "Filter metrics to this source table. Pass null to list all."}}
-                  :required             ["database_id" "table_id"]
+                                                       :description "Filter metrics to this source table. Pass null to list all."}
+                                         :search      {:type        ["string" "null"]
+                                                       :description "Search metrics by name using full-text search. Pass null to list without filtering."}}
+                  :required             ["database_id" "table_id" "search"]
                   :additionalProperties false}}
 
+   {:type        "function"
+    :name        "get_metric"
+    :description "Get details of a specific metric by its ID. Returns name, description, source table, database, and the metric's dataset_query definition."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:metric_id {:type        "integer"
+                                                     :description "The metric card ID."}}
+                  :required             ["metric_id"]
+                  :additionalProperties false}}
    {:type        "function"
     :name        "get_mbql_guide"
     :description "Get the full MBQL (Metabase Query Language) syntax reference for building structured queries.
@@ -344,6 +358,14 @@ Returns a structured framework for how to approach analytical problems like a se
 Call this before building any query that uses metrics — it explains the atomic vs semi-atomic
 metric distinction, available dimensions for each type, conversion rate formulas, and common
 use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {}
+                  :required             []
+                  :additionalProperties false}}
+   {:type        "function"
+    :name        "get_search_guide"
+    :description "Get the search strategy guide. Call this BEFORE searching for anything — metrics, questions, dashboards, collections. Explains fuzzy search, bilingual strategies, synonym expansion, and when to use which search tool."
     :strict      true
     :parameters  {:type                 "object"
                   :properties           {}
@@ -460,15 +482,20 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
 ;;; Tool implementations
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
-(defn- list-databases []
-  (let [dbs (filter mi/can-read? (t2/select :model/Database {:order-by [[:name :asc]]}))]
+(defn- list-databases [search-term]
+  (let [dbs (if (seq search-term)
+              (run-search search-term :models #{"database"} :limit 20)
+              (filter mi/can-read? (t2/select :model/Database {:order-by [[:name :asc]]})))]
     (if (empty? dbs)
-      "No databases available."
+      (if (seq search-term)
+        (format "No databases found matching \"%s\"." search-term)
+        "No databases available.")
       (str "Available databases:\n"
            (str/join "\n"
              (map (fn [db]
-                    (format "- ID: %d, Name: \"%s\", Engine: %s"
-                            (:id db) (:name db) (name (:engine db))))
+                    (format "- ID: %d, Name: \"%s\"%s"
+                            (:id db) (:name db)
+                            (if-let [e (:engine db)] (str ", Engine: " (name e)) "")))
                   dbs))))))
 
 (defn- get-database-schema [database-id]
@@ -525,6 +552,24 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                             (:id c) (:name c)
                             (if (:description c) (str ", Desc: " (:description c)) "")))
                   cards))))))
+
+(defn- run-search
+  "Run Metabase search engine with the given query, model filter, and limit."
+  [query & {:keys [models table-db-id limit] :or {limit 50}}]
+  (let [ctx (cond-> {:search-string         query
+                     :limit                 limit
+                     :current-user-id       api/*current-user-id*
+                     :current-user-perms    @api/*current-user-permissions-set*
+                     :is-superuser?         api/*is-superuser?*
+                     :is-impersonated-user? (perms/impersonated-user?)
+                     :is-sandboxed-user?    (perms/sandboxed-user?)}
+              models      (assoc :models models)
+              table-db-id (assoc :table-db-id table-db-id))]
+    (try
+      (:data (search/search (search/search-context ctx)))
+      (catch Exception e
+        (log/warn e "Search failed" {:term query})
+        []))))
 
 (def ^:private ai-type->search-model
   "Map user-friendly type names (used by the AI) to internal search model names."
@@ -752,27 +797,31 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                                    (or (:size_y dc) 4)))))
                      dashcards))))))
 
-(defn- list-collections [parent-id]
-  (let [colls (->> (if parent-id
-                     (t2/select :model/Collection
-                                :location (format "/%d/" parent-id)
-                                :archived false
-                                {:order-by [[:name :asc]]
-                                 :limit    50})
-                     (t2/select :model/Collection
-                                :location "/"
-                                :archived false
-                                {:order-by [[:name :asc]]
-                                 :limit    50}))
-                   (filter mi/can-read?)
-                   (take 30))]
+(defn- list-collections [parent-id search-term]
+  (let [colls (if (seq search-term)
+                (run-search search-term :models #{"collection"} :limit 30)
+                (->> (if parent-id
+                       (t2/select :model/Collection
+                                  :location (format "/%d/" parent-id)
+                                  :archived false
+                                  {:order-by [[:name :asc]]
+                                   :limit    50})
+                       (t2/select :model/Collection
+                                  :location "/"
+                                  :archived false
+                                  {:order-by [[:name :asc]]
+                                   :limit    50}))
+                     (filter mi/can-read?)
+                     (take 30)))]
     (if (empty? colls)
-      (if parent-id
-        (format "No sub-collections found in collection %d." parent-id)
-        "No collections found.")
-      (str (if parent-id
-             (format "Sub-collections of collection %d:\n" parent-id)
-             "Root collections:\n")
+      (cond
+        (seq search-term) (format "No collections found matching \"%s\"." search-term)
+        parent-id         (format "No sub-collections found in collection %d." parent-id)
+        :else             "No collections found.")
+      (str (cond
+             (seq search-term) (format "Collections matching \"%s\":\n" search-term)
+             parent-id         (format "Sub-collections of collection %d:\n" parent-id)
+             :else             "Root collections:\n")
            (str/join "\n"
              (map (fn [c]
                     (format "- ID: %d, Name: \"%s\"%s%s"
@@ -1038,6 +1087,9 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
 
 (defn- get-metrics-guide []
   (load-guide-file! "MB_AI_AGENT_METRICS_GUIDE_FILE"))
+
+(defn- get-search-guide []
+  (load-guide-file! "MB_AI_AGENT_SEARCH_GUIDE_FILE"))
 
 (defn- get-analytical-guide []
   (load-guide-file! "MB_AI_AGENT_ANALYTICAL_GUIDE_FILE"))
@@ -1330,15 +1382,25 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
     (format "Appended %d node(s) to document.\n- ID: %d\n- URL: /document/%d"
             (count new-nodes) document_id document_id)))
 
-(defn- list-metrics [database-id table-id]
-  (let [conditions (cond-> [:type :metric :archived false]
-                     database-id (into [:database_id database-id])
-                     table-id    (into [:table_id    table-id]))
-        metrics    (->> (apply t2/select :model/Card conditions)
-                        (filter mi/can-read?)
-                        (take 50))]
+(defn- list-metrics [database-id table-id search-term]
+  (let [metrics (if (seq search-term)
+                  ;; Full-text search via Metabase search engine
+                  (let [results (run-search search-term
+                                  :models #{"metric"}
+                                  :table-db-id database-id
+                                  :limit 50)]
+                    (cond->> results
+                      table-id (filter #(= (:table_id %) table-id))))
+                  ;; Direct DB query (no search term)
+                  (let [conditions (cond-> [:type :metric :archived false]
+                                     database-id (into [:database_id database-id])
+                                     table-id    (into [:table_id    table-id]))]
+                    (->> (apply t2/select :model/Card conditions)
+                         (filter mi/can-read?)
+                         (take 50))))]
     (if (empty? metrics)
       (cond
+        (seq search-term) (format "No metrics found matching \"%s\"." search-term)
         (and database-id table-id) (format "No metrics found for table %d in database %d." table-id database-id)
         database-id                (format "No metrics found in database %d." database-id)
         table-id                   (format "No metrics found for table %d." table-id)
@@ -1346,14 +1408,30 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
       (str (format "Available metrics (%d):\n" (count metrics))
            (str/join "\n"
              (map (fn [m]
-                    (let [tbl (when (:table_id m)
-                                (t2/select-one :model/Table :id (:table_id m)))]
+                    (let [tbl-id  (or (:table_id m) (:table-id m))
+                          tbl     (when tbl-id (t2/select-one :model/Table :id tbl-id))
+                          db-id   (or (:database_id m) (:database-id m))]
                       (str (format "- ID: %d, Name: \"%s\"" (:id m) (:name m))
                            (when (:description m) (str ", Desc: " (:description m)))
                            (when tbl (format ", Table: %s (ID: %d)" (:name tbl) (:id tbl)))
-                           (format ", Database ID: %d" (:database_id m))
+                           (when db-id (format ", Database ID: %d" db-id))
                            (format "\n  Use in MBQL aggregation: [\"metric\", %d]" (:id m)))))
                   metrics))))))
+
+(defn- get-metric [metric-id]
+  (let [card (t2/select-one :model/Card :id metric-id)
+        _    (api/check-404 card)
+        _    (api/check-403 (mi/can-read? card))]
+    (when-not (= (keyword (:type card)) :metric)
+      (throw (ex-info (format "Card %d is not a metric (type: %s)." metric-id (name (:type card))) {})))
+    (let [tbl (when (:table_id card)
+                (t2/select-one :model/Table :id (:table_id card)))]
+      (str (format "Metric: \"%s\" (ID: %d)\n" (:name card) (:id card))
+           (when (:description card) (str "Description: " (:description card) "\n"))
+           (format "Database ID: %d\n" (:database_id card))
+           (when tbl (format "Source table: %s (ID: %d)\n" (:name tbl) (:id tbl)))
+           (format "Use in MBQL: [\"metric\", %d]\n" (:id card))
+           (format "Dataset query:\n%s" (json/encode (:dataset_query card) {:pretty true}))))))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Dispatcher
@@ -1398,7 +1476,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
       (mcp/execute-mcp-tool tool-name args)
       ;; Built-in tool
       (case tool-name
-        "list_databases"    (list-databases)
+        "list_databases"    (list-databases (get args "search"))
         "get_database_schema" (get-database-schema (get args "database_id"))
         "list_questions"    (list-questions (get args "search"))
         "search_items"      (search-items (get args "query") (get args "type"))
@@ -1407,7 +1485,7 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
         "get_card_details"  (get-card-details (get args "card_id"))
         "get_dashboard_details" (get-dashboard-details (get args "dashboard_id"))
         "get_table_details"  (get-table-details (get args "table_id"))
-        "list_collections"   (list-collections (get args "parent_id"))
+        "list_collections"   (list-collections (get args "parent_id") (get args "search"))
         "get_collection_contents" (get-collection-contents (get args "collection_id"))
         "create_question"   (create-question args)
         "update_question"   (update-question args)
@@ -1416,13 +1494,15 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
         "archive_item"      (archive-item (get args "item_type") (get args "item_id"))
         "move_item"         (move-item (get args "item_type") (get args "item_id") (get args "collection_id"))
         "get_database_tables" (get-database-tables (get args "database_id"))
-        "list_metrics"       (list-metrics (get args "database_id") (get args "table_id"))
+        "list_metrics"       (list-metrics (get args "database_id") (get args "table_id") (get args "search"))
+        "get_metric"         (get-metric (get args "metric_id"))
         "create_notebook_question" (create-notebook-question args)
         "get_sql_guide"  (get-sql-guide (get args "database_id"))
         "get_mbql_guide" (get-mbql-guide)
         "get_document_guide" (get-document-guide)
         "get_analytical_guide" (get-analytical-guide)
         "get_metrics_guide"    (get-metrics-guide)
+        "get_search_guide"     (get-search-guide)
         "run_mbql_query"  (run-mbql-query (get args "database_id") (get args "dataset_query"))
         "create_document" (create-document args)
         "get_document"    (get-document-details (get args "document_id"))

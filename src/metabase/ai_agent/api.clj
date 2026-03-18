@@ -764,14 +764,13 @@
                            :qe.context
                            :qe.native
                            :qe.error
-                           [:q.query :raw_query]
+                           :qe.json_query
                            [:c.name :card_name]
                            [:d.name :dashboard_name]
                            [:db.name :database_name]
                            [:u.email :user_email]]
                :from      [[:query_execution :qe]]
-               :left-join [[:query :q]            [:= :qe.hash :q.query_hash]
-                           [:report_card :c]      [:= :qe.card_id :c.id]
+               :left-join [[:report_card :c]      [:= :qe.card_id :c.id]
                            [:report_dashboard :d] [:= :qe.dashboard_id :d.id]
                            [:metabase_database :db] [:= :qe.database_id :db.id]
                            [:core_user :u]        [:= :qe.executor_id :u.id]]
