@@ -263,14 +263,18 @@ export function AgentModal({ onClose }: AgentModalProps) {
     setTimeout(() => composerRef.current?.focus(), 100);
   }, []);
 
-  // Close slash menu on outside click
+  // Close slash menu on outside click (but not clicks inside the popup)
   useEffect(() => {
     if (!slashMenuOpen) return;
-    const handleClick = () => setSlashMenuOpen(false);
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-slash-menu]")) return;
+      setSlashMenuOpen(false);
+    };
     const timer = setTimeout(() => document.addEventListener("mousedown", handleClick), 100);
     return () => {
       clearTimeout(timer);
-      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("mousedown", handleClick as EventListener);
     };
   }, [slashMenuOpen]);
 
@@ -551,7 +555,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                       onChange={handleComposerChange}
                       onKeyDown={handleKeyDown}
                       onSlashQueryChange={handleSlashQueryChange}
-                      placeholder={t`Ask me anything about your data… (/ for metrics)`}
+                      placeholder={t`Ask me anything about your data…`}
                       disabled={isLoading}
                       className={S.composerTextarea}
                     />

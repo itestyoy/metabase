@@ -30,11 +30,12 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  background: var(--mb-color-brand-lighter);
+  background: color-mix(in srgb, var(--mb-color-brand) 15%, transparent);
   color: var(--mb-color-brand);
-  border-radius: 4px;
-  padding: 1px 6px;
-  margin: 0 1px;
+  border: 1px solid color-mix(in srgb, var(--mb-color-brand) 30%, transparent);
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin: 0 2px;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.4;

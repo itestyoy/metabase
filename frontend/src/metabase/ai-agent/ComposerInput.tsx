@@ -143,7 +143,14 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
       chip.contentEditable = "false";
       chip.setAttribute("data-metric-id", String(metric.id));
       chip.setAttribute("data-metric-name", metric.name);
-      chip.textContent = metric.name;
+
+      const icon = document.createElement("span");
+      icon.textContent = "📊";
+      icon.style.fontSize = "11px";
+      chip.appendChild(icon);
+
+      const label = document.createTextNode(metric.name);
+      chip.appendChild(label);
 
       const closeBtn = document.createElement("span");
       closeBtn.className = S.metricChipClose;

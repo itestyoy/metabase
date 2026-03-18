@@ -91,7 +91,7 @@ export function MetricSlashMenu({
     : { display: "none" };
 
   return (
-    <Box style={style} className={S.container} onMouseDown={e => e.preventDefault()}>
+    <Box style={style} className={S.container} data-slash-menu onMouseDown={e => e.preventDefault()}>
       <Text size="xs" fw={600} c="text-tertiary" px="sm" py={4}>
         {t`Metrics`}{query ? ` — "${query}"` : ""}
       </Text>
