@@ -67,10 +67,11 @@ function ForceLink({
 }
 
 const EXAMPLE_PROMPTS = [
-  t`Investigate why revenue dropped last week`,
-  t`Create a dashboard with key sales metrics`,
-  t`Build a report on monthly active users`,
-  t`Find all questions related to orders`,
+  t`Investigate ad revenue last week`,
+  t`Investigate in-app revenue last week and create a document`,
+  t`Build a notebook question on monthly active users`,
+  t`Find all questions related to stability errors`,
+  t`Find cards related to UA spend`,
 ];
 
 /* ── Block renderers ─────────────────────────────────────────────────────── */
