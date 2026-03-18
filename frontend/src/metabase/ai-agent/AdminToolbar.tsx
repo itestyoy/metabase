@@ -158,6 +158,7 @@ interface QueryRow {
   database_name: string | null;
   context: string | null;
   native: boolean;
+  error: string | null;
   raw_query: string | null;
 }
 interface CompiledCard { card_id: number | null; card_name: string; query: string; }
@@ -516,6 +517,7 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
         <Box className={S.resultContainer}>
           <Flex className={S.resultHeader} align="center" px="md" py={4} gap={8}>
             <Text size="xs" fw={500} c="text-secondary" style={{ flex: 1 }}>{t`Query`}</Text>
+            <Box w={18} />
             <Text size="xs" fw={500} c="text-secondary" w={50}>{t`Type`}</Text>
             <Text size="xs" fw={500} c="text-secondary" w={100} truncate>{t`Dashboard`}</Text>
             <Text size="xs" fw={500} c="text-secondary" w={80} truncate>{t`Database`}</Text>
@@ -540,6 +542,8 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
                         {q.context ? ` · ${q.context}` : ""}
                       </Text>
                     </Flex>
+                    <Icon name={q.error ? "warning" : "check"} size={14}
+                      color={q.error ? "var(--mb-color-error)" : "var(--mb-color-success)"} />
                     <Text size="xs" w={50} c={q.native ? "text-tertiary" : "brand"} fw={500}>
                       {q.native ? "SQL" : "MBQL"}
                     </Text>
@@ -623,6 +627,22 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
             <Icon name="close" size={10} />
           </UnstyledButton>
         </Flex>
+      )}
+
+      {/* ── Selected row: error ──── */}
+      {expandedRow !== null && queries[expandedRow]?.error && (
+        <Box className={S.resultContainer}>
+          <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={4}>
+            <Flex align="center" gap={6}>
+              <Icon name="warning" size={14} color="var(--mb-color-error)" />
+              <Text size="xs" fw={500} c="error">{t`Query Error`}</Text>
+            </Flex>
+            <CopyButton text={queries[expandedRow].error!} />
+          </Flex>
+          <Box mah={120} className={S.codeEditorScroll}>
+            <CodeEditor value={queries[expandedRow].error!} readOnly lineNumbers={false} className={S.codeEditor} />
+          </Box>
+        </Box>
       )}
 
       {/* ── Selected row: MBQL / dataset_query (only for saved cards) ──── */}

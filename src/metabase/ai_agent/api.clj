@@ -763,6 +763,7 @@
                            :qe.database_id
                            :qe.context
                            :qe.native
+                           :qe.error
                            [:q.query :raw_query]
                            [:c.name :card_name]
                            [:d.name :dashboard_name]
