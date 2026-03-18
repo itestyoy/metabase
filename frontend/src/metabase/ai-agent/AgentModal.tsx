@@ -2,9 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { t } from "ttag";
 
-import { ActionIcon, Anchor, Icon, Menu, Stack, Text, Textarea, Tooltip } from "metabase/ui";
+import { ActionIcon, Anchor, Icon, Menu, Stack, Text, Tooltip } from "metabase/ui";
+// Textarea removed — replaced by ComposerInput (contentEditable)
 
 import { AgentChatMessages } from "./AgentChatMessages";
+import type { ComposerInputHandle } from "./ComposerInput";
+import { ComposerInput } from "./ComposerInput";
+import type { MetricItem } from "./MetricSlashMenu";
+import { MetricSlashMenu } from "./MetricSlashMenu";
 import type { AgentContextValue } from "./AgentContextPicker";
 import { AgentContextPicker } from "./AgentContextPicker";
 import type { AgentDatasource } from "./AgentDatasourcePicker";
@@ -89,6 +94,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
     useFloatingPanel(PANEL_CONSTRAINTS);
 
   const [inputText, setInputText] = useState("");
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [context, setContext] = useState<AgentContextValue | null>(null);
   const [datasource, setDatasource] = useState<AgentDatasource | null>(null);
   const isDatasourceManual = useRef(false);
@@ -105,7 +111,8 @@ export function AgentModal({ onClose }: AgentModalProps) {
 
   const { messages, isLoading, error, agentSettings, chatCollectionId, chatCollectionName, sendMessage, clearMessages, stopGeneration, retryLastMessage } =
     useAgentChat();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerRef = useRef<ComposerInputHandle>(null);
+  const composerDivRef = useRef<HTMLDivElement>(null);
 
   // Auto-populate datasource from default_database setting
   useEffect(() => {
@@ -250,27 +257,59 @@ export function AgentModal({ onClose }: AgentModalProps) {
 
   // Auto-focus textarea on mount
   useEffect(() => {
-    setTimeout(() => textareaRef.current?.focus(), 100);
+    setTimeout(() => composerRef.current?.focus(), 100);
   }, []);
+
+  // Close slash menu on outside click
+  useEffect(() => {
+    if (!slashMenuOpen) return;
+    const handleClick = () => setSlashMenuOpen(false);
+    const timer = setTimeout(() => document.addEventListener("mousedown", handleClick), 100);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("mousedown", handleClick);
+    };
+  }, [slashMenuOpen]);
+
+  // ── Slash menu (metric picker) ─────────────────────────────────────────
+  const handleComposerChange = useCallback((text: string) => {
+    setInputText(text);
+  }, []);
+
+  const handleSlashTyped = useCallback(() => {
+    setSlashMenuOpen(true);
+  }, []);
+
+  const handleMetricSelect = useCallback(
+    (metric: MetricItem) => {
+      setSlashMenuOpen(false);
+      composerRef.current?.removeSlashBeforeCursor();
+      composerRef.current?.insertMetric(metric);
+      setTimeout(() => composerRef.current?.focus(), 50);
+    },
+    [],
+  );
 
   // ── Send ───────────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
-    const text = inputText.trim();
+    const text = composerRef.current?.serialize()?.trim() ?? inputText.trim();
     if (!text || isLoading) return;
+
     setInputText("");
+    composerRef.current?.clear();
     sendMessage(text, context, safeMode, saveLocation?.id, datasource);
-    // Re-focus textarea after send
-    setTimeout(() => textareaRef.current?.focus(), 50);
-  }, [inputText, isLoading, sendMessage, context, safeMode, saveLocation]);
+    setTimeout(() => composerRef.current?.focus(), 50);
+  }, [inputText, isLoading, sendMessage, context, safeMode, saveLocation, datasource]);
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (slashMenuOpen) return;
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSend();
       }
     },
-    [handleSend],
+    [handleSend, slashMenuOpen],
   );
 
   const handleSelectPrompt = useCallback(
@@ -469,24 +508,27 @@ export function AgentModal({ onClose }: AgentModalProps) {
                   </div>
                 )}
                 <div className={S.inputArea}>
-                  <div className={S.composer}>
-                    <Textarea
-                      ref={textareaRef}
-                      value={inputText}
-                      onChange={e => setInputText(e.target.value)}
+                  <div ref={composerDivRef} className={S.composer}>
+                    <ComposerInput
+                      ref={composerRef}
+                      onChange={handleComposerChange}
                       onKeyDown={handleKeyDown}
-                      placeholder={t`Ask me anything about your data…`}
-                      minRows={isBottomDock ? 3 : 1}
-                      maxRows={isBottomDock ? 8 : 5}
-                      autosize
+                      onSlashTyped={handleSlashTyped}
+                      placeholder={t`Ask me anything about your data… (/ for metrics)`}
                       disabled={isLoading}
-                      variant="unstyled"
-                      size="sm"
                       className={S.composerTextarea}
                     />
+                    {slashMenuOpen && (
+                      <MetricSlashMenu
+                        anchorRef={composerDivRef}
+                        onSelect={handleMetricSelect}
+                        onClose={() => setSlashMenuOpen(false)}
+                        datasourceId={datasource?.id}
+                      />
+                    )}
                     <div className={S.composerFooter}>
                       <Text size="xs" c="text-tertiary" className={S.inputHint}>
-                        {t`Enter to send · Shift+Enter for new line`}
+                        {t`Enter to send · Shift+Enter for new line · / for metrics`}
                       </Text>
                       {isLoading ? (
                         <Tooltip label={t`Stop generating`}>

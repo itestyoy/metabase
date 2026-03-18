@@ -1,0 +1,57 @@
+.wrapper {
+  padding: 8px 12px 4px;
+}
+
+.editor {
+  min-height: 20px;
+  max-height: 120px;
+  overflow-y: auto;
+  outline: none;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--mb-color-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--mb-color-text-tertiary);
+  pointer-events: none;
+}
+
+.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Inline metric chip */
+.metricChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--mb-color-brand-lighter);
+  color: var(--mb-color-brand);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin: 0 1px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  vertical-align: baseline;
+  cursor: default;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.metricChipClose {
+  cursor: pointer;
+  opacity: 0.5;
+  font-size: 13px;
+  font-weight: 400;
+  margin-left: 2px;
+}
+
+.metricChipClose:hover {
+  opacity: 1;
+}
