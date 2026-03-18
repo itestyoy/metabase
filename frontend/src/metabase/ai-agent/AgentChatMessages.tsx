@@ -707,11 +707,9 @@ function MetricChipById({ id }: { id: number }) {
   );
 }
 
-/**
- * Render text with inline metric chips. Works for both:
- * - ["metric", 42] /* Revenue */ (with name comment)
- * - ["metric", 42] (bare — fetches name by ID)
- */
+// Render text with inline metric chips. Works for both:
+// - ["metric", 42] with name comment
+// - ["metric", 42] bare (fetches name by ID)
 function MetricAwareText({ content, className }: { content: string; className?: string }) {
   if (!content.includes('["metric"')) {
     return <Markdown className={className}>{content}</Markdown>;
