@@ -1,6 +1,6 @@
 import { t } from "ttag";
 
-import { ActionIcon, Icon, Tooltip } from "metabase/ui";
+import { ActionIcon, Flex, Icon, Text, Tooltip } from "metabase/ui";
 
 import { AgentModal } from "./AgentModal";
 import S from "./AgentButton.module.css";
@@ -26,12 +26,15 @@ export function AgentButton() {
           bd="1px solid var(--mb-color-border)"
           p="sm"
           h="2.25rem"
-          w="2.25rem"
+          w="auto"
           aria-label={label}
           onClick={isOpen ? close : open}
           className={`${S.aiButton} ${isOpen ? S.aiButtonActive : ""}`}
         >
-          <Icon name="ai" className={isOpen ? S.aiIconActive : S.aiIcon} />
+          <Flex align="center" gap={6}>
+            <Icon name="ai" className={isOpen ? S.aiIconActive : S.aiIcon} />
+            <Text size="xs" fw={600} lh={1}>{t`BI Agent`}</Text>
+          </Flex>
         </ActionIcon>
       </Tooltip>
 
