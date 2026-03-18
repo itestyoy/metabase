@@ -330,15 +330,21 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
     setIsLoadingDetail(true);
 
     try {
+      // 1. SQL — always available from raw_query (query table stores compiled SQL for all types)
+      if (q.raw_query) {
+        try { setExpandedSql(formatSql(q.raw_query, { language: "sql" })); }
+        catch { setExpandedSql(q.raw_query); }
+      }
+
+      // 2. JSON detail — for saved cards, fetch dataset_query
       if (q.card_id) {
-        // Saved card: fetch dataset_query JSON + compile to SQL
         const resp = await fetch(`/api/card/${q.card_id}`, { headers: apiHeaders() });
         const card = await resp.json();
         const dq = card?.dataset_query;
         setExpandedDetail(dq ? JSON.stringify(dq, null, 2) : JSON.stringify(card, null, 2));
 
-        // Compile to SQL
-        if (dq) {
+        // If no raw_query from query table, compile to SQL via API
+        if (!q.raw_query && dq) {
           try {
             const sqlResp = await fetch("/api/dataset/native", {
               method: "POST", headers: apiHeaders(), body: JSON.stringify(dq),
@@ -348,12 +354,8 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
               try { setExpandedSql(formatSql(sqlData.query, { language: "sql" })); }
               catch { setExpandedSql(sqlData.query); }
             }
-          } catch { /* SQL compilation optional */ }
+          } catch { /* compilation optional */ }
         }
-      } else if (q.raw_query) {
-        // Ad-hoc: raw SQL is the detail
-        try { setExpandedSql(formatSql(q.raw_query, { language: "sql" })); }
-        catch { setExpandedSql(q.raw_query); }
       }
     } catch {
       setExpandedDetail("Failed to load query details");
@@ -645,13 +647,11 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
         </Box>
       )}
 
-      {/* ── Selected row: MBQL / dataset_query (only for saved cards) ──── */}
-      {expandedRow !== null && expandedDetail && queries[expandedRow]?.card_id && (
+      {/* ── Selected row: dataset_query JSON (only for non-native saved cards) ──── */}
+      {expandedRow !== null && expandedDetail && queries[expandedRow]?.card_id && !queries[expandedRow]?.native && (
         <Box className={S.resultContainer}>
           <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={4}>
-            <Text size="xs" fw={500} c="text-tertiary">
-              {queries[expandedRow]?.native ? "Native" : "MBQL"}
-            </Text>
+            <Text size="xs" fw={500} c="text-tertiary">MBQL (dataset_query)</Text>
             <CopyButton text={expandedDetail} />
           </Flex>
           <Box mah={200} className={S.codeEditorScroll}>
@@ -665,7 +665,7 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
         <Box className={S.resultContainer}>
           <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={4}>
             <Text size="xs" fw={500} c="text-tertiary">
-              {queries[expandedRow]?.card_id ? t`Compiled SQL` : "SQL"}
+              {queries[expandedRow]?.native ? "SQL" : t`Compiled SQL`}
             </Text>
             <Flex gap={4}>
               <OpenInEditorButton sql={expandedSql} />
