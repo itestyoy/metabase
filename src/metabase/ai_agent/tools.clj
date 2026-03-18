@@ -482,6 +482,24 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
 ;;; Tool implementations
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
+(defn- run-search
+  "Run Metabase search engine with the given query, model filter, and limit."
+  [query & {:keys [models table-db-id limit] :or {limit 50}}]
+  (let [ctx (cond-> {:search-string         query
+                     :limit                 limit
+                     :current-user-id       api/*current-user-id*
+                     :current-user-perms    @api/*current-user-permissions-set*
+                     :is-superuser?         api/*is-superuser?*
+                     :is-impersonated-user? (perms/impersonated-user?)
+                     :is-sandboxed-user?    (perms/sandboxed-user?)}
+              models      (assoc :models models)
+              table-db-id (assoc :table-db-id table-db-id))]
+    (try
+      (:data (search/search (search/search-context ctx)))
+      (catch Exception e
+        (log/warn e "Search failed" {:term query})
+        []))))
+
 (defn- list-databases [search-term]
   (let [dbs (if (seq search-term)
               (run-search search-term :models #{"database"} :limit 20)
@@ -552,24 +570,6 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                             (:id c) (:name c)
                             (if (:description c) (str ", Desc: " (:description c)) "")))
                   cards))))))
-
-(defn- run-search
-  "Run Metabase search engine with the given query, model filter, and limit."
-  [query & {:keys [models table-db-id limit] :or {limit 50}}]
-  (let [ctx (cond-> {:search-string         query
-                     :limit                 limit
-                     :current-user-id       api/*current-user-id*
-                     :current-user-perms    @api/*current-user-permissions-set*
-                     :is-superuser?         api/*is-superuser?*
-                     :is-impersonated-user? (perms/impersonated-user?)
-                     :is-sandboxed-user?    (perms/sandboxed-user?)}
-              models      (assoc :models models)
-              table-db-id (assoc :table-db-id table-db-id))]
-    (try
-      (:data (search/search (search/search-context ctx)))
-      (catch Exception e
-        (log/warn e "Search failed" {:term query})
-        []))))
 
 (def ^:private ai-type->search-model
   "Map user-friendly type names (used by the AI) to internal search model names."
