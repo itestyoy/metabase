@@ -990,6 +990,20 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                             (if (:description tbl) (str " — " (:description tbl)) "")))
                   tables))))))
 
+(defn- load-guide-file!
+  "Load a guide file from the path given by env var.
+  Throws if the env var is not set or the file does not exist."
+  [env-var]
+  (let [path (or (System/getenv env-var)
+                 (throw (ex-info (str "BI Agent: env var " env-var " is not set. "
+                                      "Set it to the path of the guide file.")
+                                 {:env-var env-var})))
+        f    (io/file path)]
+    (when-not (.exists f)
+      (throw (ex-info (str "BI Agent: " env-var " points to non-existent file '" path "'")
+                      {:env-var env-var :path path})))
+    (slurp f)))
+
 (defn- get-mbql-guide []
   (load-guide-file! "MB_AI_AGENT_MBQL_GUIDE_FILE"))
 
@@ -1021,20 +1035,6 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
 
 (defn- get-document-guide []
   (load-guide-file! "MB_AI_AGENT_DOCUMENT_GUIDE_FILE"))
-
-(defn- load-guide-file!
-  "Load a guide file from the path given by env var.
-  Throws if the env var is not set or the file does not exist."
-  [env-var]
-  (let [path (or (System/getenv env-var)
-                 (throw (ex-info (str "BI Agent: env var " env-var " is not set. "
-                                      "Set it to the path of the guide file.")
-                                 {:env-var env-var})))
-        f    (io/file path)]
-    (when-not (.exists f)
-      (throw (ex-info (str "BI Agent: " env-var " points to non-existent file '" path "'")
-                      {:env-var env-var :path path})))
-    (slurp f)))
 
 (defn- get-metrics-guide []
   (load-guide-file! "MB_AI_AGENT_METRICS_GUIDE_FILE"))
