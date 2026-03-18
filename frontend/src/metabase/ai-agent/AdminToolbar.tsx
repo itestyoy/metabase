@@ -564,53 +564,64 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
       )}
       {/* ── Selected row: actions bar ──── */}
       {expandedRow !== null && queries[expandedRow] && (
-        <Flex className={S.actionsBar} gap="xs" align="center" px="md" py={6} wrap="wrap">
+        <Flex className={S.actionsBar} gap={6} align="center" px="md" py={6} wrap="wrap">
           {queries[expandedRow].card_id && (
-            <Button size="xs" variant="light" leftSection={<Icon name="question" size={12} />}
+            <UnstyledButton className={S.actionPill}
               onClick={() => window.open(`/question/${queries[expandedRow]!.card_id}`, "_blank")}>
-              {t`Open Card`}
-            </Button>
+              <Icon name="question" size={12} />
+              <Text size="xs">{t`Card`}</Text>
+            </UnstyledButton>
           )}
           {queries[expandedRow].dashboard_id && (
-            <Button size="xs" variant="light" leftSection={<Icon name="dashboard" size={12} />}
+            <UnstyledButton className={S.actionPill}
               onClick={() => window.open(`/dashboard/${queries[expandedRow]!.dashboard_id}`, "_blank")}>
-              {t`Open Dashboard`}
-            </Button>
+              <Icon name="dashboard" size={12} />
+              <Text size="xs">{t`Dashboard`}</Text>
+            </UnstyledButton>
           )}
           {!queries[expandedRow].native && expandedDetail && (
-            <OpenInNotebookButton datasetQuery={expandedDetail} />
+            <UnstyledButton className={S.actionPill}
+              onClick={() => { try { const dq = JSON.parse(expandedDetail); window.open(`/question/notebook#${serializeCardForUrl({ dataset_query: dq, display: "table", visualization_settings: {} })}`, "_blank"); } catch {} }}>
+              <Icon name="notebook" size={12} />
+              <Text size="xs">{t`Notebook`}</Text>
+            </UnstyledButton>
           )}
-          {(queries[expandedRow].native || expandedSql) && (
-            <OpenInEditorButton sql={expandedSql ?? ""} />
+          {expandedSql && (
+            <UnstyledButton className={S.actionPill}
+              onClick={() => window.open(buildNativeQuestionUrl(expandedSql), "_blank")}>
+              <Icon name="play" size={12} />
+              <Text size="xs">{t`Editor`}</Text>
+            </UnstyledButton>
           )}
           <Box style={{ flex: 1 }} />
           {queries[expandedRow].card_id && (
-            <Button size="xs" variant="subtle" c="text-tertiary"
-              leftSection={<Icon name="filter" size={12} />}
+            <UnstyledButton className={`${S.actionPill} ${S.actionPillMuted}`}
               onClick={() => {
                 setCardIdFilter(queries[expandedRow]!.card_id);
                 setDashboardIdFilter(null);
                 setContextLabel(queries[expandedRow]!.card_name ?? `Card ${queries[expandedRow]!.card_id}`);
                 setFiltersStale(true);
               }}>
-              {t`Filter by card`}
-            </Button>
+              <Icon name="filter" size={12} />
+              <Text size="xs">{t`By card`}</Text>
+            </UnstyledButton>
           )}
           {queries[expandedRow].dashboard_id && (
-            <Button size="xs" variant="subtle" c="text-tertiary"
-              leftSection={<Icon name="filter" size={12} />}
+            <UnstyledButton className={`${S.actionPill} ${S.actionPillMuted}`}
               onClick={() => {
                 setDashboardIdFilter(queries[expandedRow]!.dashboard_id);
                 setCardIdFilter(null);
                 setContextLabel(queries[expandedRow]!.dashboard_name ?? `Dashboard ${queries[expandedRow]!.dashboard_id}`);
                 setFiltersStale(true);
               }}>
-              {t`Filter by dashboard`}
-            </Button>
+              <Icon name="filter" size={12} />
+              <Text size="xs">{t`By dashboard`}</Text>
+            </UnstyledButton>
           )}
-          <ActionIcon variant="subtle" size="xs" onClick={() => { setExpandedRow(null); setExpandedDetail(null); setExpandedSql(null); }}>
-            <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
-          </ActionIcon>
+          <UnstyledButton className={`${S.actionPill} ${S.actionPillMuted}`}
+            onClick={() => { setExpandedRow(null); setExpandedDetail(null); setExpandedSql(null); }}>
+            <Icon name="close" size={10} />
+          </UnstyledButton>
         </Flex>
       )}
 
