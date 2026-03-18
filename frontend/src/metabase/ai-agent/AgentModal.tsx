@@ -95,6 +95,9 @@ export function AgentModal({ onClose }: AgentModalProps) {
 
   const [inputText, setInputText] = useState("");
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const [slashQuery, setSlashQuery] = useState("");
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+  const slashMetricsRef = useRef<MetricItem[]>([]);
   const [context, setContext] = useState<AgentContextValue | null>(null);
   const [datasource, setDatasource] = useState<AgentDatasource | null>(null);
   const isDatasourceManual = useRef(false);
@@ -276,14 +279,24 @@ export function AgentModal({ onClose }: AgentModalProps) {
     setInputText(text);
   }, []);
 
-  const handleSlashTyped = useCallback(() => {
-    setSlashMenuOpen(true);
+  const handleSlashQueryChange = useCallback((query: string | null) => {
+    if (query !== null) {
+      setSlashMenuOpen(true);
+      setSlashQuery(query);
+      setSlashSelectedIndex(0);
+    } else {
+      setSlashMenuOpen(false);
+    }
+  }, []);
+
+  const handleSlashMetricsLoaded = useCallback((metrics: MetricItem[]) => {
+    slashMetricsRef.current = metrics;
+    setSlashSelectedIndex(0);
   }, []);
 
   const handleMetricSelect = useCallback(
     (metric: MetricItem) => {
       setSlashMenuOpen(false);
-      // insertMetric restores saved cursor, removes "/", inserts chip
       composerRef.current?.insertMetric(metric);
     },
     [],
@@ -302,13 +315,38 @@ export function AgentModal({ onClose }: AgentModalProps) {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (slashMenuOpen) return;
+      if (slashMenuOpen) {
+        const metrics = slashMetricsRef.current;
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setSlashSelectedIndex((i: number) => (i < metrics.length - 1 ? i + 1 : 0));
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setSlashSelectedIndex((i: number) => (i > 0 ? i - 1 : metrics.length - 1));
+          return;
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const idx = slashSelectedIndex;
+          if (metrics[idx]) {
+            handleMetricSelect(metrics[idx]);
+          }
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setSlashMenuOpen(false);
+          return;
+        }
+      }
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSend();
       }
     },
-    [handleSend, slashMenuOpen],
+    [slashMenuOpen, slashSelectedIndex, handleMetricSelect, handleSend],
   );
 
   const handleSelectPrompt = useCallback(
@@ -512,16 +550,17 @@ export function AgentModal({ onClose }: AgentModalProps) {
                       ref={composerRef}
                       onChange={handleComposerChange}
                       onKeyDown={handleKeyDown}
-                      onSlashTyped={handleSlashTyped}
+                      onSlashQueryChange={handleSlashQueryChange}
                       placeholder={t`Ask me anything about your data… (/ for metrics)`}
                       disabled={isLoading}
                       className={S.composerTextarea}
                     />
                     {slashMenuOpen && (
                       <MetricSlashMenu
+                        query={slashQuery}
+                        selectedIndex={slashSelectedIndex}
                         anchorRef={composerDivRef}
-                        onSelect={handleMetricSelect}
-                        onClose={() => setSlashMenuOpen(false)}
+                        onLoaded={handleSlashMetricsLoaded}
                         datasourceId={datasource?.id}
                       />
                     )}

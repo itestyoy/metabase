@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { t } from "ttag";
 
-import { Box, Flex, Icon, Text, TextInput } from "metabase/ui";
+import { Box, Flex, Icon, Text } from "metabase/ui";
 
 import S from "./MetricSlashMenu.module.css";
 
@@ -13,31 +13,29 @@ export interface MetricItem {
 }
 
 interface MetricSlashMenuProps {
-  /** Anchor element for positioning the popup */
+  /** Search query (text typed after "/") — controlled by parent */
+  query: string;
+  /** Currently highlighted item index — controlled by parent via arrow keys */
+  selectedIndex: number;
+  /** Anchor element for positioning */
   anchorRef: React.RefObject<HTMLElement | null>;
-  onSelect: (metric: MetricItem) => void;
-  onClose: () => void;
+  /** Called when metrics list updates (parent stores the list for Enter handling) */
+  onLoaded: (metrics: MetricItem[]) => void;
   datasourceId?: number | null;
 }
 
-function apiHeaders(): Record<string, string> {
-  return { "Content-Type": "application/json" };
-}
-
 export function MetricSlashMenu({
+  query,
+  selectedIndex,
   anchorRef,
-  onSelect,
-  onClose,
+  onLoaded,
   datasourceId,
 }: MetricSlashMenuProps) {
-  const [query, setQuery] = useState("");
   const [metrics, setMetrics] = useState<MetricItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Fetch metrics
+  // Fetch metrics when query changes
   useEffect(() => {
     setIsLoading(true);
     const params = new URLSearchParams({ models: "metric", limit: "50" });
@@ -47,7 +45,7 @@ export function MetricSlashMenu({
     if (datasourceId) {
       params.set("table_db_id", String(datasourceId));
     }
-    fetch(`/api/search?${params}`, { headers: apiHeaders() })
+    fetch(`/api/search?${params}`, { headers: { "Content-Type": "application/json" } })
       .then(r => r.json())
       .then(data => {
         const items: MetricItem[] = (data.data ?? data ?? []).map(
@@ -59,16 +57,15 @@ export function MetricSlashMenu({
           }),
         );
         setMetrics(items);
-        setSelectedIndex(0);
+        onLoaded(items);
       })
-      .catch(() => setMetrics([]))
+      .catch(() => {
+        setMetrics([]);
+        onLoaded([]);
+      })
       .finally(() => setIsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, datasourceId]);
-
-  // Auto-focus search
-  useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 50);
-  }, []);
 
   // Scroll selected item into view
   useEffect(() => {
@@ -78,30 +75,8 @@ export function MetricSlashMenu({
     item?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSelectedIndex(i => (i < metrics.length - 1 ? i + 1 : 0));
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSelectedIndex(i => (i > 0 ? i - 1 : metrics.length - 1));
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        if (metrics[selectedIndex]) {
-          onSelect(metrics[selectedIndex]);
-        }
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    },
-    [metrics, selectedIndex, onSelect, onClose],
-  );
-
-  // Position above the textarea
-  const anchor = anchorRef.current;
-  const rect = anchor?.getBoundingClientRect();
+  // Position above the anchor
+  const rect = anchorRef.current?.getBoundingClientRect();
   const style: React.CSSProperties = rect
     ? {
         position: "fixed",
@@ -113,28 +88,16 @@ export function MetricSlashMenu({
     : { display: "none" };
 
   return (
-    <Box style={style} className={S.container}>
-      <TextInput
-        ref={inputRef}
-        value={query}
-        onChange={e => setQuery(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={t`Search metrics…`}
-        size="xs"
-        variant="unstyled"
-        className={S.searchInput}
-        leftSection={<Icon name="metric" size={14} />}
-      />
+    <Box style={style} className={S.container} onMouseDown={e => e.preventDefault()}>
+      <Text size="xs" fw={600} c="text-tertiary" px="sm" py={4}>
+        {t`Metrics`}{query ? ` — "${query}"` : ""}
+      </Text>
       <div ref={listRef} className={S.list}>
         {isLoading && (
-          <Text size="xs" c="text-tertiary" ta="center" py="sm">
-            {t`Loading…`}
-          </Text>
+          <Text size="xs" c="text-tertiary" ta="center" py="sm">{t`Loading…`}</Text>
         )}
         {!isLoading && metrics.length === 0 && (
-          <Text size="xs" c="text-tertiary" ta="center" py="sm">
-            {t`No metrics found`}
-          </Text>
+          <Text size="xs" c="text-tertiary" ta="center" py="sm">{t`No metrics found`}</Text>
         )}
         {!isLoading &&
           metrics.map((m, i) => (
@@ -145,24 +108,16 @@ export function MetricSlashMenu({
               gap="xs"
               px="sm"
               py={6}
-              onClick={() => onSelect(m)}
-              onMouseEnter={() => setSelectedIndex(i)}
             >
               <Icon name="metric" size={14} className={S.itemIcon} />
               <Box style={{ flex: 1, minWidth: 0 }}>
-                <Text size="sm" fw={500} truncate>
-                  {m.name}
-                </Text>
+                <Text size="sm" fw={500} truncate>{m.name}</Text>
                 {m.description && (
-                  <Text size="xs" c="text-tertiary" truncate>
-                    {m.description}
-                  </Text>
+                  <Text size="xs" c="text-tertiary" truncate>{m.description}</Text>
                 )}
               </Box>
               {m.collection_name && (
-                <Text size="xs" c="text-tertiary" style={{ flexShrink: 0 }}>
-                  {m.collection_name}
-                </Text>
+                <Text size="xs" c="text-tertiary" style={{ flexShrink: 0 }}>{m.collection_name}</Text>
               )}
             </Flex>
           ))}
@@ -170,4 +125,3 @@ export function MetricSlashMenu({
     </Box>
   );
 }
-

@@ -16,6 +16,7 @@ export interface ComposerInputHandle {
   focus: () => void;
   serialize: () => string;
   clear: () => void;
+  /** Insert metric chip, replacing "/query" text before cursor. Focus stays in editor. */
   insertMetric: (metric: InlineMetric) => void;
   getText: () => string;
 }
@@ -25,19 +26,41 @@ interface ComposerInputProps {
   disabled?: boolean;
   onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   onChange?: (text: string) => void;
-  onSlashTyped?: () => void;
+  /** Called when slash query changes. null = no active slash command. */
+  onSlashQueryChange?: (query: string | null) => void;
   className?: string;
+}
+
+/**
+ * Extract slash-command query from a text node at cursor position.
+ * Returns text after "/" or null if not in a slash command.
+ */
+function getSlashQuery(node: Node, offset: number): string | null {
+  if (node.nodeType !== Node.TEXT_NODE) return null;
+  const text = node.textContent ?? "";
+  // Walk backwards from cursor to find "/"
+  let i = offset - 1;
+  while (i >= 0) {
+    const ch = text[i];
+    if (ch === "/") {
+      if (i === 0 || text[i - 1] === " " || text[i - 1] === "\n" || text[i - 1] === "\u00A0") {
+        return text.slice(i + 1, offset);
+      }
+      return null;
+    }
+    if (ch === " " || ch === "\n") return null;
+    i--;
+  }
+  return null;
 }
 
 export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>(
   function ComposerInput(
-    { placeholder, disabled, onKeyDown, onChange, onSlashTyped, className },
+    { placeholder, disabled, onKeyDown, onChange, onSlashQueryChange, className },
     ref,
   ) {
     const editorRef = useRef<HTMLDivElement>(null);
     const isComposing = useRef(false);
-    // Saved cursor range — captured when "/" is typed, restored when metric is inserted
-    const savedRange = useRef<Range | null>(null);
 
     const getText = useCallback((): string => {
       return editorRef.current?.textContent ?? "";
@@ -82,7 +105,6 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
       if (editorRef.current) {
         editorRef.current.innerHTML = "";
       }
-      savedRange.current = null;
     }, []);
 
     const focus = useCallback(() => {
@@ -90,53 +112,32 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
     }, []);
 
     const insertMetric = useCallback((metric: InlineMetric) => {
+      // Focus is ALREADY in this editor (never lost), so getSelection works directly
       const el = editorRef.current;
       if (!el) return;
 
-      // Restore saved cursor position (from when "/" was typed)
-      const range = savedRange.current;
-      if (!range) {
-        // Fallback: append to end
-        el.focus();
-        const sel = window.getSelection();
-        if (sel) {
-          const fallbackRange = document.createRange();
-          fallbackRange.selectNodeContents(el);
-          fallbackRange.collapse(false);
-          sel.removeAllRanges();
-          sel.addRange(fallbackRange);
-        }
-      } else {
-        el.focus();
-        const sel = window.getSelection();
-        if (sel) {
-          sel.removeAllRanges();
-          sel.addRange(range);
-        }
-      }
-
-      // Now remove the "/" before cursor
       const sel = window.getSelection();
-      if (sel && sel.rangeCount > 0) {
-        const curRange = sel.getRangeAt(0);
-        const node = curRange.startContainer;
-        const offset = curRange.startOffset;
+      if (!sel || sel.rangeCount === 0) return;
 
-        if (node.nodeType === Node.TEXT_NODE && offset > 0) {
-          const text = node.textContent ?? "";
-          const slashPos = text.lastIndexOf("/", offset - 1);
-          if (slashPos >= 0) {
-            node.textContent = text.slice(0, slashPos) + text.slice(offset);
-            const newRange = document.createRange();
-            newRange.setStart(node, slashPos);
-            newRange.setEnd(node, slashPos);
-            sel.removeAllRanges();
-            sel.addRange(newRange);
-          }
+      const range = sel.getRangeAt(0);
+      const node = range.startContainer;
+      const offset = range.startOffset;
+
+      // Remove "/query" text before cursor
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent ?? "";
+        let slashPos = offset - 1;
+        while (slashPos >= 0 && text[slashPos] !== "/") {
+          slashPos--;
+        }
+        if (slashPos >= 0) {
+          node.textContent = text.slice(0, slashPos) + text.slice(offset);
+          range.setStart(node, slashPos);
+          range.setEnd(node, slashPos);
         }
       }
 
-      // Create chip element
+      // Create chip
       const chip = document.createElement("span");
       chip.className = S.metricChip;
       chip.contentEditable = "false";
@@ -155,21 +156,17 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
       });
       chip.appendChild(closeBtn);
 
-      // Insert chip at cursor
-      const sel2 = window.getSelection();
-      if (sel2 && sel2.rangeCount > 0) {
-        const insertRange = sel2.getRangeAt(0);
-        insertRange.deleteContents();
-        insertRange.insertNode(chip);
-        const space = document.createTextNode("\u00A0");
-        chip.after(space);
-        insertRange.setStartAfter(space);
-        insertRange.setEndAfter(space);
-        sel2.removeAllRanges();
-        sel2.addRange(insertRange);
-      }
+      // Insert at cursor
+      range.deleteContents();
+      range.insertNode(chip);
+      const space = document.createTextNode("\u00A0");
+      chip.after(space);
+      const newRange = document.createRange();
+      newRange.setStartAfter(space);
+      newRange.setEndAfter(space);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
 
-      savedRange.current = null;
       onChange?.(getText());
     }, [onChange, getText]);
 
@@ -186,25 +183,14 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
       const text = getText();
       onChange?.(text);
 
-      // Check if "/" was just typed — save cursor position
+      // Detect slash query for metric picker
       const sel = window.getSelection();
       if (sel && sel.rangeCount > 0) {
         const range = sel.getRangeAt(0);
-        const node = range.startContainer;
-        const offset = range.startOffset;
-        if (node.nodeType === Node.TEXT_NODE && offset > 0) {
-          const char = (node.textContent ?? "")[offset - 1];
-          const charBefore = offset > 1 ? (node.textContent ?? "")[offset - 2] : undefined;
-          if (
-            char === "/" &&
-            (offset === 1 || charBefore === " " || charBefore === "\n" || charBefore === "\u00A0")
-          ) {
-            savedRange.current = range.cloneRange();
-            onSlashTyped?.();
-          }
-        }
+        const query = getSlashQuery(range.startContainer, range.startOffset);
+        onSlashQueryChange?.(query);
       }
-    }, [getText, onChange, onSlashTyped]);
+    }, [getText, onChange, onSlashQueryChange]);
 
     const handlePaste = useCallback(
       (e: React.ClipboardEvent) => {
