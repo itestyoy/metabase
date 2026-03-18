@@ -30,6 +30,7 @@ import Visualization from "metabase/visualizations/components/Visualization";
 import S from "./AgentModal.module.css";
 import type { ChatMessage, ContentBlock } from "./types";
 
+
 /**
  * A Link that forces a page refresh when navigating to the current URL.
  * React Router v3 ignores navigation to the same path, so we intercept

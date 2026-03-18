@@ -345,11 +345,9 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
                                                          :items {:type "object"
                                                                  :properties {:type       {:type "string" :enum ["count" "sum" "avg" "min" "max" "distinct" "metric" "divide" "multiply" "subtract" "add"]}
                                                                               :field_id   {:type ["integer" "null"] :description "Field ID for sum/avg/min/max/distinct."}
-                                                                              :metric_id  {:type ["integer" "null"] :description "Metric ID for type=metric."}
-                                                                              :metric_id_1 {:type ["integer" "null"] :description "First metric for divide/multiply/subtract/add."}
-                                                                              :metric_id_2 {:type ["integer" "null"] :description "Second metric for divide/multiply/subtract/add."}
-                                                                              :scalar     {:type ["number" "null"] :description "Multiply result by this number (e.g. 1000 for eCPM)."}}
-                                                                 :required ["type" "field_id" "metric_id" "metric_id_1" "metric_id_2" "scalar"]
+                                                                              :metric_ids {:type ["array" "null"] :items {:type "integer"} :description "Metric IDs. For type=metric: [id]. For divide/multiply/subtract/add: [numerator_id, denominator_id]."}
+                                                                              :scalar     {:type ["number" "null"] :description "Multiply result by this (e.g. 1000 for eCPM)."}}
+                                                                 :required ["type" "field_id" "metric_ids" "scalar"]
                                                                  :additionalProperties false}
                                                          :description "Aggregations. Use type=metric for saved metrics, type=divide for metric1/metric2."}
                                          :breakouts     {:type ["array" "null"]
@@ -363,12 +361,10 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
                                                          :items {:type "object"
                                                                  :properties {:operator {:type "string" :enum ["=" "!=" ">" "<" ">=" "<=" "between" "contains" "does-not-contain" "starts-with" "ends-with" "is-null" "not-null" "is-empty" "not-empty" "time-interval"]}
                                                                               :field_id {:type "integer"}
-                                                                              :value    {:type ["string" "number" "boolean" "null"] :description "Filter value. For time-interval: number of units (e.g. -7 for last 7)."}
-                                                                              :value2   {:type ["string" "number" "null"] :description "Second value for between. For time-interval: unit string (day/week/month/year)."}
-                                                                              }
-                                                                 :required ["operator" "field_id" "value" "value2"]
+                                                                              :values   {:type "array" :items {:type ["string" "number" "boolean" "null"]} :description "Filter values. =: [val]. between: [min, max]. time-interval: [-7, \"day\"]. is-null: []."}}
+                                                                 :required ["operator" "field_id" "values"]
                                                                  :additionalProperties false}
-                                                         :description "Filters. For time-interval: value=-7, value2=\"day\" means last 7 days."}
+                                                         :description "Filters. For time-interval: values=[-7, \"day\"] means last 7 days. For is-null: values=[]."}
                                          :order_by      {:type ["array" "null"]
                                                          :items {:type "object"
                                                                  :properties {:field_id          {:type ["integer" "null"] :description "Field ID to sort by. null if sorting by aggregation."}
@@ -394,11 +390,9 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
                                                          :items {:type "object"
                                                                  :properties {:type       {:type "string" :enum ["count" "sum" "avg" "min" "max" "distinct" "metric" "divide" "multiply" "subtract" "add"]}
                                                                               :field_id   {:type ["integer" "null"]}
-                                                                              :metric_id  {:type ["integer" "null"]}
-                                                                              :metric_id_1 {:type ["integer" "null"]}
-                                                                              :metric_id_2 {:type ["integer" "null"]}
+                                                                              :metric_ids {:type ["array" "null"] :items {:type "integer"}}
                                                                               :scalar     {:type ["number" "null"]}}
-                                                                 :required ["type" "field_id" "metric_id" "metric_id_1" "metric_id_2" "scalar"]
+                                                                 :required ["type" "field_id" "metric_ids" "scalar"]
                                                                  :additionalProperties false}}
                                          :breakouts     {:type ["array" "null"]
                                                          :items {:type "object"
@@ -409,9 +403,8 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
                                                          :items {:type "object"
                                                                  :properties {:operator {:type "string" :enum ["=" "!=" ">" "<" ">=" "<=" "between" "contains" "does-not-contain" "starts-with" "ends-with" "is-null" "not-null" "is-empty" "not-empty" "time-interval"]}
                                                                               :field_id {:type "integer"}
-                                                                              :value    {:type ["string" "number" "boolean" "null"]}
-                                                                              :value2   {:type ["string" "number" "null"]}}
-                                                                 :required ["operator" "field_id" "value" "value2"]
+                                                                              :values   {:type "array" :items {:type ["string" "number" "boolean" "null"]}}}
+                                                                 :required ["operator" "field_id" "values"]
                                                                  :additionalProperties false}}
                                          :order_by      {:type ["array" "null"]
                                                          :items {:type "object"
@@ -728,45 +721,49 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
 
 (defn- build-aggregation
   "Convert a simplified aggregation map to MBQL clause."
-  [{:strs [type field_id metric_id metric_id_1 metric_id_2 scalar]}]
-  (let [agg (case type
+  [{:strs [type field_id metric_ids scalar]}]
+  (let [m1 (first metric_ids)
+        m2 (second metric_ids)
+        agg (case type
               "count"    ["count"]
               "sum"      ["sum" (field-ref field_id)]
               "avg"      ["avg" (field-ref field_id)]
               "min"      ["min" (field-ref field_id)]
               "max"      ["max" (field-ref field_id)]
               "distinct" ["distinct" (field-ref field_id)]
-              "metric"   ["metric" metric_id]
-              "divide"   ["/" ["metric" metric_id_1] ["metric" metric_id_2]]
-              "multiply" ["*" ["metric" metric_id_1] ["metric" metric_id_2]]
-              "subtract" ["-" ["metric" metric_id_1] ["metric" metric_id_2]]
-              "add"      ["+" ["metric" metric_id_1] ["metric" metric_id_2]]
+              "metric"   ["metric" m1]
+              "divide"   ["/" ["metric" m1] ["metric" m2]]
+              "multiply" ["*" ["metric" m1] ["metric" m2]]
+              "subtract" ["-" ["metric" m1] ["metric" m2]]
+              "add"      ["+" ["metric" m1] ["metric" m2]]
               ["count"])]
-    (if (and scalar (not= type "metric") (#{"divide" "multiply" "subtract" "add"} type))
+    (if (and scalar (#{"divide" "multiply" "subtract" "add"} type))
       ["*" agg scalar]
       agg)))
 
 (defn- build-filter
   "Convert a simplified filter map to MBQL clause."
-  [{:strs [operator field_id value value2]}]
-  (case operator
-    ("=" "!=" ">" "<" ">=" "<=")
-    [operator (field-ref field_id) value]
+  [{:strs [operator field_id values]}]
+  (let [v1 (first values)
+        v2 (second values)]
+    (case operator
+      ("=" "!=" ">" "<" ">=" "<=")
+      [operator (field-ref field_id) v1]
 
-    "between"
-    ["between" (field-ref field_id) value value2]
+      "between"
+      ["between" (field-ref field_id) v1 v2]
 
-    ("contains" "does-not-contain" "starts-with" "ends-with")
-    [operator (field-ref field_id) value]
+      ("contains" "does-not-contain" "starts-with" "ends-with")
+      [operator (field-ref field_id) v1]
 
-    ("is-null" "not-null" "is-empty" "not-empty")
-    [operator (field-ref field_id)]
+      ("is-null" "not-null" "is-empty" "not-empty")
+      [operator (field-ref field_id)]
 
-    "time-interval"
-    ["time-interval" (field-ref field_id) value value2]
+      "time-interval"
+      ["time-interval" (field-ref field_id) v1 v2]
 
-    ;; fallback
-    ["=" (field-ref field_id) value]))
+      ;; fallback
+      ["=" (field-ref field_id) v1])))
 
 (defn- build-order-by
   "Convert a simplified order-by map to MBQL clause."

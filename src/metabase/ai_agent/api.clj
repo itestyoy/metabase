@@ -430,6 +430,89 @@
                      (inc attempt)))))))))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
+;;; Structured params → MBQL conversion for notebook_link blocks
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+(defn- field-ref [field-id temporal-unit]
+  (if temporal-unit
+    ["field" field-id {"temporal-unit" temporal-unit}]
+    ["field" field-id nil]))
+
+(defn- convert-aggregation [{:strs [type field_id metric_ids scalar]}]
+  (let [ops {"divide" "/" "multiply" "*" "subtract" "-" "add" "+"}
+        m1  (first metric_ids)
+        m2  (second metric_ids)
+        agg (case type
+              "count"    ["count"]
+              "sum"      ["sum" (field-ref field_id nil)]
+              "avg"      ["avg" (field-ref field_id nil)]
+              "min"      ["min" (field-ref field_id nil)]
+              "max"      ["max" (field-ref field_id nil)]
+              "distinct" ["distinct" (field-ref field_id nil)]
+              "metric"   ["metric" m1]
+              (if-let [op (get ops type)]
+                [op ["metric" m1] ["metric" m2]]
+                ["count"]))]
+    (if (and scalar (get ops type))
+      ["*" agg scalar]
+      agg)))
+
+(defn- convert-filter [{:strs [operator field_id values]}]
+  (let [v1 (first values)
+        v2 (second values)]
+    (case operator
+      ("=" "!=" ">" "<" ">=" "<=") [operator (field-ref field_id nil) v1]
+      "between"                    ["between" (field-ref field_id nil) v1 v2]
+      ("contains" "does-not-contain" "starts-with" "ends-with") [operator (field-ref field_id nil) v1]
+      ("is-null" "not-null" "is-empty" "not-empty")             [operator (field-ref field_id nil)]
+      "time-interval"              ["time-interval" (field-ref field_id nil) v1 v2]
+      ["=" (field-ref field_id nil) v1])))
+
+(defn- structured-dataset-query->mbql
+  "Convert structured AI dataset_query params to Metabase MBQL format."
+  [{:strs [database_id source_table source_card aggregations breakouts filters order_by limit]
+    :as   dq}]
+  ;; If already in MBQL format, return as-is
+  (if (and (get dq "type") (get dq "query"))
+    dq
+    (let [query (cond-> {}
+                  source_table       (assoc "source-table" source_table)
+                  source_card        (assoc "source-card" source_card)
+                  (seq aggregations) (assoc "aggregation" (mapv convert-aggregation aggregations))
+                  (seq breakouts)    (assoc "breakout" (mapv (fn [{:strs [field_id temporal_unit]}]
+                                                               (field-ref field_id temporal_unit))
+                                                             breakouts))
+                  (seq filters)      (assoc "filter" (if (= 1 (count filters))
+                                                       (convert-filter (first filters))
+                                                       (into ["and"] (mapv convert-filter filters))))
+                  (seq order_by)     (assoc "order-by" (mapv (fn [{:strs [field_id aggregation_index direction]}]
+                                                               (let [dir (or direction "asc")]
+                                                                 (if aggregation_index
+                                                                   [dir ["aggregation" aggregation_index]]
+                                                                   [dir (field-ref field_id nil)])))
+                                                             order_by))
+                  limit              (assoc "limit" limit))]
+      {"type" "query" "database" database_id "query" query})))
+
+(defn- convert-notebook-links-in-content
+  "Parse AI response content JSON, convert dataset_query in notebook_link blocks to MBQL, return updated JSON string."
+  [content]
+  (try
+    (let [parsed (json/parse-string content)
+          blocks (get parsed "blocks")]
+      (if-not (sequential? blocks)
+        content
+        (let [converted (mapv (fn [block]
+                                (if (and (= "notebook_link" (get block "type"))
+                                         (map? (get block "dataset_query")))
+                                  (assoc block "dataset_query"
+                                         (structured-dataset-query->mbql (get block "dataset_query")))
+                                  block))
+                              blocks)]
+          (json/generate-string (assoc parsed "blocks" converted)))))
+    (catch Exception _ content)))
+
+;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; SSE helpers
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
@@ -573,11 +656,12 @@
                               :datasource           datasource
                               :safe-mode            safe-mode
                               :chat-collection-id   chat-collection-id})
-        result (run-tool-loop api-key model opts
-                              :safe-mode? safe-mode?
-                              :ensure-chat-coll! ensure-chat-coll!)]
+        raw-result (run-tool-loop api-key model opts
+                                  :safe-mode? safe-mode?
+                                  :ensure-chat-coll! ensure-chat-coll!)
+        result     (validate-and-retry api-key model raw-result :safe-mode? safe-mode?)]
     {:response_id         (:response-id result)
-     :content             (:content result)
+     :content             (convert-notebook-links-in-content (:content result))
      :chat_collection_id   @chat-coll-id-atom
      :chat_collection_name (when @chat-coll-id-atom chat-coll-name)
      :tool_calls           (mapv (fn [{:keys [name args result]}]
@@ -639,13 +723,14 @@
         (let [{:keys [api-key model opts safe-mode? ensure-chat-coll!
                       chat-coll-id-atom chat-coll-name]} params
               emit!      (fn [event data] (sse-write! os event data))
-              result (run-tool-loop api-key model opts
-                                   :safe-mode? safe-mode?
-                                   :ensure-chat-coll! ensure-chat-coll!
-                                   :emit! emit!)]
+              raw-result (run-tool-loop api-key model opts
+                                        :safe-mode? safe-mode?
+                                        :ensure-chat-coll! ensure-chat-coll!
+                                        :emit! emit!)
+              result     (validate-and-retry api-key model raw-result :safe-mode? safe-mode?)]
           (sse-write! os "done"
                       {:response_id         (:response-id result)
-                       :content             (:content result)
+                       :content             (convert-notebook-links-in-content (:content result))
                        :chat_collection_id   @chat-coll-id-atom
                        :chat_collection_name (when @chat-coll-id-atom chat-coll-name)
                        :tool_calls           (mapv (fn [{:keys [name args result]}]

@@ -75,13 +75,47 @@
                                                 :document_id {:type ["integer" "null"]}
                                                 :name    {:type ["string" "null"]}
                                                 :display {:type ["string" "null"]}
-                                                :dataset_query {:type ["object" "null"]}
+                                                :dataset_query {:type ["object" "null"]
+                                                                :properties {:database_id  {:type "integer"}
+                                                                             :source_table {:type ["integer" "null"]}
+                                                                             :source_card  {:type ["integer" "null"]}
+                                                                             :aggregations {:type ["array" "null"]
+                                                                                            :items {:type "object"
+                                                                                                    :properties {:type {:type "string"}
+                                                                                                                 :field_id {:type ["integer" "null"]}
+                                                                                                                 :metric_ids {:type ["array" "null"] :items {:type "integer"}}
+                                                                                                                 :scalar {:type ["number" "null"]}}
+                                                                                                    :required ["type" "field_id" "metric_ids" "scalar"]
+                                                                                                    :additionalProperties false}}
+                                                                             :breakouts {:type ["array" "null"]
+                                                                                         :items {:type "object"
+                                                                                                 :properties {:field_id {:type "integer"}
+                                                                                                              :temporal_unit {:type ["string" "null"]}}
+                                                                                                 :required ["field_id" "temporal_unit"]
+                                                                                                 :additionalProperties false}}
+                                                                             :filters {:type ["array" "null"]
+                                                                                       :items {:type "object"
+                                                                                               :properties {:operator {:type "string"}
+                                                                                                            :field_id {:type "integer"}
+                                                                                                            :values {:type "array" :items {:type ["string" "number" "boolean" "null"]}}}
+                                                                                               :required ["operator" "field_id" "values"]
+                                                                                               :additionalProperties false}}
+                                                                             :order_by {:type ["array" "null"]
+                                                                                        :items {:type "object"
+                                                                                                :properties {:field_id {:type ["integer" "null"]}
+                                                                                                             :aggregation_index {:type ["integer" "null"]}
+                                                                                                             :direction {:type "string"}}
+                                                                                                :required ["field_id" "aggregation_index" "direction"]
+                                                                                                :additionalProperties false}}
+                                                                             :limit {:type ["integer" "null"]}}
+                                                                :required ["database_id" "source_table" "source_card" "aggregations" "breakouts" "filters" "order_by" "limit"]
+                                                                :additionalProperties false}
                                                 :columns {:type ["array" "null"]
                                                           :items {:type "string"}}
                                                 :rows    {:type ["array" "null"]
                                                           :items {:type "array"
-                                                                  :items {}}}}
-                                                :required             ["type"]
+                                                                  :items {:type ["string" "number" "boolean" "null"]}}}}
+                                                :required             ["type" "content" "card_id" "card_ids" "dashboard_id" "document_id" "name" "display" "dataset_query" "columns" "rows"]
                                                 :additionalProperties false}}
                           :suggestions {:type  "array"
                                         :items {:type "string"}}}
@@ -97,12 +131,10 @@
            :input             (build-input opts)
            :store             true       ; store=true is required for previous_response_id to work
            :max_output_tokens 65536      ; large limit so tool call arguments (e.g. ProseMirror AST) aren't truncated
-           ;; Structured output — use override if provided, else default agent_response schema
-           :text              {:format (or text-format
-                                           {:type   "json_schema"
-                                            :name   "agent_response"
-                                            :strict true
-                                            :schema response-json-schema})}}
+           ;; Structured output — only apply if explicitly provided (e.g. sub-agent)
+           ;; Main agent uses free-form JSON validated by prompt instructions
+           }
+    text-format                (assoc :text {:format text-format})
     previous-response-id (assoc :previous_response_id previous-response-id)
     (seq tools)          (assoc :tools        tools
                                 :tool_choice  "auto")))
