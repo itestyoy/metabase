@@ -283,9 +283,8 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const handleMetricSelect = useCallback(
     (metric: MetricItem) => {
       setSlashMenuOpen(false);
-      composerRef.current?.removeSlashBeforeCursor();
+      // insertMetric restores saved cursor, removes "/", inserts chip
       composerRef.current?.insertMetric(metric);
-      setTimeout(() => composerRef.current?.focus(), 50);
     },
     [],
   );

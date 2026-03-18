@@ -1,7 +1,6 @@
 import {
   forwardRef,
   useCallback,
-  useEffect,
   useImperativeHandle,
   useRef,
 } from "react";
@@ -15,15 +14,9 @@ export interface InlineMetric {
 
 export interface ComposerInputHandle {
   focus: () => void;
-  /** Serialize content to plain text, converting metric chips to ["metric", ID] */
   serialize: () => string;
-  /** Clear all content */
   clear: () => void;
-  /** Insert a metric chip at the current cursor position */
   insertMetric: (metric: InlineMetric) => void;
-  /** Remove the last "/" character before cursor (used before inserting metric) */
-  removeSlashBeforeCursor: () => void;
-  /** Get raw text (for checking empty state) */
   getText: () => string;
 }
 
@@ -43,6 +36,8 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
   ) {
     const editorRef = useRef<HTMLDivElement>(null);
     const isComposing = useRef(false);
+    // Saved cursor range — captured when "/" is typed, restored when metric is inserted
+    const savedRange = useRef<Range | null>(null);
 
     const getText = useCallback((): string => {
       return editorRef.current?.textContent ?? "";
@@ -58,19 +53,16 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
           parts.push(node.textContent ?? "");
         } else if (node.nodeType === Node.ELEMENT_NODE) {
           const elem = node as HTMLElement;
-          // Metric chip
           const metricId = elem.getAttribute("data-metric-id");
           if (metricId) {
             const name = elem.getAttribute("data-metric-name") ?? elem.textContent;
             parts.push(`["metric", ${metricId}] /* ${name} */`);
-            return; // don't recurse into chip
+            return;
           }
-          // <br> → newline
           if (elem.tagName === "BR") {
             parts.push("\n");
             return;
           }
-          // Block-level elements get newlines (except first)
           if (elem.tagName === "DIV" && elem !== el && parts.length > 0) {
             const lastChar = parts[parts.length - 1];
             if (lastChar && !lastChar.endsWith("\n")) {
@@ -90,6 +82,7 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
       if (editorRef.current) {
         editorRef.current.innerHTML = "";
       }
+      savedRange.current = null;
     }, []);
 
     const focus = useCallback(() => {
@@ -100,11 +93,50 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
       const el = editorRef.current;
       if (!el) return;
 
-      const sel = window.getSelection();
-      if (!sel || sel.rangeCount === 0) {
+      // Restore saved cursor position (from when "/" was typed)
+      const range = savedRange.current;
+      if (!range) {
+        // Fallback: append to end
         el.focus();
+        const sel = window.getSelection();
+        if (sel) {
+          const fallbackRange = document.createRange();
+          fallbackRange.selectNodeContents(el);
+          fallbackRange.collapse(false);
+          sel.removeAllRanges();
+          sel.addRange(fallbackRange);
+        }
+      } else {
+        el.focus();
+        const sel = window.getSelection();
+        if (sel) {
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
       }
 
+      // Now remove the "/" before cursor
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const curRange = sel.getRangeAt(0);
+        const node = curRange.startContainer;
+        const offset = curRange.startOffset;
+
+        if (node.nodeType === Node.TEXT_NODE && offset > 0) {
+          const text = node.textContent ?? "";
+          const slashPos = text.lastIndexOf("/", offset - 1);
+          if (slashPos >= 0) {
+            node.textContent = text.slice(0, slashPos) + text.slice(offset);
+            const newRange = document.createRange();
+            newRange.setStart(node, slashPos);
+            newRange.setEnd(node, slashPos);
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+          }
+        }
+      }
+
+      // Create chip element
       const chip = document.createElement("span");
       chip.className = S.metricChip;
       chip.contentEditable = "false";
@@ -112,7 +144,6 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
       chip.setAttribute("data-metric-name", metric.name);
       chip.textContent = metric.name;
 
-      // Add × button
       const closeBtn = document.createElement("span");
       closeBtn.className = S.metricChipClose;
       closeBtn.textContent = "×";
@@ -124,54 +155,29 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
       });
       chip.appendChild(closeBtn);
 
-      // Insert at cursor
-      const range = sel?.getRangeAt(0);
-      if (range) {
-        range.deleteContents();
-        range.insertNode(chip);
-        // Add a space after chip and move cursor there
+      // Insert chip at cursor
+      const sel2 = window.getSelection();
+      if (sel2 && sel2.rangeCount > 0) {
+        const insertRange = sel2.getRangeAt(0);
+        insertRange.deleteContents();
+        insertRange.insertNode(chip);
         const space = document.createTextNode("\u00A0");
         chip.after(space);
-        range.setStartAfter(space);
-        range.setEndAfter(space);
-        sel?.removeAllRanges();
-        sel?.addRange(range);
+        insertRange.setStartAfter(space);
+        insertRange.setEndAfter(space);
+        sel2.removeAllRanges();
+        sel2.addRange(insertRange);
       }
 
+      savedRange.current = null;
       onChange?.(getText());
     }, [onChange, getText]);
-
-    const removeSlashBeforeCursor = useCallback(() => {
-      const sel = window.getSelection();
-      if (!sel || sel.rangeCount === 0) return;
-
-      const range = sel.getRangeAt(0);
-      const node = range.startContainer;
-      const offset = range.startOffset;
-
-      if (node.nodeType === Node.TEXT_NODE && offset > 0) {
-        const text = node.textContent ?? "";
-        // Find the "/" before cursor
-        const slashPos = text.lastIndexOf("/", offset - 1);
-        if (slashPos >= 0) {
-          // Remove from slash to cursor (the "/" and any search text after it)
-          node.textContent = text.slice(0, slashPos) + text.slice(offset);
-          // Restore cursor position
-          const newRange = document.createRange();
-          newRange.setStart(node, slashPos);
-          newRange.setEnd(node, slashPos);
-          sel.removeAllRanges();
-          sel.addRange(newRange);
-        }
-      }
-    }, []);
 
     useImperativeHandle(ref, () => ({
       focus,
       serialize,
       clear,
       insertMetric,
-      removeSlashBeforeCursor,
       getText,
     }));
 
@@ -180,7 +186,7 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
       const text = getText();
       onChange?.(text);
 
-      // Check if "/" was just typed
+      // Check if "/" was just typed — save cursor position
       const sel = window.getSelection();
       if (sel && sel.rangeCount > 0) {
         const range = sel.getRangeAt(0);
@@ -193,13 +199,13 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
             char === "/" &&
             (offset === 1 || charBefore === " " || charBefore === "\n" || charBefore === "\u00A0")
           ) {
+            savedRange.current = range.cloneRange();
             onSlashTyped?.();
           }
         }
       }
     }, [getText, onChange, onSlashTyped]);
 
-    // Handle paste — strip HTML, keep plain text
     const handlePaste = useCallback(
       (e: React.ClipboardEvent) => {
         e.preventDefault();
