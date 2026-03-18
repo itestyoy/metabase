@@ -434,6 +434,15 @@ This is the PREFERRED way to create questions — use create_question (SQL) only
                                          :nodes       {:type        "string"
                                                        :description "A JSON array of ProseMirror nodes to append. Example: [{\"type\":\"heading\",\"attrs\":{\"level\":2},\"content\":[{\"type\":\"text\",\"text\":\"New Section\"}]},{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Some text.\"}]}]"}}
                   :required             ["document_id" "nodes"]
+                  :additionalProperties false}}
+   {:type        "function"
+    :name        "validate_document_nodes"
+    :description "Validate ProseMirror AST nodes BEFORE sending them to create_document or append_to_document. Returns OK or a list of errors to fix. You MUST call this before every create_document and append_to_document call."
+    :strict      true
+    :parameters  {:type                 "object"
+                  :properties           {:nodes {:type        "string"
+                                                 :description "JSON string to validate. For create_document: the full doc node {\"type\":\"doc\",...}. For append_to_document: the array of nodes [{...},{...}]."}}
+                  :required             ["nodes"]
                   :additionalProperties false}}])
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
@@ -1437,97 +1446,7 @@ Choose display based on the data:
          (get sql-guides engine sql-guide-default))))
 
 (defn- get-document-guide []
-  "## Metabase Document Authoring Guide (ProseMirror AST)
-
-Documents use a ProseMirror AST: a JSON object with `type` and `content` fields.
-The top-level node is always `{\"type\": \"doc\", \"content\": [...]}`.
-
-### Block nodes (top-level children of \"doc\")
-
-1. **paragraph** — basic text block
-   {\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Hello world\"}]}
-   Empty paragraph (spacer): {\"type\": \"paragraph\"}
-
-2. **heading** — section title (levels 1-6)
-   {\"type\": \"heading\", \"attrs\": {\"level\": 2}, \"content\": [{\"type\": \"text\", \"text\": \"Section Title\"}]}
-
-3. **bulletList** — unordered list
-   {\"type\": \"bulletList\", \"content\": [
-     {\"type\": \"listItem\", \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Item 1\"}]}]},
-     {\"type\": \"listItem\", \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Item 2\"}]}]}
-   ]}
-
-4. **orderedList** — numbered list (same structure as bulletList but type is \"orderedList\")
-
-5. **codeBlock** — fenced code block
-   {\"type\": \"codeBlock\", \"content\": [{\"type\": \"text\", \"text\": \"SELECT * FROM orders\"}]}
-
-6. **blockquote** — quoted text
-   {\"type\": \"blockquote\", \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Important note\"}]}]}
-
-7. **horizontalRule** — divider line
-   {\"type\": \"horizontalRule\"}
-
-8. **cardEmbed** — embedded Metabase question/visualization (IMPORTANT)
-   Wrap in a resizeNode for proper rendering:
-   {\"type\": \"resizeNode\", \"content\": [{\"type\": \"cardEmbed\", \"attrs\": {\"id\": <card_id>, \"name\": null}}]}
-   The card_id must be a valid saved question ID. Create questions first, then embed them.
-
-9. **image** — inline image
-   {\"type\": \"image\", \"attrs\": {\"src\": \"https://...\", \"alt\": \"description\"}}
-
-### Inline marks (applied to text nodes)
-
-Text nodes can have a `marks` array with formatting:
-- **bold**: {\"type\": \"text\", \"text\": \"important\", \"marks\": [{\"type\": \"bold\"}]}
-- **italic**: {\"type\": \"text\", \"text\": \"emphasis\", \"marks\": [{\"type\": \"italic\"}]}
-- **strike**: {\"type\": \"text\", \"text\": \"deleted\", \"marks\": [{\"type\": \"strike\"}]}
-- **code**: {\"type\": \"text\", \"text\": \"inline code\", \"marks\": [{\"type\": \"code\"}]}
-- **link**: {\"type\": \"text\", \"text\": \"click here\", \"marks\": [{\"type\": \"link\", \"attrs\": {\"href\": \"https://...\"}}]}
-
-Multiple marks can be combined:
-{\"type\": \"text\", \"text\": \"bold link\", \"marks\": [{\"type\": \"bold\"}, {\"type\": \"link\", \"attrs\": {\"href\": \"...\"}}]}
-
-### Best practices
-
-1. **Always create questions before embedding them** — call create_notebook_question or create_question first,
-   then use the returned card_id in a cardEmbed node.
-
-2. **Structure your document logically** — use headings (level 2-3) to organize sections, embed relevant
-   charts after explanatory text, and use bullet/ordered lists for key findings.
-
-3. **Wrap cardEmbed in resizeNode** — this is required for the editor to properly render and resize the embed.
-
-4. **Use empty paragraphs as spacers** — add {\"type\": \"paragraph\"} between sections for visual breathing room.
-
-5. **Keep the AST valid** — every text must be inside a paragraph, heading, or listItem.
-   Never put text nodes directly inside \"doc\" or \"bulletList\".
-
-6. **Typical document structure**:
-   - Heading (level 1): document title
-   - Paragraph: introduction / summary
-   - Heading (level 2): section for each analysis area
-   - Paragraph: explanation
-   - resizeNode > cardEmbed: embedded chart
-   - Paragraph: interpretation of the chart
-   - bulletList: key takeaways
-   - Heading (level 2): conclusion
-
-### Complete example
-
-{\"type\": \"doc\", \"content\": [
-  {\"type\": \"heading\", \"attrs\": {\"level\": 1}, \"content\": [{\"type\": \"text\", \"text\": \"Q1 Revenue Report\"}]},
-  {\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"This report summarizes revenue trends for Q1 2025.\"}]},
-  {\"type\": \"heading\", \"attrs\": {\"level\": 2}, \"content\": [{\"type\": \"text\", \"text\": \"Monthly Revenue\"}]},
-  {\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Revenue grew steadily across all three months:\"}]},
-  {\"type\": \"resizeNode\", \"content\": [{\"type\": \"cardEmbed\", \"attrs\": {\"id\": 42, \"name\": null}}]},
-  {\"type\": \"paragraph\"},
-  {\"type\": \"heading\", \"attrs\": {\"level\": 2}, \"content\": [{\"type\": \"text\", \"text\": \"Key Findings\"}]},
-  {\"type\": \"bulletList\", \"content\": [
-    {\"type\": \"listItem\", \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Revenue up 15% vs Q4\"}]}]},
-    {\"type\": \"listItem\", \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Top category: Widgets (34% of total)\"}]}]}
-  ]}
-]}")
+  (load-guide-file! "MB_AI_AGENT_DOCUMENT_GUIDE_FILE"))
 
 (defn- load-guide-file!
   "Load a guide file from the path given by env var.
@@ -1548,6 +1467,167 @@ Multiple marks can be combined:
 
 (defn- get-analytical-guide []
   (load-guide-file! "MB_AI_AGENT_ANALYTICAL_GUIDE_FILE"))
+
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;; ProseMirror AST validator
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+(def ^:private valid-block-types
+  #{"paragraph" "heading" "bulletList" "orderedList" "blockquote"
+    "codeBlock" "horizontalRule" "resizeNode" "image" "table"})
+
+(def ^:private valid-inline-types #{"text"})
+
+(def ^:private camel-case-types
+  {"bullet_list"     "bulletList"
+   "ordered_list"    "orderedList"
+   "list_item"       "listItem"
+   "code_block"      "codeBlock"
+   "horizontal_rule" "horizontalRule"
+   "card_embed"      "cardEmbed"
+   "resize_node"     "resizeNode"
+   "table_row"       "tableRow"
+   "table_cell"      "tableCell"
+   "table_header"    "tableHeader"})
+
+(def ^:private no-content-types #{"horizontalRule" "image"})
+
+(defn- validate-node
+  "Validate a single ProseMirror node. Returns a vector of error strings (empty = valid)."
+  [node path]
+  (if-not (map? node)
+    [(str path ": node must be a JSON object, got " (type node))]
+    (let [t    (or (get node "type") (get node :type))
+          errs (transient [])]
+      ;; Check type exists
+      (when-not t
+        (conj! errs (str path ": missing \"type\" field")))
+
+      (when t
+        ;; Check snake_case
+        (when-let [fix (get camel-case-types (name t))]
+          (conj! errs (str path ": wrong type \"" t "\" (snake_case). Use \"" fix "\"")))
+
+        ;; Heading must have attrs.level as integer
+        (when (= (name t) "heading")
+          (let [attrs (or (get node "attrs") (get node :attrs))]
+            (when-not attrs
+              (conj! errs (str path ": heading missing \"attrs\":{\"level\":N}")))
+            (when attrs
+              (let [level (or (get attrs "level") (get attrs :level))]
+                (when-not (integer? level)
+                  (conj! errs (str path ": heading level must be integer 1-6, got " (pr-str level))))))))
+
+        ;; cardEmbed must have attrs.id, must be inside resizeNode
+        (when (= (name t) "cardEmbed")
+          (let [attrs (or (get node "attrs") (get node :attrs))
+                id    (when attrs (or (get attrs "id") (get attrs :id)))]
+            (when-not id
+              (conj! errs (str path ": cardEmbed missing attrs.id (use \"id\", not \"card_id\")")))
+            (when (or (get attrs "card_id") (get attrs :card_id))
+              (conj! errs (str path ": cardEmbed uses \"card_id\" — must be \"id\"")))))
+
+        ;; No content on leaf nodes
+        (when (contains? no-content-types (name t))
+          (let [content (or (get node "content") (get node :content))]
+            (when (some? content)
+              (conj! errs (str path ": " t " must NOT have a \"content\" field")))))
+
+        ;; text node checks
+        (when (= (name t) "text")
+          (let [text-val (or (get node "text") (get node :text))]
+            (when-not (string? text-val)
+              (conj! errs (str path ": text node missing \"text\" string field")))
+            (when (or (get node "content") (get node :content))
+              (conj! errs (str path ": text node must NOT have \"content\"")))))
+
+        ;; listItem must contain paragraph
+        (when (= (name t) "listItem")
+          (let [content (or (get node "content") (get node :content))]
+            (when (or (not (sequential? content)) (empty? content))
+              (conj! errs (str path ": listItem must have content with at least one paragraph")))
+            (when (sequential? content)
+              (doseq [child content]
+                (let [ct (or (get child "type") (get child :type))]
+                  (when (= (name (or ct "")) "text")
+                    (conj! errs (str path ": text directly inside listItem — wrap in paragraph"))))))))
+
+        ;; bulletList/orderedList must contain only listItem
+        (when (#{"bulletList" "orderedList"} (name t))
+          (let [content (or (get node "content") (get node :content))]
+            (when (or (not (sequential? content)) (empty? content))
+              (conj! errs (str path ": " t " must have at least one listItem")))
+            (when (sequential? content)
+              (doseq [child content]
+                (let [ct (name (or (get child "type") (get child :type) ""))]
+                  (when-not (= ct "listItem")
+                    (conj! errs (str path ": " t " can only contain listItem, found \"" ct "\""))))))))
+
+        ;; paragraph/heading should only contain text nodes
+        (when (#{"paragraph" "heading"} (name t))
+          (let [content (or (get node "content") (get node :content))]
+            (when (sequential? content)
+              (doseq [child content]
+                (let [ct (name (or (get child "type") (get child :type) ""))]
+                  (when-not (valid-inline-types ct)
+                    (conj! errs (str path ": " t " can only contain text nodes, found \"" ct "\""))))))))
+
+        ;; marks only on text nodes
+        (when (and (not= (name t) "text")
+                   (or (get node "marks") (get node :marks)))
+          (conj! errs (str path ": \"marks\" only allowed on text nodes, found on \"" t "\"")))
+
+        ;; Recurse into content
+        (let [content (or (get node "content") (get node :content))]
+          (when (sequential? content)
+            (doseq [[i child] (map-indexed vector content)]
+              (let [child-errs (validate-node child (str path ".content[" i "]"))]
+                (doseq [e child-errs] (conj! errs e)))))))
+
+      (persistent! errs))))
+
+(defn- validate-document-nodes [{:strs [nodes]}]
+  (let [parsed (try
+                 (json/parse-string nodes)
+                 (catch Exception e
+                   (str "INVALID JSON: " (.getMessage e))))]
+    (if (string? parsed)
+      parsed
+      (let [node-list (if (and (map? parsed) (= (get parsed "type") "doc"))
+                        ;; create_document format: validate children of doc
+                        (let [content (get parsed "content")]
+                          (if (sequential? content)
+                            content
+                            [{:error "doc node must have \"content\" array"}]))
+                        ;; append_to_document format: array of nodes
+                        (if (sequential? parsed)
+                          parsed
+                          [{:error (str "Expected JSON array or {\"type\":\"doc\",...}, got " (type parsed))}]))
+            ;; Check for top-level errors
+            top-errors (when-let [e (:error (first node-list))]
+                         [e])
+            ;; Validate doc-level if wrapped in doc
+            doc-errors (when (and (map? parsed) (= (get parsed "type") "doc"))
+                         (let [content (get parsed "content")]
+                           (when (sequential? content)
+                             (->> content
+                                  (keep-indexed (fn [i child]
+                                                  (let [ct (or (get child "type") (get child :type) "")]
+                                                    (when (= (name ct) "text")
+                                                      (str "doc.content[" i "]: text directly inside doc — wrap in paragraph")))))
+                                  vec))))
+            ;; Validate each node
+            all-errors (if top-errors
+                         top-errors
+                         (into (vec doc-errors)
+                               (mapcat (fn [[i node]]
+                                         (validate-node node (str "node[" i "]")))
+                                       (map-indexed vector node-list))))]
+        (if (empty? all-errors)
+          "OK — all nodes are valid."
+          (str "ERRORS FOUND (" (count all-errors) "):\n"
+               (str/join "\n" (map-indexed (fn [i e] (str (inc i) ". " e)) all-errors))
+               "\n\nFix these errors and call validate_document_nodes again before submitting."))))))
 
 (defn- create-notebook-question [{:strs [name description database_id dataset_query display collection_id]}]
   (when collection_id
@@ -1754,6 +1834,7 @@ Multiple marks can be combined:
         "get_document"    (get-document-details (get args "document_id"))
         "update_document" (update-document args)
         "append_to_document" (append-to-document args)
+        "validate_document_nodes" (validate-document-nodes args)
         (str "Unknown tool: " tool-name)))
     (catch Exception e
       (log/warn e "AI Agent tool execution failed" {:tool tool-name})

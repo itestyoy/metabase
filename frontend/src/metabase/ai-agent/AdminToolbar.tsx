@@ -159,7 +159,7 @@ interface QueryRow {
   context: string | null;
   native: boolean;
   error: string | null;
-  raw_query: string | null;
+  raw_query: string | Record<string, unknown> | null;
 }
 interface CompiledCard { card_id: number | null; card_name: string; query: string; }
 
@@ -330,10 +330,15 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
     setIsLoadingDetail(true);
 
     try {
-      // 1. SQL — always available from raw_query (query table stores compiled SQL for all types)
+      // 1. SQL — raw_query may be a string or an object with {query, params}
       if (q.raw_query) {
-        try { setExpandedSql(formatSql(q.raw_query, { language: "sql" })); }
-        catch { setExpandedSql(q.raw_query); }
+        const sqlStr = typeof q.raw_query === "object" && q.raw_query !== null
+          ? (q.raw_query as Record<string, unknown>).query as string ?? JSON.stringify(q.raw_query, null, 2)
+          : q.raw_query;
+        if (sqlStr) {
+          try { setExpandedSql(formatSql(sqlStr, { language: "sql" })); }
+          catch { setExpandedSql(sqlStr); }
+        }
       }
 
       // 2. JSON detail — for saved cards, fetch dataset_query
@@ -651,7 +656,7 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
       {expandedRow !== null && expandedDetail && queries[expandedRow]?.card_id && !queries[expandedRow]?.native && (
         <Box className={S.resultContainer}>
           <Flex className={S.resultHeader} align="center" justify="space-between" px="md" py={4}>
-            <Text size="xs" fw={500} c="text-tertiary">MBQL (dataset_query)</Text>
+            <Text size="xs" fw={500} c="text-tertiary">MBQL</Text>
             <CopyButton text={expandedDetail} />
           </Flex>
           <Box mah={200} className={S.codeEditorScroll}>
