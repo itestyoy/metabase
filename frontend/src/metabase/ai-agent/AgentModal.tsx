@@ -85,7 +85,7 @@ interface AgentModalProps {
 }
 
 export function AgentModal({ onClose }: AgentModalProps) {
-  const { panelState, panelStyle, headerProps, resizeHandleProps, toggleMinimized } =
+  const { panelState, panelStyle, headerProps, resizeHandleProps } =
     useFloatingPanel(PANEL_CONSTRAINTS);
 
   const [inputText, setInputText] = useState("");
@@ -295,14 +295,13 @@ export function AgentModal({ onClose }: AgentModalProps) {
     [sendMessage, context, safeMode, saveLocation],
   );
 
-  const { isMinimized, isInteracting } = panelState;
+  const { isInteracting } = panelState;
   const isNotConfigured = agentSettings !== null && !agentSettings.configured;
 
   const modalClassName = [
     S.floatingModal,
     isRightDock && S.floatingModalDocked,
     isBottomDock && S.floatingModalDockedBottom,
-    !isDocked && isMinimized && S.floatingModalMinimized,
     !isDocked && isInteracting && S.floatingModalInteracting,
   ]
     .filter(Boolean)
@@ -331,7 +330,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
       )}
 
       {/* ── Resize handles (hidden when minimized or docked) ──── */}
-      {!isMinimized && !isDocked && (
+      {!isDocked && (
         <>
           <div
             className={`${S.resizeHandle} ${S.resizeHandleLeft}`}
@@ -358,7 +357,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
         </div>
 
         <div className={S.modalHeaderActions}>
-          {!isMinimized && messages.length > 0 && (
+          {messages.length > 0 && (
             <Tooltip label={t`New chat`}>
               <ActionIcon
                 variant="transparent"
@@ -379,12 +378,12 @@ export function AgentModal({ onClose }: AgentModalProps) {
                 size="sm"
                 aria-label={t`Dock mode`}
               >
-                <Icon name={dockMode === "none" ? "sidebar_closed" : dockMode === "right" ? "sidebar_closed" : "arrow_down"} size={14} />
+                <Icon name={dockMode === "right" ? "chevronright" : dockMode === "bottom" ? "chevrondown" : "expand"} size={14} />
               </ActionIcon>
             </Menu.Target>
             <Menu.Dropdown>
               <Menu.Item
-                leftSection={<Icon name="chevronleft" size={14} />}
+                leftSection={<Icon name="expand" size={14} />}
                 onClick={() => setDockMode("none")}
                 fw={dockMode === "none" ? 600 : 400}
                 c={dockMode === "none" ? "brand" : undefined}
@@ -392,7 +391,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                 {t`Floating`}
               </Menu.Item>
               <Menu.Item
-                leftSection={<Icon name="sidebar_closed" size={14} />}
+                leftSection={<Icon name="chevronright" size={14} />}
                 onClick={() => setDockMode("right")}
                 fw={dockMode === "right" ? 600 : 400}
                 c={dockMode === "right" ? "brand" : undefined}
@@ -400,7 +399,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                 {t`Dock right`}
               </Menu.Item>
               <Menu.Item
-                leftSection={<Icon name="arrow_down" size={14} />}
+                leftSection={<Icon name="chevrondown" size={14} />}
                 onClick={() => setDockMode("bottom")}
                 fw={dockMode === "bottom" ? 600 : 400}
                 c={dockMode === "bottom" ? "brand" : undefined}
@@ -409,19 +408,6 @@ export function AgentModal({ onClose }: AgentModalProps) {
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
-          {!isDocked && (
-            <Tooltip label={isMinimized ? t`Expand` : t`Minimize`}>
-              <ActionIcon
-                variant="transparent"
-                c="rgba(255,255,255,0.8)"
-                size="sm"
-                onClick={toggleMinimized}
-                aria-label={isMinimized ? t`Expand` : t`Minimize`}
-              >
-                <Icon name={isMinimized ? "chevronup" : "chevrondown"} size={14} />
-              </ActionIcon>
-            </Tooltip>
-          )}
           <Tooltip label={t`Close`}>
             <ActionIcon
               variant="transparent"
@@ -437,7 +423,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
       </div>
 
       {/* ── Body ───────────────────────────────────── */}
-      {!isMinimized && (
+      {(
         <>
           {isNotConfigured ? (
             <Stack align="center" justify="center" p="xl" gap="sm" style={{ flex: 1 }}>

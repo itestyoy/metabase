@@ -43,13 +43,6 @@
   transition: height 0.2s ease;
 }
 
-.floatingModalMinimized {
-  /* Override the inline height from JS — 52px includes border thanks to
-     box-sizing: border-box inherited from .floatingModal */
-  height: 52px !important;
-  border-radius: var(--default-border-radius, 8px);
-}
-
 /* Applied during drag/resize to prevent text selection and disable transitions */
 .floatingModalInteracting {
   user-select: none;
