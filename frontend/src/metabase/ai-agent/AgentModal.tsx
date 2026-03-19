@@ -588,33 +588,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                       />
                     )}
                     <div className={S.composerFooter}>
-                      <Text size="xs" c="text-tertiary" className={S.inputHint}>
-                        {t`Enter to send · Shift+Enter for new line · / for metrics`}
-                      </Text>
-                      <Flex gap={2} align="center">
-                        <Menu position="top-end" shadow="md" width={140}>
-                          <Menu.Target>
-                            <Tooltip label={lang === "ru" ? "Русский" : "English"}>
-                              <ActionIcon variant="transparent" size="sm" aria-label={t`Language`}>
-                                <Text size="xs" fw={700} c="text-tertiary" lh={1}>{lang === "ru" ? "RU" : "EN"}</Text>
-                              </ActionIcon>
-                            </Tooltip>
-                          </Menu.Target>
-                          <Menu.Dropdown>
-                            <Menu.Item
-                              onClick={() => setLang("ru")}
-                              style={lang === "ru" ? { background: "var(--mb-color-background-hover)" } : undefined}
-                            >
-                              <Text size="xs">Русский</Text>
-                            </Menu.Item>
-                            <Menu.Item
-                              onClick={() => setLang("en")}
-                              style={lang === "en" ? { background: "var(--mb-color-background-hover)" } : undefined}
-                            >
-                              <Text size="xs">English</Text>
-                            </Menu.Item>
-                          </Menu.Dropdown>
-                        </Menu>
+                      <Flex gap={4} align="center" style={{ flex: 1, minWidth: 0 }}>
                         <Popover position="top-end" shadow="md" width={280} opened={tipsOpen} onChange={setTipsOpen}>
                           <Popover.Target>
                             <ActionIcon variant="transparent" size="sm" aria-label={t`Tips`} onClick={() => setTipsOpen(o => !o)}>
@@ -624,7 +598,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                           <Popover.Dropdown p="xs">
                             <Text size="xs" fw={600} c="text-secondary" mb={6}>{lang === "ru" ? "Шаблоны" : "Templates"}</Text>
                             <Stack gap={2}>
-                              {(tipsData?.templates ?? []).map((tip, tipIdx) => {
+                              {(tipsData?.templates ?? []).map((tip) => {
                                 const tipLabel = tip.label[lang] ?? tip.label.en ?? "";
                                 const tipTemplate = tip.template[lang] ?? tip.template.en ?? "";
                                 return (
@@ -679,6 +653,34 @@ export function AgentModal({ onClose }: AgentModalProps) {
                             </Box>
                           </Popover.Dropdown>
                         </Popover>
+                        <Text size="xs" c="text-tertiary" className={S.inputHint}>
+                          {t`Enter to send · Shift+Enter for new line · / for metrics`}
+                        </Text>
+                      </Flex>
+                      <Flex gap={2} align="center">
+                        <Menu position="top-end" shadow="md" width={140}>
+                          <Menu.Target>
+                            <Tooltip label={lang === "ru" ? "Русский" : "English"}>
+                              <ActionIcon variant="transparent" size="sm" aria-label={t`Language`}>
+                                <Text size="xs" fw={700} c="text-tertiary" lh={1}>{lang === "ru" ? "RU" : "EN"}</Text>
+                              </ActionIcon>
+                            </Tooltip>
+                          </Menu.Target>
+                          <Menu.Dropdown>
+                            <Menu.Item
+                              onClick={() => setLang("ru")}
+                              style={lang === "ru" ? { background: "var(--mb-color-background-hover)" } : undefined}
+                            >
+                              <Text size="xs">Русский</Text>
+                            </Menu.Item>
+                            <Menu.Item
+                              onClick={() => setLang("en")}
+                              style={lang === "en" ? { background: "var(--mb-color-background-hover)" } : undefined}
+                            >
+                              <Text size="xs">English</Text>
+                            </Menu.Item>
+                          </Menu.Dropdown>
+                        </Menu>
                         {isLoading ? (
                           <Tooltip label={t`Stop generating`}>
                             <ActionIcon

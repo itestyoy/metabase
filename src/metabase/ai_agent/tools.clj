@@ -90,39 +90,31 @@ Use this to preview data or validate SQL before saving a question."
 
    {:type        "function"
     :name        "execute_card"
-    :description "Run an existing saved question (card) by its ID and return the results.
-Use this to show the user the current data from a question they already have, or to
-inspect results before referencing them in your answer."
+    :description "Run an existing saved question (card) by its card_id and return the results. NOT for tables or metrics — use card_id from list_questions, search_items, or context."
     :strict      true
     :parameters  {:type                 "object"
                   :properties           {:card_id {:type        "integer"
-                                                   :description "ID of the saved question to execute."}}
+                                                   :description "Card ID (from list_questions, search_items, or context). NOT a table_id or metric_id."}}
                   :required             ["card_id"]
                   :additionalProperties false}}
 
    {:type        "function"
     :name        "get_card_details"
-    :description "Get detailed information about a saved question (card): its name, description,
-dataset query (SQL or structured), visualization type, parameters, and the collection it belongs to.
-Use this when the user asks about a specific question, wants to understand how it works, or you need
-to inspect its query before modifying or recreating it."
+    :description "Get details of a saved question/model/metric card: name, query, display, collection. Use card_id from list_questions, search_items, or context — NOT a table_id."
     :strict      true
     :parameters  {:type                 "object"
                   :properties           {:card_id {:type        "integer"
-                                                   :description "ID of the saved question to inspect."}}
+                                                   :description "Card ID (from list_questions, search_items, or [Context] with type=question/model). NOT a table_id or database_id."}}
                   :required             ["card_id"]
                   :additionalProperties false}}
 
    {:type        "function"
     :name        "get_dashboard_details"
-    :description "Get detailed information about a dashboard: its name, description, parameters (filters),
-and the list of cards (questions) it contains with their sizes and positions.
-Use this when the user asks about a dashboard's structure, wants to know what questions are on it,
-or needs to understand how its filters work."
+    :description "Get dashboard details: name, cards, filters, layout. Use dashboard_id from search_items or context — NOT a card_id or table_id."
     :strict      true
     :parameters  {:type                 "object"
                   :properties           {:dashboard_id {:type        "integer"
-                                                        :description "ID of the dashboard to inspect."}}
+                                                        :description "Dashboard ID (from search_items or [Context] with type=dashboard). NOT a card_id."}}
                   :required             ["dashboard_id"]
                   :additionalProperties false}}
 
@@ -152,13 +144,11 @@ Use this when the user asks what is inside a collection or wants to browse its c
 
    {:type        "function"
     :name        "get_table_details"
-    :description "Get detailed information about a specific table or model: its columns (names, types),
-the database it belongs to, and its schema. Use this when the context references a table or model,
-or when you need column details for a single table without fetching the entire database schema."
+    :description "Get table columns with field IDs and types. Use table_id from get_database_tables or [Context] with type=table — NOT a card_id."
     :strict      true
     :parameters  {:type                 "object"
                   :properties           {:table_id {:type        "integer"
-                                                    :description "ID of the table to inspect."}}
+                                                    :description "Table ID (from get_database_tables or [Context] with type=table). NOT a card_id or database_id."}}
                   :required             ["table_id"]
                   :additionalProperties false}}
 
@@ -282,11 +272,11 @@ Returns metric IDs, names, descriptions, and their source tables."
 
    {:type        "function"
     :name        "get_metric"
-    :description "Get details of a specific metric by its ID. Returns name, description, source table, database, and the metric's dataset_query definition."
+    :description "Get metric details: name, description, dataset_query, source table. Use metric_id from list_metrics."
     :strict      true
     :parameters  {:type                 "object"
                   :properties           {:metric_id {:type        "integer"
-                                                     :description "The metric card ID."}}
+                                                     :description "Metric card ID (from list_metrics). NOT a table_id or field_id."}}
                   :required             ["metric_id"]
                   :additionalProperties false}}
    {:type        "function"
@@ -386,32 +376,32 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
                   :properties           {:database_id   {:type "integer" :description "Database ID."}
                                          :source_table  {:type ["integer" "null"] :description "Table ID. Use this OR source_card."}
                                          :source_card   {:type ["integer" "null"] :description "Saved question/model ID. Use this OR source_table."}
-                                         :aggregations  {:type ["array" "null"]
+                                         :aggregations  {:type ["array" "null"] :description "What to calculate."
                                                          :items {:type "object"
-                                                                 :properties {:type       {:type "string" :enum ["count" "sum" "avg" "min" "max" "distinct" "metric" "divide" "multiply" "subtract" "add"]}
-                                                                              :field_id   {:type ["integer" "null"]}
-                                                                              :metric_ids {:type ["array" "null"] :items {:type "integer"}}
-                                                                              :scalar     {:type ["number" "null"]}}
+                                                                 :properties {:type       {:type "string" :enum ["count" "sum" "avg" "min" "max" "distinct" "metric" "divide" "multiply" "subtract" "add"] :description "Aggregation type."}
+                                                                              :field_id   {:type ["integer" "null"] :description "Field ID for sum/avg/min/max/distinct. Null for count/metric."}
+                                                                              :metric_ids {:type ["array" "null"] :items {:type "integer"} :description "For metric: [id]. For divide: [numerator_id, denominator_id]."}
+                                                                              :scalar     {:type ["number" "null"] :description "Multiply result (e.g. 1000 for eCPM)."}}
                                                                  :required ["type" "field_id" "metric_ids" "scalar"]
                                                                  :additionalProperties false}}
-                                         :breakouts     {:type ["array" "null"]
+                                         :breakouts     {:type ["array" "null"] :description "Group by fields."
                                                          :items {:type "object"
-                                                                 :properties {:field_id {:type "integer"} :temporal_unit {:type ["string" "null"] :enum ["minute" "hour" "day" "week" "month" "quarter" "year" nil]}}
+                                                                 :properties {:field_id {:type "integer" :description "Field ID to group by."} :temporal_unit {:type ["string" "null"] :enum ["minute" "hour" "day" "week" "month" "quarter" "year" nil] :description "Time grouping. Null for non-date."}}
                                                                  :required ["field_id" "temporal_unit"]
                                                                  :additionalProperties false}}
-                                         :filters       {:type ["array" "null"]
+                                         :filters       {:type ["array" "null"] :description "Row filters. Multiple are ANDed."
                                                          :items {:type "object"
-                                                                 :properties {:operator {:type "string" :enum ["=" "!=" ">" "<" ">=" "<=" "between" "contains" "does-not-contain" "starts-with" "ends-with" "is-null" "not-null" "is-empty" "not-empty" "time-interval"]}
-                                                                              :field_id {:type "integer"}
-                                                                              :values   {:type "array" :items {:type ["string" "number" "boolean" "null"]}}}
+                                                                 :properties {:operator {:type "string" :enum ["=" "!=" ">" "<" ">=" "<=" "between" "contains" "does-not-contain" "starts-with" "ends-with" "is-null" "not-null" "is-empty" "not-empty" "time-interval"] :description "Filter operator."}
+                                                                              :field_id {:type "integer" :description "Field ID to filter."}
+                                                                              :values   {:type "array" :items {:type ["string" "number" "boolean" "null"]} :description "Values. =:[val]. between:[min,max]. time-interval:[-7,\"day\"]. is-null:[]."}}
                                                                  :required ["operator" "field_id" "values"]
                                                                  :additionalProperties false}}
-                                         :order_by      {:type ["array" "null"]
+                                         :order_by      {:type ["array" "null"] :description "Sort order."
                                                          :items {:type "object"
-                                                                 :properties {:field_id {:type ["integer" "null"]} :aggregation_index {:type ["integer" "null"]} :direction {:type "string" :enum ["asc" "desc"]}}
+                                                                 :properties {:field_id {:type ["integer" "null"] :description "Field to sort. Null if by aggregation."} :aggregation_index {:type ["integer" "null"] :description "0-based agg index. Null if by field."} :direction {:type "string" :enum ["asc" "desc"] :description "Sort direction."}}
                                                                  :required ["field_id" "aggregation_index" "direction"]
                                                                  :additionalProperties false}}
-                                         :limit         {:type ["integer" "null"]}}
+                                         :limit         {:type ["integer" "null"] :description "Max rows."}}
                   :required             ["database_id" "source_table" "source_card" "aggregations" "breakouts" "filters" "order_by" "limit"]
                   :additionalProperties false}}
    {:type        "function"
@@ -814,7 +804,8 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
 
 (defn- execute-card [card-id]
   (let [card (t2/select-one :model/Card :id card-id)
-        _    (api/check-404 card)
+        _    (when-not card
+               (throw (ex-info (format "Card/question with ID %d not found. Make sure you're using a valid card_id." card-id) {})))
         _    (api/check-403 (mi/can-read? card))
         dq   (:dataset_query card)
         result (try
@@ -832,7 +823,8 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
 
 (defn- get-card-details [card-id]
   (let [card (t2/select-one :model/Card :id card-id)
-        _    (api/check-404 card)
+        _    (when-not card
+               (throw (ex-info (format "Card/question with ID %d not found. Check that you're using a card_id, not a table_id or metric_id." card-id) {})))
         _    (api/check-403 (mi/can-read? card))
         coll (when (:collection_id card)
                (t2/select-one :model/Collection :id (:collection_id card)))
@@ -871,7 +863,8 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
 
 (defn- get-dashboard-details [dashboard-id]
   (let [dash (t2/select-one :model/Dashboard :id dashboard-id)
-        _    (api/check-404 dash)
+        _    (when-not dash
+               (throw (ex-info (format "Dashboard with ID %d not found." dashboard-id) {})))
         _    (api/check-403 (mi/can-read? dash))
         coll (when (:collection_id dash)
                (t2/select-one :model/Collection :id (:collection_id dash)))
@@ -1008,7 +1001,8 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
 
 (defn- get-table-details [table-id]
   (let [tbl    (t2/select-one :model/Table :id table-id)
-        _      (api/check-404 tbl)
+        _      (when-not tbl
+                 (throw (ex-info (format "Table with ID %d not found." table-id) {})))
         _      (api/check-403 (mi/can-read? tbl))
         db     (t2/select-one :model/Database :id (:db_id tbl))
         fields (t2/select :model/Field
@@ -1323,7 +1317,8 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
 
 (defn- get-document-details [document-id]
   (let [doc (t2/select-one :model/Document :id document-id)
-        _   (api/check-404 doc)
+        _   (when-not doc
+               (throw (ex-info (format "Document with ID %d not found." document-id) {})))
         _   (api/check-403 (mi/can-read? doc))
         ast (:document doc)
         ;; Extract embedded card IDs from AST
@@ -1406,7 +1401,8 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
 
 (defn- get-metric [metric-id]
   (let [card (t2/select-one :model/Card :id metric-id)
-        _    (api/check-404 card)
+        _    (when-not card
+               (throw (ex-info (format "Metric with ID %d not found." metric-id) {})))
         _    (api/check-403 (mi/can-read? card))]
     (when-not (= (keyword (:type card)) :metric)
       (throw (ex-info (format "Card %d is not a metric (type: %s)." metric-id (name (:type card))) {})))
