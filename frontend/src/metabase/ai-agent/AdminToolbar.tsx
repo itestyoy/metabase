@@ -159,7 +159,7 @@ interface QueryRow {
   context: string | null;
   native: boolean;
   error: string | null;
-  raw_query: Record<string, unknown> | null;
+  raw_query: string | Record<string, unknown> | null;
 }
 interface CompiledCard { card_id: number | null; card_name: string; query: string; }
 
@@ -331,9 +331,13 @@ function QueryExplorer({ pageContext }: { pageContext: PageContext | null }) {
 
     try {
       // raw_query comes from the `query` table (same as v_query_log.query)
-      const dq = q.raw_query;
+      // It may be a string (raw SQL query result) or already parsed object
+      let dq = q.raw_query;
+      if (typeof dq === "string") {
+        try { dq = JSON.parse(dq); } catch { /* not JSON, leave as-is */ }
+      }
 
-      if (dq) {
+      if (dq && typeof dq === "object") {
         setExpandedDetail(JSON.stringify(dq, null, 2));
 
         if (q.native) {

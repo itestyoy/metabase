@@ -62,62 +62,31 @@
       :content (str message)}]))
 
 (def ^:private response-json-schema
-  "JSON schema for structured output — guarantees the model returns valid blocks + suggestions format."
+  "Unified JSON schema for structured output. 6 universal fields per block.
+   Backend converts to the legacy format that frontend expects."
   {:type                 "object"
+   :description          "BI Agent response. Use MULTIPLE blocks with specific types — do NOT put everything in one text block. Use card_link for questions, dashboard_link for dashboards, document_link for documents."
    :properties           {:blocks      {:type  "array"
+                                        :description "Content blocks. Each block has a type and 5 universal fields. Use the right type for each piece — text for explanations, card_link for question references, table for data, etc."
                                         :items {:type                 "object"
-                                                :properties           {:type    {:type "string"}
-                                                :content {:type ["string" "null"]}
-                                                :card_id {:type ["integer" "null"]}
-                                                :card_ids {:type ["array" "null"]
-                                                           :items {:type "integer"}}
-                                                :dashboard_id {:type ["integer" "null"]}
-                                                :document_id {:type ["integer" "null"]}
-                                                :name    {:type ["string" "null"]}
-                                                :display {:type ["string" "null"]}
-                                                :dataset_query {:type ["object" "null"]
-                                                                :properties {:database_id  {:type "integer"}
-                                                                             :source_table {:type ["integer" "null"]}
-                                                                             :source_card  {:type ["integer" "null"]}
-                                                                             :aggregations {:type ["array" "null"]
-                                                                                            :items {:type "object"
-                                                                                                    :properties {:type {:type "string"}
-                                                                                                                 :field_id {:type ["integer" "null"]}
-                                                                                                                 :metric_ids {:type ["array" "null"] :items {:type "integer"}}
-                                                                                                                 :scalar {:type ["number" "null"]}}
-                                                                                                    :required ["type" "field_id" "metric_ids" "scalar"]
-                                                                                                    :additionalProperties false}}
-                                                                             :breakouts {:type ["array" "null"]
-                                                                                         :items {:type "object"
-                                                                                                 :properties {:field_id {:type "integer"}
-                                                                                                              :temporal_unit {:type ["string" "null"]}}
-                                                                                                 :required ["field_id" "temporal_unit"]
-                                                                                                 :additionalProperties false}}
-                                                                             :filters {:type ["array" "null"]
-                                                                                       :items {:type "object"
-                                                                                               :properties {:operator {:type "string"}
-                                                                                                            :field_id {:type "integer"}
-                                                                                                            :values {:type "array" :items {:type ["string" "number" "boolean" "null"]}}}
-                                                                                               :required ["operator" "field_id" "values"]
-                                                                                               :additionalProperties false}}
-                                                                             :order_by {:type ["array" "null"]
-                                                                                        :items {:type "object"
-                                                                                                :properties {:field_id {:type ["integer" "null"]}
-                                                                                                             :aggregation_index {:type ["integer" "null"]}
-                                                                                                             :direction {:type "string"}}
-                                                                                                :required ["field_id" "aggregation_index" "direction"]
-                                                                                                :additionalProperties false}}
-                                                                             :limit {:type ["integer" "null"]}}
-                                                                :required ["database_id" "source_table" "source_card" "aggregations" "breakouts" "filters" "order_by" "limit"]
-                                                                :additionalProperties false}
-                                                :columns {:type ["array" "null"]
-                                                          :items {:type "string"}}
-                                                :rows    {:type ["array" "null"]
-                                                          :items {:type "array"
-                                                                  :items {:type ["string" "number" "boolean" "null"]}}}}
-                                                :required             ["type" "content" "card_id" "card_ids" "dashboard_id" "document_id" "name" "display" "dataset_query" "columns" "rows"]
+                                                :description          "A content block. Fill only the fields relevant to the type. Set irrelevant fields to null."
+                                                :properties           {:type    {:type "string"
+                                                                                :enum ["text" "sql" "card_link" "card_preview" "dashboard_link" "document_link" "notebook_link" "table"]
+                                                                                :description "Block type. text=markdown, sql=code, card_link=link to question, card_preview=created question, dashboard_link=link to dashboard, document_link=link to document, notebook_link=MBQL draft, table=inline data."}
+                                                                      :content {:type ["string" "null"]
+                                                                                :description "For text: markdown content. For sql: SQL code. Null for other types."}
+                                                                      :id      {:type ["integer" "null"]
+                                                                                :description "For card_link/card_preview: card ID. For dashboard_link: dashboard ID. For document_link: document ID. Null for text/sql/notebook_link/table."}
+                                                                      :name    {:type ["string" "null"]
+                                                                                :description "Human-readable display name. Required for card_link, card_preview, dashboard_link, document_link, notebook_link. Null for text/sql/table."}
+                                                                      :display {:type ["string" "null"]
+                                                                                :description "Visualization type: line, bar, area, pie, table, scalar, row, progress, funnel, scatter. For card_preview and notebook_link. Null for others."}
+                                                                      :data    {:type ["string" "null"]
+                                                                                :description "JSON string for complex data. For notebook_link: structured query as JSON string. For table: {\"columns\":[\"col1\",\"col2\"],\"rows\":[[\"a\",1],[\"b\",2]]} as JSON string. Null for other types."}}
+                                                :required             ["type" "content" "id" "name" "display" "data"]
                                                 :additionalProperties false}}
                           :suggestions {:type  "array"
+                                        :description "2-6 short follow-up prompts the user can click. Human-readable, max 60 chars each, no internal IDs."
                                         :items {:type "string"}}}
    :required             ["blocks" "suggestions"]
    :additionalProperties false})
@@ -131,10 +100,13 @@
            :input             (build-input opts)
            :store             true       ; store=true is required for previous_response_id to work
            :max_output_tokens 65536      ; large limit so tool call arguments (e.g. ProseMirror AST) aren't truncated
-           ;; Structured output — only apply if explicitly provided (e.g. sub-agent)
-           ;; Main agent uses free-form JSON validated by prompt instructions
-           }
-    text-format                (assoc :text {:format text-format})
+           ;; Structured output — use override if provided, else default unified schema
+           :text              {:format (or text-format
+                                           {:type   "json_schema"
+                                            :name   "agent_response"
+                                            :strict true
+                                            :schema response-json-schema})}}
+
     previous-response-id (assoc :previous_response_id previous-response-id)
     (seq tools)          (assoc :tools        tools
                                 :tool_choice  "auto")))

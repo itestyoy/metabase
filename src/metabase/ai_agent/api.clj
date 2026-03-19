@@ -494,22 +494,38 @@
                   limit              (assoc "limit" limit))]
       {"type" "query" "database" database_id "query" query})))
 
-(defn- convert-notebook-links-in-content
-  "Parse AI response content JSON, convert dataset_query in notebook_link blocks to MBQL, return updated JSON string."
+(defn- unified-block->legacy
+  "Convert a unified block {type, content, id, name, display, data} to legacy format."
+  [{:strs [type content id name display data]}]
+  (case type
+    "text"           {"type" "text" "content" (or content "")}
+    "sql"            {"type" "sql" "content" (or content "")}
+    "card_link"      {"type" "card_link" "card_id" id "name" (or name "")}
+    "card_preview"   {"type" "card_preview" "card_id" id "name" (or name "") "display" (or display "table")}
+    "dashboard_link" {"type" "dashboard_link" "dashboard_id" id "name" (or name "")}
+    "document_link"  {"type" "document_link" "document_id" id "name" (or name "")}
+    "notebook_link"  (let [dq (when data
+                                (try (structured-dataset-query->mbql (json/parse-string data))
+                                     (catch Exception _ nil)))]
+                       (cond-> {"type" "notebook_link" "name" (or name "") "display" (or display "table")}
+                         dq (assoc "dataset_query" dq)))
+    "table"          (let [parsed (when data (try (json/parse-string data) (catch Exception _ nil)))]
+                       {"type" "table"
+                        "columns" (or (get parsed "columns") [])
+                        "rows"    (or (get parsed "rows") [])})
+    ;; fallback — pass through
+    {"type" (or type "text") "content" (or content "")}))
+
+(defn- convert-unified-response
+  "Parse AI structured response, convert unified blocks to legacy format for frontend."
   [content]
   (try
     (let [parsed (json/parse-string content)
           blocks (get parsed "blocks")]
       (if-not (sequential? blocks)
         content
-        (let [converted (mapv (fn [block]
-                                (if (and (= "notebook_link" (get block "type"))
-                                         (map? (get block "dataset_query")))
-                                  (assoc block "dataset_query"
-                                         (structured-dataset-query->mbql (get block "dataset_query")))
-                                  block))
-                              blocks)]
-          (json/generate-string (assoc parsed "blocks" converted)))))
+        (json/generate-string
+          (assoc parsed "blocks" (mapv unified-block->legacy blocks)))))
     (catch Exception _ content)))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
@@ -656,12 +672,11 @@
                               :datasource           datasource
                               :safe-mode            safe-mode
                               :chat-collection-id   chat-collection-id})
-        raw-result (run-tool-loop api-key model opts
-                                  :safe-mode? safe-mode?
-                                  :ensure-chat-coll! ensure-chat-coll!)
-        result     (validate-and-retry api-key model raw-result :safe-mode? safe-mode?)]
+        result (run-tool-loop api-key model opts
+                              :safe-mode? safe-mode?
+                              :ensure-chat-coll! ensure-chat-coll!)]
     {:response_id         (:response-id result)
-     :content             (convert-notebook-links-in-content (:content result))
+     :content             (convert-unified-response (:content result))
      :chat_collection_id   @chat-coll-id-atom
      :chat_collection_name (when @chat-coll-id-atom chat-coll-name)
      :tool_calls           (mapv (fn [{:keys [name args result]}]
@@ -723,14 +738,13 @@
         (let [{:keys [api-key model opts safe-mode? ensure-chat-coll!
                       chat-coll-id-atom chat-coll-name]} params
               emit!      (fn [event data] (sse-write! os event data))
-              raw-result (run-tool-loop api-key model opts
-                                        :safe-mode? safe-mode?
-                                        :ensure-chat-coll! ensure-chat-coll!
-                                        :emit! emit!)
-              result     (validate-and-retry api-key model raw-result :safe-mode? safe-mode?)]
+              result (run-tool-loop api-key model opts
+                                   :safe-mode? safe-mode?
+                                   :ensure-chat-coll! ensure-chat-coll!
+                                   :emit! emit!)]
           (sse-write! os "done"
                       {:response_id         (:response-id result)
-                       :content             (convert-notebook-links-in-content (:content result))
+                       :content             (convert-unified-response (:content result))
                        :chat_collection_id   @chat-coll-id-atom
                        :chat_collection_name (when @chat-coll-id-atom chat-coll-name)
                        :tool_calls           (mapv (fn [{:keys [name args result]}]

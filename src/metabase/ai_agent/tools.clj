@@ -695,9 +695,10 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
   (let [db     (t2/select-one :model/Database :id database-id)
         _      (api/check-404 db)
         _      (api/check-403 (mi/can-read? db))
-        query  {:database database-id
-                :type     :native
-                :native   {:query sql :template-tags {}}}
+        query  {:database   database-id
+                :type       :native
+                :native     {:query sql :template-tags {}}
+                :middleware {:userland-query? true}}
         result (try
                  (qp/process-query
                   (assoc query :info {:executed-by api/*current-user-id*
@@ -798,9 +799,10 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
         db (t2/select-one :model/Database :id database-id)
         _  (api/check-404 db)
         _  (api/check-403 (mi/can-read? db))
-        query  {:database database-id
-                :type     :query
-                :query    query-map}
+        query  {:database   database-id
+                :type       :query
+                :query      query-map
+                :middleware {:userland-query? true}}
         result (try
                  (qp/process-query
                   (assoc query :info {:executed-by api/*current-user-id*
@@ -818,6 +820,7 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
         result (try
                  (qp/process-query
                   (assoc dq
+                         :middleware {:userland-query? true}
                          :info {:executed-by api/*current-user-id*
                                 :context     :ad-hoc
                                 :card-id     card-id
