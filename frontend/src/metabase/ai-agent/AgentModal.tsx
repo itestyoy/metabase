@@ -98,6 +98,19 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const [slashQuery, setSlashQuery] = useState("");
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const [tipsOpen, setTipsOpen] = useState(false);
+  const [lang, setLang] = useState<"ru" | "en">("ru");
+  const [tipsData, setTipsData] = useState<{
+    templates: { icon: string; label: Record<string, string>; template: Record<string, string> }[];
+    examples: Record<string, string>[];
+    hint: Record<string, string>;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/ai-agent/tips", { headers: { "Content-Type": "application/json" } })
+      .then(r => r.json())
+      .then(setTipsData)
+      .catch(() => {});
+  }, []);
   const slashMetricsRef = useRef<MetricItem[]>([]);
   const [context, setContext] = useState<AgentContextValue | null>(null);
   const [datasource, setDatasource] = useState<AgentDatasource | null>(null);
@@ -312,11 +325,14 @@ export function AgentModal({ onClose }: AgentModalProps) {
     const text = composerRef.current?.serialize()?.trim() ?? inputText.trim();
     if (!text || isLoading) return;
 
+    const langHint = lang === "ru" ? "\n[Respond in Russian]" : "\n[Respond in English]";
+    const finalText = text + langHint;
+
     setInputText("");
     composerRef.current?.clear();
-    sendMessage(text, context, safeMode, saveLocation?.id, datasource);
+    sendMessage(finalText, context, safeMode, saveLocation?.id, datasource);
     setTimeout(() => composerRef.current?.focus(), 50);
-  }, [inputText, isLoading, sendMessage, context, safeMode, saveLocation, datasource]);
+  }, [inputText, isLoading, sendMessage, context, safeMode, saveLocation, datasource, lang]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -532,6 +548,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                 onSelectPrompt={handleSelectPrompt}
                 onSaveAsQuestion={handleSaveAsQuestion}
                 onRetry={retryLastMessage}
+                examplePrompts={tipsData?.examples?.map(e => e[lang] ?? e.en ?? "") ?? undefined}
               />
 
               <div
@@ -575,6 +592,29 @@ export function AgentModal({ onClose }: AgentModalProps) {
                         {t`Enter to send · Shift+Enter for new line · / for metrics`}
                       </Text>
                       <Flex gap={2} align="center">
+                        <Menu position="top-end" shadow="md" width={140}>
+                          <Menu.Target>
+                            <Tooltip label={lang === "ru" ? "Русский" : "English"}>
+                              <ActionIcon variant="transparent" size="sm" aria-label={t`Language`}>
+                                <Text size="xs" fw={700} c="text-tertiary" lh={1}>{lang === "ru" ? "RU" : "EN"}</Text>
+                              </ActionIcon>
+                            </Tooltip>
+                          </Menu.Target>
+                          <Menu.Dropdown>
+                            <Menu.Item
+                              onClick={() => setLang("ru")}
+                              style={lang === "ru" ? { background: "var(--mb-color-background-hover)" } : undefined}
+                            >
+                              <Text size="xs">Русский</Text>
+                            </Menu.Item>
+                            <Menu.Item
+                              onClick={() => setLang("en")}
+                              style={lang === "en" ? { background: "var(--mb-color-background-hover)" } : undefined}
+                            >
+                              <Text size="xs">English</Text>
+                            </Menu.Item>
+                          </Menu.Dropdown>
+                        </Menu>
                         <Popover position="top-end" shadow="md" width={280} opened={tipsOpen} onChange={setTipsOpen}>
                           <Popover.Target>
                             <ActionIcon variant="transparent" size="sm" aria-label={t`Tips`} onClick={() => setTipsOpen(o => !o)}>
@@ -582,20 +622,14 @@ export function AgentModal({ onClose }: AgentModalProps) {
                             </ActionIcon>
                           </Popover.Target>
                           <Popover.Dropdown p="xs">
-                            <Text size="xs" fw={600} c="text-secondary" mb={6}>{t`Templates`}</Text>
+                            <Text size="xs" fw={600} c="text-secondary" mb={6}>{lang === "ru" ? "Шаблоны" : "Templates"}</Text>
                             <Stack gap={2}>
-                              {[
-                                { icon: "line" as const, label: t`Chart`, template: "Show {metric} by {dimension} for the last {period}" },
-                                { icon: "table2" as const, label: t`Compare`, template: "Compare {metric_A} vs {metric_B} by {dimension}" },
-                                { icon: "filter" as const, label: t`Filter`, template: "Show {metric} where {field} is {value}" },
-                                { icon: "bolt" as const, label: t`Investigate`, template: "Why did {metric} change in {period}? Break down by {dimension}" },
-                                { icon: "dashboard" as const, label: t`Dashboard`, template: "Create a dashboard: {metric_1} by {dim_1}, {metric_2} by {dim_2}" },
-                                { icon: "document" as const, label: t`Report`, template: "Create a report analyzing {topic} for {period}" },
-                                { icon: "search" as const, label: t`Find`, template: "Find all metrics related to {keyword}" },
-                                { icon: "sum" as const, label: t`Ratio`, template: "Calculate {metric_A} / {metric_B} by {dimension}" },
-                              ].map(tip => (
+                              {(tipsData?.templates ?? []).map((tip, tipIdx) => {
+                                const tipLabel = tip.label[lang] ?? tip.label.en ?? "";
+                                const tipTemplate = tip.template[lang] ?? tip.template.en ?? "";
+                                return (
                                 <Flex
-                                  key={tip.label}
+                                  key={tipLabel}
                                   align="center"
                                   gap={8}
                                   px={8}
@@ -605,8 +639,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                                   onClick={() => {
                                     setTipsOpen(false);
                                     composerRef.current?.focus();
-                                    document.execCommand("insertText", false, tip.template);
-                                    // Select first placeholder so user can type over it
+                                    document.execCommand("insertText", false, tipTemplate);
                                     setTimeout(() => {
                                       const el = (composerRef.current as unknown as { getText?: () => string })?.getText?.() ?? "";
                                       const match = el.match(/\{(\w+)\}/);
@@ -630,17 +663,18 @@ export function AgentModal({ onClose }: AgentModalProps) {
                                     }, 50);
                                   }}
                                 >
-                                  <Icon name={tip.icon} size={13} color="var(--mb-color-brand)" style={{ flexShrink: 0 }} />
+                                  <Icon name={tip.icon as any} size={13} color="var(--mb-color-brand)" style={{ flexShrink: 0 }} />
                                   <Box style={{ flex: 1, minWidth: 0 }}>
-                                    <Text size="xs" fw={500} c="text-primary">{tip.label}</Text>
-                                    <Text size="xs" c="text-tertiary" truncate>{tip.template}</Text>
+                                    <Text size="xs" fw={500} c="text-primary">{tipLabel}</Text>
+                                    <Text size="xs" c="text-tertiary" truncate>{tipTemplate}</Text>
                                   </Box>
                                 </Flex>
-                              ))}
+                                );
+                              })}
                             </Stack>
                             <Box mt={8} pt={6} style={{ borderTop: "1px solid var(--mb-color-border)" }}>
                               <Text size="xs" c="text-tertiary" lh={1.4}>
-                                {t`Replace {placeholders} with your values. Type / to insert metrics.`}
+                                {tipsData?.hint?.[lang] ?? tipsData?.hint?.en ?? t`Replace {placeholders} with your values. Type / to insert metrics.`}
                               </Text>
                             </Box>
                           </Popover.Dropdown>

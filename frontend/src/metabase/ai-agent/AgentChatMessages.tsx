@@ -67,12 +67,10 @@ function ForceLink({
   );
 }
 
-const EXAMPLE_PROMPTS = [
-  t`Investigate ad revenue last week`,
-  t`Investigate in-app revenue last week and create a document`,
-  t`Build a notebook question on monthly active users`,
-  t`Find all questions related to stability errors`,
-  t`Find cards related to UA spend`,
+const DEFAULT_EXAMPLE_PROMPTS = [
+  "What metrics do we have?",
+  "Show revenue by month",
+  "Find all ad revenue metrics",
 ];
 
 /* ── Block renderers ─────────────────────────────────────────────────────── */
@@ -768,11 +766,13 @@ interface AgentChatMessagesProps {
   onSelectPrompt?: (prompt: string) => void;
   onSaveAsQuestion?: (sql: string) => void;
   onRetry?: () => void;
+  examplePrompts?: string[];
 }
 
 export function AgentChatMessages({
   messages,
   isLoading,
+  examplePrompts,
   error,
   onSelectPrompt,
   onSaveAsQuestion,
@@ -808,7 +808,7 @@ export function AgentChatMessages({
         </Text>
         {onSelectPrompt && (
           <Stack className={S.promptChips} gap={6} w="100%">
-            {EXAMPLE_PROMPTS.map(p => (
+            {(examplePrompts ?? DEFAULT_EXAMPLE_PROMPTS).map(p => (
               <UnstyledButton
                 key={p}
                 className={S.promptChip}

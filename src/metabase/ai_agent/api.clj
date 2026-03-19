@@ -782,6 +782,19 @@
                       {:value "gpt-4.1-mini"  :label "GPT-4.1 Mini — faster, lower cost"             :group "GPT-4.1"}
                       {:value "gpt-4.1-nano"  :label "GPT-4.1 Nano — lightest, cheapest"             :group "GPT-4.1"}]})
 
+(defn- load-tips-file []
+  (let [path (System/getenv "MB_AI_AGENT_TIPS_FILE")]
+    (when (and path (.exists (clojure.java.io/file path)))
+      (try (json/parse-string (slurp path) true)
+           (catch Exception _ nil)))))
+
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :get "/tips"
+  "Return tips, templates and example prompts for the AI Agent chat UI."
+  []
+  (or (load-tips-file)
+      {:templates [] :examples [] :hint {:en "" :ru ""}}))
+
 #_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
 (api.macros/defendpoint :get "/mcp-servers"
   "Return status of connected MCP servers and their available tools.
