@@ -97,6 +97,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState("");
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+  const [tipsOpen, setTipsOpen] = useState(false);
   const slashMetricsRef = useRef<MetricItem[]>([]);
   const [context, setContext] = useState<AgentContextValue | null>(null);
   const [datasource, setDatasource] = useState<AgentDatasource | null>(null);
@@ -574,9 +575,9 @@ export function AgentModal({ onClose }: AgentModalProps) {
                         {t`Enter to send · Shift+Enter for new line · / for metrics`}
                       </Text>
                       <Flex gap={2} align="center">
-                        <Popover position="top-end" shadow="md" width={280}>
+                        <Popover position="top-end" shadow="md" width={280} opened={tipsOpen} onChange={setTipsOpen}>
                           <Popover.Target>
-                            <ActionIcon variant="transparent" size="sm" aria-label={t`Tips`}>
+                            <ActionIcon variant="transparent" size="sm" aria-label={t`Tips`} onClick={() => setTipsOpen(o => !o)}>
                               <Icon name="info" size={14} color="var(--mb-color-text-tertiary)" />
                             </ActionIcon>
                           </Popover.Target>
@@ -602,6 +603,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                                   style={{ borderRadius: 6, cursor: "pointer", transition: "background 0.1s" }}
                                   className={S.tipItem}
                                   onClick={() => {
+                                    setTipsOpen(false);
                                     composerRef.current?.focus();
                                     document.execCommand("insertText", false, tip.template);
                                     // Select first placeholder so user can type over it
