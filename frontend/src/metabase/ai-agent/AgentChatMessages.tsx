@@ -624,107 +624,59 @@ function CopyMessageButton({ message }: { message: ChatMessage }) {
   );
 }
 
-/* ── Metric chip rendering in text ───────────────────────────────────────── */
+/* ── Metric link rendering in text ───────────────────────────────────────── */
 
-// Matches ["metric", 42] /* Name */ OR ["metric", 42] (without comment)
-const METRIC_PATTERN_FULL = /\["metric",\s*(\d+)\]\s*\/\*\s*(.+?)\s*\*\//g;
-const METRIC_PATTERN_BARE = /\["metric",\s*(\d+)\]/g;
-
-const metricChipStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 4,
-  background: "color-mix(in srgb, var(--mb-color-brand) 10%, transparent)",
-  color: "var(--mb-color-brand)",
-  border: "1px solid color-mix(in srgb, var(--mb-color-brand) 25%, transparent)",
-  borderRadius: 6,
-  padding: "1px 8px 1px 5px",
-  margin: "0 2px",
-  verticalAlign: "baseline",
-  whiteSpace: "nowrap",
-  textDecoration: "none",
-  cursor: "pointer",
-  transition: "background 0.12s, border-color 0.12s",
-  fontSize: 12,
-  fontWeight: 600,
-  lineHeight: "1.5",
-};
+// Matches all forms:
+// ["metric", 42] /* Name */
+// ["metric", 42]
+// `["metric", 42]` (in backticks)
+const METRIC_ALL_PATTERN = /`?\["metric",\s*(\d+)\]`?(?:\s*\/\*\s*(.+?)\s*\*\/)?/g;
 
 // Cache for metric names fetched by ID
 const metricNameCache = new Map<number, string>();
 
-function MetricChipByName({ id, name }: { id: number; name: string }) {
-  return (
-    <Link
-      to={`/question/${id}`}
-      style={metricChipStyle}
-      onMouseEnter={e => {
-        (e.currentTarget as HTMLElement).style.background = "color-mix(in srgb, var(--mb-color-brand) 20%, transparent)";
-        (e.currentTarget as HTMLElement).style.borderColor = "var(--mb-color-brand)";
-      }}
-      onMouseLeave={e => {
-        (e.currentTarget as HTMLElement).style.background = "color-mix(in srgb, var(--mb-color-brand) 10%, transparent)";
-        (e.currentTarget as HTMLElement).style.borderColor = "color-mix(in srgb, var(--mb-color-brand) 25%, transparent)";
-      }}
-    >
-      <Icon name="metric" size={12} />
-      {name}
-    </Link>
+function MetricLink({ id, name }: { id: number; name?: string | null }) {
+  const [resolvedName, setResolvedName] = useState<string | null>(
+    () => name || metricNameCache.get(id) || null,
   );
-}
-
-function MetricChipById({ id }: { id: number }) {
-  const [name, setName] = useState<string | null>(() => metricNameCache.get(id) ?? null);
 
   useEffect(() => {
-    if (name) return;
+    if (resolvedName) return;
     fetch(`/api/card/${id}`, { headers: { "Content-Type": "application/json" } })
       .then(r => r.json())
       .then(card => {
-        const n = (card?.name as string) ?? `Metric #${id}`;
+        const n = (card?.name as string) || `Metric #${id}`;
         metricNameCache.set(id, n);
-        setName(n);
+        setResolvedName(n);
       })
-      .catch(() => setName(`Metric #${id}`));
-  }, [id, name]);
+      .catch(() => setResolvedName(`Metric #${id}`));
+  }, [id, resolvedName]);
 
   return (
     <Link
       to={`/question/${id}`}
-      style={metricChipStyle}
-      onMouseEnter={e => {
-        (e.currentTarget as HTMLElement).style.background = "color-mix(in srgb, var(--mb-color-brand) 20%, transparent)";
-        (e.currentTarget as HTMLElement).style.borderColor = "var(--mb-color-brand)";
-      }}
-      onMouseLeave={e => {
-        (e.currentTarget as HTMLElement).style.background = "color-mix(in srgb, var(--mb-color-brand) 10%, transparent)";
-        (e.currentTarget as HTMLElement).style.borderColor = "color-mix(in srgb, var(--mb-color-brand) 25%, transparent)";
+      style={{
+        color: "var(--mb-color-brand)",
+        textDecoration: "none",
+        fontWeight: 600,
+        borderBottom: "1px dashed var(--mb-color-brand)",
       }}
     >
-      <Icon name="metric" size={12} />
-      {name ?? `#${id}`}
+      {resolvedName ?? `#${id}`}
     </Link>
   );
 }
 
-// Render text with inline metric chips. Works for both:
-// - ["metric", 42] with name comment
-// - ["metric", 42] bare (fetches name by ID)
+// Replace metric references with markdown-style inline links
 function MetricAwareText({ content, className }: { content: string; className?: string }) {
-  if (!content.includes('["metric"')) {
+  if (!content.includes("metric")) {
     return <Markdown className={className}>{content}</Markdown>;
   }
 
-  // Collect metrics: named ones first, then bare ones
-  const metrics: { name: string | null; id: number }[] = [];
-  let cleaned = content.replace(new RegExp(METRIC_PATTERN_FULL), (_m, id, name) => {
+  const metrics: { id: number; name: string | null }[] = [];
+  const cleaned = content.replace(new RegExp(METRIC_ALL_PATTERN), (_m, id, name) => {
     const i = metrics.length;
-    metrics.push({ name, id: parseInt(id, 10) });
-    return `\u200B__M${i}__\u200B`;
-  });
-  cleaned = cleaned.replace(new RegExp(METRIC_PATTERN_BARE), (_m, id) => {
-    const i = metrics.length;
-    metrics.push({ name: null, id: parseInt(id, 10) });
+    metrics.push({ id: parseInt(id, 10), name: name || null });
     return `\u200B__M${i}__\u200B`;
   });
 
@@ -738,13 +690,8 @@ function MetricAwareText({ content, className }: { content: string; className?: 
     if (i % 2 === 0) {
       if (segments[i]) parts.push(<span key={`t${i}`}>{segments[i]}</span>);
     } else {
-      const mi = parseInt(segments[i], 10);
-      const m = metrics[mi];
-      if (m?.name) {
-        parts.push(<MetricChipByName key={`m${i}`} id={m.id} name={m.name} />);
-      } else if (m) {
-        parts.push(<MetricChipById key={`m${i}`} id={m.id} />);
-      }
+      const m = metrics[parseInt(segments[i], 10)];
+      if (m) parts.push(<MetricLink key={`m${i}`} id={m.id} name={m.name} />);
     }
   }
   return <span className={className}>{parts}</span>;

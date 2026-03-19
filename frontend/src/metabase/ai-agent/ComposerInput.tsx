@@ -48,7 +48,7 @@ function getSlashQuery(node: Node, offset: number): string | null {
       }
       return null;
     }
-    if (ch === " " || ch === "\n") return null;
+    if (ch === "\n") return null;
     i--;
   }
   return null;

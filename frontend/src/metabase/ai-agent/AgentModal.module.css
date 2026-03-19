@@ -552,6 +552,11 @@
   font-size: 11px;
 }
 
+/* ── Tips popover items ── */
+.tipItem:hover {
+  background: var(--mb-color-background-hover);
+}
+
 /* ── Bottom bar: context, save location, safe mode toggle ── */
 .bottomBar {
   display: flex;

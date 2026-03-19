@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { t } from "ttag";
 
-import { ActionIcon, Anchor, Icon, Menu, Stack, Text, Tooltip } from "metabase/ui";
+import { ActionIcon, Anchor, Box, Flex, Icon, Menu, Popover, Stack, Text, Tooltip } from "metabase/ui";
 // Textarea removed — replaced by ComposerInput (contentEditable)
 
 import { AgentChatMessages } from "./AgentChatMessages";
@@ -573,32 +573,103 @@ export function AgentModal({ onClose }: AgentModalProps) {
                       <Text size="xs" c="text-tertiary" className={S.inputHint}>
                         {t`Enter to send · Shift+Enter for new line · / for metrics`}
                       </Text>
-                      {isLoading ? (
-                        <Tooltip label={t`Stop generating`}>
+                      <Flex gap={2} align="center">
+                        <Popover position="top-end" shadow="md" width={280}>
+                          <Popover.Target>
+                            <ActionIcon variant="transparent" size="sm" aria-label={t`Tips`}>
+                              <Icon name="info" size={14} color="var(--mb-color-text-tertiary)" />
+                            </ActionIcon>
+                          </Popover.Target>
+                          <Popover.Dropdown p="xs">
+                            <Text size="xs" fw={600} c="text-secondary" mb={6}>{t`Templates`}</Text>
+                            <Stack gap={2}>
+                              {[
+                                { icon: "line" as const, label: t`Chart`, template: "Show {metric} by {dimension} for the last {period}" },
+                                { icon: "table2" as const, label: t`Compare`, template: "Compare {metric_A} vs {metric_B} by {dimension}" },
+                                { icon: "filter" as const, label: t`Filter`, template: "Show {metric} where {field} is {value}" },
+                                { icon: "bolt" as const, label: t`Investigate`, template: "Why did {metric} change in {period}? Break down by {dimension}" },
+                                { icon: "dashboard" as const, label: t`Dashboard`, template: "Create a dashboard: {metric_1} by {dim_1}, {metric_2} by {dim_2}" },
+                                { icon: "document" as const, label: t`Report`, template: "Create a report analyzing {topic} for {period}" },
+                                { icon: "search" as const, label: t`Find`, template: "Find all metrics related to {keyword}" },
+                                { icon: "sum" as const, label: t`Ratio`, template: "Calculate {metric_A} / {metric_B} by {dimension}" },
+                              ].map(tip => (
+                                <Flex
+                                  key={tip.label}
+                                  align="center"
+                                  gap={8}
+                                  px={8}
+                                  py={5}
+                                  style={{ borderRadius: 6, cursor: "pointer", transition: "background 0.1s" }}
+                                  className={S.tipItem}
+                                  onClick={() => {
+                                    composerRef.current?.focus();
+                                    document.execCommand("insertText", false, tip.template);
+                                    // Select first placeholder so user can type over it
+                                    setTimeout(() => {
+                                      const el = (composerRef.current as unknown as { getText?: () => string })?.getText?.() ?? "";
+                                      const match = el.match(/\{(\w+)\}/);
+                                      if (match) {
+                                        const sel = window.getSelection();
+                                        if (sel && sel.rangeCount > 0) {
+                                          const range = sel.getRangeAt(0);
+                                          const node = range.startContainer;
+                                          if (node.nodeType === Node.TEXT_NODE) {
+                                            const text = node.textContent ?? "";
+                                            const idx = text.indexOf(match[0]);
+                                            if (idx >= 0) {
+                                              range.setStart(node, idx);
+                                              range.setEnd(node, idx + match[0].length);
+                                              sel.removeAllRanges();
+                                              sel.addRange(range);
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }, 50);
+                                  }}
+                                >
+                                  <Icon name={tip.icon} size={13} color="var(--mb-color-brand)" style={{ flexShrink: 0 }} />
+                                  <Box style={{ flex: 1, minWidth: 0 }}>
+                                    <Text size="xs" fw={500} c="text-primary">{tip.label}</Text>
+                                    <Text size="xs" c="text-tertiary" truncate>{tip.template}</Text>
+                                  </Box>
+                                </Flex>
+                              ))}
+                            </Stack>
+                            <Box mt={8} pt={6} style={{ borderTop: "1px solid var(--mb-color-border)" }}>
+                              <Text size="xs" c="text-tertiary" lh={1.4}>
+                                {t`Replace {placeholders} with your values. Type / to insert metrics.`}
+                              </Text>
+                            </Box>
+                          </Popover.Dropdown>
+                        </Popover>
+                        {isLoading ? (
+                          <Tooltip label={t`Stop generating`}>
+                            <ActionIcon
+                              variant="transparent"
+                              size="sm"
+                              onClick={stopGeneration}
+                              aria-label={t`Stop generating`}
+                            >
+                              <Icon name="close" size={14} color="var(--mb-color-error)" />
+                            </ActionIcon>
+                          </Tooltip>
+                        ) : (
                           <ActionIcon
                             variant="transparent"
                             size="sm"
-                            onClick={stopGeneration}
-                            aria-label={t`Stop generating`}
+                            onClick={handleSend}
+                            disabled={!inputText.trim()}
+                            aria-label={t`Send message`}
                           >
-                            <Icon name="close" size={14} color="var(--mb-color-error)" />
+                            <Icon
+                              name="send"
+                              size={14}
+                              color={!inputText.trim() ? "var(--mb-color-text-tertiary)" : "var(--mb-color-brand)"}
+                            />
                           </ActionIcon>
-                        </Tooltip>
-                      ) : (
-                        <ActionIcon
-                          variant="transparent"
-                          size="sm"
-                          onClick={handleSend}
-                          disabled={!inputText.trim()}
-                          aria-label={t`Send message`}
-                        >
-                          <Icon
-                            name="send"
-                            size={14}
-                            color={!inputText.trim() ? "var(--mb-color-text-tertiary)" : "var(--mb-color-brand)"}
-                          />
-                        </ActionIcon>
-                      )}
+                        )}
+                      </Flex>
                     </div>
                   </div>
                 </div>
