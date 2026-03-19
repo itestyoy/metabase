@@ -39,7 +39,7 @@
                                 [:= :pg.name "AI"]]
                        :limit  1})))))
 
-(def ^:private max-tool-iterations 10)
+(def ^:private max-tool-iterations 25)
 (def ^:private max-validation-retries 5)
 
 (defn- strip-markdown-fences
@@ -342,9 +342,17 @@
          iterations 0
          all-calls  []]
     (if (>= iterations max-tool-iterations)
-      {:response-id  nil
-       :content      "Reached maximum tool iteration limit. Please try a more specific request."
-       :tool-calls   all-calls}
+      ;; Graceful fallback: ask AI to summarize what it has so far, WITHOUT tools
+      (let [fallback-resp (ai.openai/create-response
+                            (assoc opts
+                                   :api-key api-key
+                                   :model   model
+                                   :tools   []
+                                   :input   [{:role "user"
+                                              :content "You have reached the tool call limit. Summarize your findings and provide the best answer you can based on the data you already collected. Respond in the same language as the user's original question."}]))]
+        {:response-id (ai.openai/response-id fallback-resp)
+         :content     (ai.openai/extract-text fallback-resp)
+         :tool-calls  all-calls})
       (let [response    (ai.openai/create-response (assoc opts
                                                           :api-key api-key
                                                           :model   model

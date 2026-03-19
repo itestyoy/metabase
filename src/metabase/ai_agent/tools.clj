@@ -1439,10 +1439,10 @@ Rules:
 - Be concise — return just the key findings (IDs, names, values).
 - Do NOT call delegate_task (no recursive sub-agents).
 - Do NOT create/modify anything (read-only).
-- Max 10 tool calls then return what you have.
+- Max 15 tool calls then return what you have.
 - Follow the RESPONSE FORMAT instructions from the task.")
 
-(def ^:private max-subagent-iterations 10)
+(def ^:private max-subagent-iterations 15)
 
 (def ^:private subagent-excluded-tools
   "Tools excluded from sub-agent to prevent recursion and unnecessary calls."
