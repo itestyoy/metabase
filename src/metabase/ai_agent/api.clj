@@ -495,8 +495,8 @@
       {"type" "query" "database" database_id "query" query})))
 
 (defn- unified-block->legacy
-  "Convert a unified block {type, content, id, name, display, data} to legacy format."
-  [{:strs [type content id name display data]}]
+  "Convert a unified block {type, content, id, name, display, data, query} to legacy format."
+  [{:strs [type content id name display data query]}]
   (case type
     "text"           {"type" "text" "content" (or content "")}
     "sql"            {"type" "sql" "content" (or content "")}
@@ -504,15 +504,14 @@
     "card_preview"   {"type" "card_preview" "card_id" id "name" (or name "") "display" (or display "table")}
     "dashboard_link" {"type" "dashboard_link" "dashboard_id" id "name" (or name "")}
     "document_link"  {"type" "document_link" "document_id" id "name" (or name "")}
-    "notebook_link"  (let [dq (when data
-                                (try (structured-dataset-query->mbql (json/parse-string data))
+    "notebook_link"  (let [dq (when (map? query)
+                                (try (structured-dataset-query->mbql query)
                                      (catch Exception _ nil)))]
                        (cond-> {"type" "notebook_link" "name" (or name "") "display" (or display "table")}
                          dq (assoc "dataset_query" dq)))
-    "table"          (let [parsed (when data (try (json/parse-string data) (catch Exception _ nil)))]
-                       {"type" "table"
-                        "columns" (or (get parsed "columns") [])
-                        "rows"    (or (get parsed "rows") [])})
+    "table"          {"type" "table"
+                      "columns" (or (get data "columns") [])
+                      "rows"    (or (get data "rows") [])}
     ;; fallback — pass through
     {"type" (or type "text") "content" (or content "")}))
 

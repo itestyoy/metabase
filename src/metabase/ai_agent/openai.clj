@@ -80,10 +80,59 @@
                                                                       :name    {:type ["string" "null"]
                                                                                 :description "Human-readable display name. Required for card_link, card_preview, dashboard_link, document_link, notebook_link. Null for text/sql/table."}
                                                                       :display {:type ["string" "null"]
-                                                                                :description "Visualization type: line, bar, area, pie, table, scalar, row, progress, funnel, scatter. For card_preview and notebook_link. Null for others."}
-                                                                      :data    {:type ["string" "null"]
-                                                                                :description "JSON string for complex data. For notebook_link: structured query as JSON string. For table: {\"columns\":[\"col1\",\"col2\"],\"rows\":[[\"a\",1],[\"b\",2]]} as JSON string. Null for other types."}}
-                                                :required             ["type" "content" "id" "name" "display" "data"]
+                                                                                :enum ["line" "bar" "area" "pie" "table" "scalar" "row" "progress" "funnel" "scatter" nil]
+                                                                                :description "Visualization type. For card_preview and notebook_link. Null for others."}
+                                                                      :data    {:type ["object" "null"]
+                                                                                :description "Table data for table block only. Null for all other types."
+                                                                                :properties {:columns {:type "array" :items {:type "string"} :description "Column names."}
+                                                                                             :rows    {:type "array" :items {:type "array" :items {:type ["string" "number" "boolean" "null"]}} :description "Row data."}}
+                                                                                :required ["columns" "rows"]
+                                                                                :additionalProperties false}
+                                                                      :query   {:type ["object" "null"]
+                                                                                :description "Structured query for notebook_link only. Null for all other types."
+                                                                                :properties {:database_id  {:type "integer" :description "Database ID to query."}
+                                                                                             :source_table {:type ["integer" "null"] :description "Table ID. Use this OR source_card, never both."}
+                                                                                             :source_card  {:type ["integer" "null"] :description "Saved question/model ID. Use this OR source_table, never both."}
+                                                                                             :aggregations {:type ["array" "null"]
+                                                                                                            :description "What to calculate. Use metric for saved metrics, divide for ratios."
+                                                                                                            :items {:type "object"
+                                                                                                                    :description "One aggregation."
+                                                                                                                    :properties {:type {:type "string" :enum ["count" "sum" "avg" "min" "max" "distinct" "metric" "divide" "multiply" "subtract" "add"] :description "count/sum/avg/min/max/distinct=field agg. metric=saved metric. divide/multiply/subtract/add=combine two metrics."}
+                                                                                                                                 :field_id {:type ["integer" "null"] :description "Field ID for sum/avg/min/max/distinct. Null for count/metric/divide."}
+                                                                                                                                 :metric_ids {:type ["array" "null"] :items {:type "integer"} :description "Metric IDs. For metric: [id]. For divide/multiply: [numerator_id, denominator_id]. Null for field aggregations."}
+                                                                                                                                 :scalar {:type ["number" "null"] :description "Multiply result by this (e.g. 1000 for eCPM). Only for divide/multiply/subtract/add."}}
+                                                                                                                    :required ["type" "field_id" "metric_ids" "scalar"]
+                                                                                                                    :additionalProperties false}}
+                                                                                             :breakouts {:type ["array" "null"]
+                                                                                                         :description "Group by fields. Use temporal_unit for date grouping."
+                                                                                                         :items {:type "object"
+                                                                                                                 :description "One breakout dimension."
+                                                                                                                 :properties {:field_id {:type "integer" :description "Field ID to group by."}
+                                                                                                                              :temporal_unit {:type ["string" "null"] :enum ["minute" "hour" "day" "week" "month" "quarter" "year" nil] :description "Time grouping. Null for non-date fields."}}
+                                                                                                                 :required ["field_id" "temporal_unit"]
+                                                                                                                 :additionalProperties false}}
+                                                                                             :filters {:type ["array" "null"]
+                                                                                                       :description "Row filters. Multiple filters are ANDed."
+                                                                                                       :items {:type "object"
+                                                                                                               :description "One filter condition."
+                                                                                                               :properties {:operator {:type "string" :enum ["=" "!=" ">" "<" ">=" "<=" "between" "contains" "does-not-contain" "starts-with" "ends-with" "is-null" "not-null" "is-empty" "not-empty" "time-interval"] :description "Filter operator."}
+                                                                                                                            :field_id {:type "integer" :description "Field ID to filter on."}
+                                                                                                                            :values {:type "array" :items {:type ["string" "number" "boolean" "null"]} :description "Filter values. =: [val]. between: [min, max]. time-interval: [-7, \"day\"]. is-null: []."}}
+                                                                                                               :required ["operator" "field_id" "values"]
+                                                                                                               :additionalProperties false}}
+                                                                                             :order_by {:type ["array" "null"]
+                                                                                                        :description "Sort order."
+                                                                                                        :items {:type "object"
+                                                                                                                :description "One sort clause."
+                                                                                                                :properties {:field_id {:type ["integer" "null"] :description "Field ID to sort by. Null if sorting by aggregation."}
+                                                                                                                             :aggregation_index {:type ["integer" "null"] :description "0-based aggregation index to sort by. Null if sorting by field."}
+                                                                                                                             :direction {:type "string" :enum ["asc" "desc"] :description "Sort direction."}}
+                                                                                                                :required ["field_id" "aggregation_index" "direction"]
+                                                                                                                :additionalProperties false}}
+                                                                                             :limit {:type ["integer" "null"] :description "Max rows. Null for no limit."}}
+                                                                                :required ["database_id" "source_table" "source_card" "aggregations" "breakouts" "filters" "order_by" "limit"]
+                                                                                :additionalProperties false}}
+                                                :required             ["type" "content" "id" "name" "display" "data" "query"]
                                                 :additionalProperties false}}
                           :suggestions {:type  "array"
                                         :description "2-6 short follow-up prompts the user can click. Human-readable, max 60 chars each, no internal IDs."
