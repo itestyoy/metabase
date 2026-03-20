@@ -589,14 +589,14 @@ export function AgentModal({ onClose }: AgentModalProps) {
                     )}
                     <div className={S.composerFooter}>
                       <Flex gap={4} align="center" style={{ flex: 1, minWidth: 0 }}>
-                        <Popover position="top-end" shadow="md" width={280} opened={tipsOpen} onChange={setTipsOpen}>
+                        <Popover position="top-start" shadow="md" width={280} opened={tipsOpen} onChange={setTipsOpen}>
                           <Popover.Target>
                             <ActionIcon variant="transparent" size="sm" aria-label={t`Tips`} onClick={() => setTipsOpen(o => !o)}>
                               <Icon name="info" size={14} color="var(--mb-color-text-tertiary)" />
                             </ActionIcon>
                           </Popover.Target>
                           <Popover.Dropdown p="xs">
-                            <Text size="xs" fw={600} c="text-secondary" mb={6}>{lang === "ru" ? "Шаблоны" : "Templates"}</Text>
+                            <Text size="xs" fw={600} c="text-secondary" mb={6}>{"Templates"}</Text>
                             <Stack gap={2}>
                               {(tipsData?.templates ?? []).map((tip) => {
                                 const tipLabel = tip.label[lang] ?? tip.label.en ?? "";
