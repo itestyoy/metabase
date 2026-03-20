@@ -136,8 +136,10 @@
                                                 :additionalProperties false}}
                           :suggestions {:type  "array"
                                         :description "2-6 short follow-up prompts the user can click. Human-readable, max 60 chars each, no internal IDs."
-                                        :items {:type "string"}}}
-   :required             ["blocks" "suggestions"]
+                                        :items {:type "string"}}
+                          :title       {:type ["string" "null"]
+                                        :description "Short conversation title (3-7 words). Generate ONLY on the FIRST message (when there is no previous_response_id). Set to null on follow-up messages. Use the same language as the user's message."}}
+   :required             ["blocks" "suggestions" "title"]
    :additionalProperties false})
 
 (defn- build-request-body

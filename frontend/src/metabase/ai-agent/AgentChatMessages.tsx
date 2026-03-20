@@ -686,13 +686,13 @@ function MetricAwareText({ content, className }: { content: string; className?: 
   const parts: ReactNode[] = [];
   for (let i = 0; i < segments.length; i++) {
     if (i % 2 === 0) {
-      if (segments[i]) parts.push(<span key={`t${i}`}>{segments[i]}</span>);
+      if (segments[i]) parts.push(<Markdown key={`t${i}`} className={className}>{segments[i]}</Markdown>);
     } else {
       const m = metrics[parseInt(segments[i], 10)];
       if (m) parts.push(<MetricLink key={`m${i}`} id={m.id} name={m.name} />);
     }
   }
-  return <span className={className}>{parts}</span>;
+  return <div className={className}>{parts}</div>;
 }
 
 /* ── Message bubble ──────────────────────────────────────────────────────── */

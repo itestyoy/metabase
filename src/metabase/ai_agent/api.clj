@@ -524,16 +524,20 @@
     {"type" (or type "text") "content" (or content "")}))
 
 (defn- convert-unified-response
-  "Parse AI structured response, convert unified blocks to legacy format for frontend."
+  "Parse AI structured response, convert unified blocks to legacy format for frontend.
+   Returns {:content converted-json-string, :title ai-generated-title-or-nil}."
   [content]
   (try
     (let [parsed (json/parse-string content)
-          blocks (get parsed "blocks")]
+          blocks (get parsed "blocks")
+          title  (get parsed "title")]
       (if-not (sequential? blocks)
-        content
-        (json/generate-string
-          (assoc parsed "blocks" (mapv unified-block->legacy blocks)))))
-    (catch Exception _ content)))
+        {:content content :title title}
+        {:content (json/generate-string
+                    (dissoc (assoc parsed "blocks" (mapv unified-block->legacy blocks))
+                            "title"))
+         :title   title}))
+    (catch Exception _ {:content content :title nil})))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; SSE helpers
@@ -679,13 +683,20 @@
                               :datasource           datasource
                               :safe-mode            safe-mode
                               :chat-collection-id   chat-collection-id})
-        result (run-tool-loop api-key model opts
-                              :safe-mode? safe-mode?
-                              :ensure-chat-coll! ensure-chat-coll!)]
+        result    (run-tool-loop api-key model opts
+                                :safe-mode? safe-mode?
+                                :ensure-chat-coll! ensure-chat-coll!)
+        {:keys [content title]} (convert-unified-response (:content result))
+        ;; Rename collection if AI generated a title and collection exists
+        coll-name (if (and title (not (clojure.string/blank? title)) @chat-coll-id-atom)
+                    (do (try (t2/update! :model/Collection @chat-coll-id-atom {:name (str "AI: " title)})
+                             (catch Exception e (log/warn "Failed to rename chat collection" (.getMessage e))))
+                        (str "AI: " title))
+                    chat-coll-name)]
     {:response_id         (:response-id result)
-     :content             (convert-unified-response (:content result))
+     :content             content
      :chat_collection_id   @chat-coll-id-atom
-     :chat_collection_name (when @chat-coll-id-atom chat-coll-name)
+     :chat_collection_name (when @chat-coll-id-atom coll-name)
      :tool_calls           (mapv (fn [{:keys [name args result]}]
                                    {:name   name
                                     :args   args
@@ -748,12 +759,18 @@
               result (run-tool-loop api-key model opts
                                    :safe-mode? safe-mode?
                                    :ensure-chat-coll! ensure-chat-coll!
-                                   :emit! emit!)]
+                                   :emit! emit!)
+              {:keys [content title]} (convert-unified-response (:content result))
+              coll-name (if (and title (not (clojure.string/blank? title)) @chat-coll-id-atom)
+                          (do (try (t2/update! :model/Collection @chat-coll-id-atom {:name (str "AI: " title)})
+                                   (catch Exception e (log/warn "Failed to rename chat collection" (.getMessage e))))
+                              (str "AI: " title))
+                          chat-coll-name)]
           (sse-write! os "done"
                       {:response_id         (:response-id result)
-                       :content             (convert-unified-response (:content result))
+                       :content             content
                        :chat_collection_id   @chat-coll-id-atom
-                       :chat_collection_name (when @chat-coll-id-atom chat-coll-name)
+                       :chat_collection_name (when @chat-coll-id-atom coll-name)
                        :tool_calls           (mapv (fn [{:keys [name args result]}]
                                                      {:name name :args args :result result})
                                                    (:tool-calls result))}))

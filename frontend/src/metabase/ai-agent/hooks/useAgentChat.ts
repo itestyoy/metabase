@@ -250,7 +250,7 @@ export function useAgentChat() {
       const userMsg: ChatMessage = {
         id: makeId(),
         role: "user",
-        content: userText,
+        content: userText.replace(/\n\[Respond in (?:Russian|English)\]$/, ""),
         timestamp: new Date().toISOString(),
       };
       setMessages(prev => [...prev, userMsg]);

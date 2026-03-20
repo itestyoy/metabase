@@ -326,11 +326,10 @@ export function AgentModal({ onClose }: AgentModalProps) {
     if (!text || isLoading) return;
 
     const langHint = lang === "ru" ? "\n[Respond in Russian]" : "\n[Respond in English]";
-    const finalText = text + langHint;
 
     setInputText("");
     composerRef.current?.clear();
-    sendMessage(finalText, context, safeMode, saveLocation?.id, datasource);
+    sendMessage(text + langHint, context, safeMode, saveLocation?.id, datasource);
     setTimeout(() => composerRef.current?.focus(), 50);
   }, [inputText, isLoading, sendMessage, context, safeMode, saveLocation, datasource, lang]);
 
