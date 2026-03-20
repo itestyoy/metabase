@@ -687,11 +687,12 @@
                                 :safe-mode? safe-mode?
                                 :ensure-chat-coll! ensure-chat-coll!)
         {:keys [content title]} (convert-unified-response (:content result))
-        ;; Rename collection if AI generated a title and collection exists
+        ;; Rename collection with AI-generated title — always update to latest title
         coll-name (if (and title (not (clojure.string/blank? title)) @chat-coll-id-atom)
-                    (do (try (t2/update! :model/Collection @chat-coll-id-atom {:name (str "AI: " title)})
-                             (catch Exception e (log/warn "Failed to rename chat collection" (.getMessage e))))
-                        (str "AI: " title))
+                    (let [new-name (str "AI: " title)]
+                      (try (t2/update! :model/Collection @chat-coll-id-atom {:name new-name})
+                           (catch Exception e (log/warn "Failed to rename chat collection" (.getMessage e))))
+                      new-name)
                     chat-coll-name)]
     {:response_id         (:response-id result)
      :content             content
@@ -762,9 +763,10 @@
                                    :emit! emit!)
               {:keys [content title]} (convert-unified-response (:content result))
               coll-name (if (and title (not (clojure.string/blank? title)) @chat-coll-id-atom)
-                          (do (try (t2/update! :model/Collection @chat-coll-id-atom {:name (str "AI: " title)})
-                                   (catch Exception e (log/warn "Failed to rename chat collection" (.getMessage e))))
-                              (str "AI: " title))
+                          (let [new-name (str "AI: " title)]
+                            (try (t2/update! :model/Collection @chat-coll-id-atom {:name new-name})
+                                 (catch Exception e (log/warn "Failed to rename chat collection" (.getMessage e))))
+                            new-name)
                           chat-coll-name)]
           (sse-write! os "done"
                       {:response_id         (:response-id result)

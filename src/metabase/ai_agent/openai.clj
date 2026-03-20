@@ -138,7 +138,7 @@
                                         :description "2-6 short follow-up prompts the user can click. Human-readable, max 60 chars each, no internal IDs."
                                         :items {:type "string"}}
                           :title       {:type ["string" "null"]
-                                        :description "Short conversation title (3-7 words). Generate ONLY on the FIRST message (when there is no previous_response_id). Set to null on follow-up messages. Use the same language as the user's message."}}
+                                        :description "Short conversation title (3-7 words) summarizing the conversation topic. Generate on every response. Use the same language as the user's message."}}
    :required             ["blocks" "suggestions" "title"]
    :additionalProperties false})
 
