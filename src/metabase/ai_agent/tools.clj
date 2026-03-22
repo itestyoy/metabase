@@ -1372,11 +1372,24 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
                                   :limit 20)]
                     (cond->> results
                       table-id (filter #(= (:table_id %) table-id))))
-                  ;; Direct DB query (no search term)
-                  (let [conditions (cond-> [:type :metric :archived false]
-                                     database-id (into [:database_id database-id])
-                                     table-id    (into [:table_id    table-id]))]
+                  ;; Direct DB query (no search term) — filter by readable databases first
+                  (let [readable-db-ids (when-not database-id
+                                          (->> (t2/select :model/Database)
+                                               (filter mi/can-read?)
+                                               (map :id)
+                                               set))
+                        conditions (cond-> [:type :metric :archived false]
+                                     database-id  (into [:database_id database-id])
+                                     table-id     (into [:table_id    table-id]))]
                     (->> (apply t2/select :model/Card conditions)
+                         ;; Scope to databases the user can read
+                         (filter (fn [m]
+                                   (let [db-id (or (:database_id m) (:database-id m))]
+                                     (if readable-db-ids
+                                       (contains? readable-db-ids db-id)
+                                       ;; database-id was explicitly provided — check it directly
+                                       (when-let [db (t2/select-one :model/Database :id db-id)]
+                                         (mi/can-read? db))))))
                          (filter mi/can-read?)
                          (take 50))))]
     (if (empty? metrics)
