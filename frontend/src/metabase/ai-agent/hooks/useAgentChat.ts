@@ -277,24 +277,24 @@ export function useAgentChat() {
 
         const form = new FormData();
         form.append("file", blob, attachedFile.name);
-        form.append("message", userText || " ");
+        form.append("message", userText.trim() || "");
         if (previousResponseId) form.append("previous_response_id", previousResponseId);
-        if (context) form.append("context", JSON.stringify(context));
-        if (datasource) form.append("datasource", JSON.stringify(datasource));
+        if (context) form.append("context", JSON.stringify({
+          id: context.id, name: context.name, model: context.model,
+          ...(context.db_id != null ? { db_id: context.db_id } : {}),
+          ...(context.url_params ? { url_params: context.url_params } : {}),
+          ...(context.dataset_query ? { dataset_query: context.dataset_query } : {}),
+        }));
+        if (datasource) form.append("datasource", JSON.stringify({
+          type: datasource.type, id: datasource.id, name: datasource.name,
+          ...(datasource.db_id != null ? { db_id: datasource.db_id } : {}),
+        }));
         if (safeMode) form.append("safe_mode", "true");
         const effectiveCollectionId = targetCollectionId ?? chatCollectionId;
         if (effectiveCollectionId) form.append("chat_collection_id", String(effectiveCollectionId));
         fetchBody = form;
-        // Don't set Content-Type — browser sets it automatically with boundary
+        // Don't set Content-Type — browser sets it with boundary automatically
       } else {
-        const jsonBody: Record<string, unknown> = { message: userText };
-        if (previousResponseId) jsonBody.previous_response_id = previousResponseId;
-        fetchBody = JSON.stringify(jsonBody);
-        fetchHeaders["Content-Type"] = "application/json";
-      }
-      // For JSON path: build full body with all fields
-      if (!attachedFile) {
-        if (previousResponseId) (fetchBody as any) = undefined; // will rebuild below
         const jsonBody: Record<string, unknown> = { message: userText };
         if (previousResponseId) jsonBody.previous_response_id = previousResponseId;
         if (context) {

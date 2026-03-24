@@ -57,12 +57,19 @@
              :call_id call-id
              :output  (str output)})
           tool-results)
-    ;; Regular user turn — optionally attach a file
+    ;; Regular user turn — string content when no file, array when file attached
     [{:role    "user"
-      :content (cond-> [{:type "input_text" :text (str message)}]
-                 file (conj {:type      "input_file"
-                             :filename  (:filename file)
-                             :file_data (:file-data file)}))}]))
+      :content (if file
+                 ;; Array of content parts required when file is present
+                 (cond-> []
+                   (seq (clojure.string/trim (str message)))
+                   (conj {:type "input_text" :text (clojure.string/trim (str message))})
+                   file
+                   (conj {:type      "input_file"
+                          :filename  (:filename file)
+                          :file_data (:file-data file)}))
+                 ;; Plain string for text-only messages (simpler, backward-compatible)
+                 (str message))}]))
 
 (def ^:private response-json-schema
   "Unified JSON schema for structured output. 6 universal fields per block.
