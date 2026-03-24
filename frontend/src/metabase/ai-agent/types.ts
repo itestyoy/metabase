@@ -25,4 +25,6 @@ export interface ChatMessage {
   toolStatus?: "running" | "done" | "error";
   toolName?: string;
   toolResult?: string;
+  /** Attached file metadata (user messages only). */
+  attachedFile?: { name: string; mimeType: string };
 }

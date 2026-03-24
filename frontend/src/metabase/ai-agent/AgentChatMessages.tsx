@@ -720,7 +720,16 @@ function MessageBubble({
     return (
       <Flex className={S.messageBubbleRow} justify="flex-end" direction="column" align="flex-end">
         <Paper className={S.userBubble} radius="xl">
-          <MetricAwareText content={message.content ?? ""} className={S.userMarkdown} />
+          {message.attachedFile && (
+            <Flex align="center" gap={4} mb={message.content ? 6 : 0}
+              style={{ padding: "2px 4px", background: "var(--mb-color-background)", borderRadius: 6, border: "1px solid var(--mb-color-border)" }}>
+              <Icon name="attachment" size={11} color="var(--mb-color-brand)" />
+              <Text size="xs" c="brand" fw={500} style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {message.attachedFile.name}
+              </Text>
+            </Flex>
+          )}
+          {message.content && <MetricAwareText content={message.content} className={S.userMarkdown} />}
         </Paper>
         <MessageTimestamp timestamp={message.timestamp} />
       </Flex>

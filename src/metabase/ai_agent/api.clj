@@ -562,7 +562,7 @@
 
 (defn- prepare-chat-params
   "Build all the shared parameters needed by both /chat and /chat-stream."
-  [{:keys [message previous-response-id context datasource safe-mode chat-collection-id]}]
+  [{:keys [message previous-response-id context datasource safe-mode chat-collection-id file]}]
   (let [api-key          (ai.settings/ai-agent-openai-api-key)
         _                (api/check-403 (some? api-key))
         model            (or (ai.settings/ai-agent-openai-model) "gpt-5.4")
@@ -627,7 +627,10 @@
                          effective-msg)
         opts           (cond-> {:message effective-msg}
                          previous-response-id
-                         (assoc :previous-response-id previous-response-id))]
+                         (assoc :previous-response-id previous-response-id)
+                         file
+                         (assoc :file {:filename  (:filename file)
+                                       :file-data (:file_data file)}))]
     {:api-key           api-key
      :model             model
      :opts              opts
@@ -659,23 +662,28 @@
     context              :context
     datasource           :datasource
     safe-mode            :safe_mode
-    chat-collection-id   :chat_collection_id} :- [:map
-                                                    [:message              ms/NonBlankString]
-                                                    [:previous_response_id {:optional true} [:maybe :string]]
-                                                    [:context              {:optional true}
-                                                     [:maybe [:map
-                                                              [:id    :int]
-                                                              [:name  :string]
-                                                              [:model :string]
-                                                              [:db_id {:optional true} [:maybe :int]]]]]
-                                                    [:datasource           {:optional true}
-                                                     [:maybe [:map
-                                                              [:type  :string]
-                                                              [:id    :int]
-                                                              [:name  :string]
-                                                              [:db_id {:optional true} [:maybe :int]]]]]
-                                                    [:safe_mode {:optional true} [:maybe :boolean]]
-                                                    [:chat_collection_id {:optional true} [:maybe :int]]]]
+    chat-collection-id   :chat_collection_id
+    file                 :file} :- [:map
+                                     [:message              ms/NonBlankString]
+                                     [:previous_response_id {:optional true} [:maybe :string]]
+                                     [:context              {:optional true}
+                                      [:maybe [:map
+                                               [:id    :int]
+                                               [:name  :string]
+                                               [:model :string]
+                                               [:db_id {:optional true} [:maybe :int]]]]]
+                                     [:datasource           {:optional true}
+                                      [:maybe [:map
+                                               [:type  :string]
+                                               [:id    :int]
+                                               [:name  :string]
+                                               [:db_id {:optional true} [:maybe :int]]]]]
+                                     [:safe_mode {:optional true} [:maybe :boolean]]
+                                     [:chat_collection_id {:optional true} [:maybe :int]]
+                                     [:file {:optional true}
+                                      [:maybe [:map
+                                               [:filename  :string]
+                                               [:file_data :string]]]]]
   (api/check-403 (ai.settings/ai-agent-enabled))
   (api/check-403 (current-user-in-ai-group?))
   (let [{:keys [api-key model opts safe-mode? ensure-chat-coll!
@@ -685,7 +693,8 @@
                               :context              context
                               :datasource           datasource
                               :safe-mode            safe-mode
-                              :chat-collection-id   chat-collection-id})
+                              :chat-collection-id   chat-collection-id
+                              :file                 file})
         result    (run-tool-loop api-key model opts
                                 :safe-mode? safe-mode?
                                 :ensure-chat-coll! ensure-chat-coll!)
@@ -722,23 +731,28 @@
     context              :context
     datasource           :datasource
     safe-mode            :safe_mode
-    chat-collection-id   :chat_collection_id} :- [:map
-                                                    [:message              ms/NonBlankString]
-                                                    [:previous_response_id {:optional true} [:maybe :string]]
-                                                    [:context              {:optional true}
-                                                     [:maybe [:map
-                                                              [:id    :int]
-                                                              [:name  :string]
-                                                              [:model :string]
-                                                              [:db_id {:optional true} [:maybe :int]]]]]
-                                                    [:datasource           {:optional true}
-                                                     [:maybe [:map
-                                                              [:type  :string]
-                                                              [:id    :int]
-                                                              [:name  :string]
-                                                              [:db_id {:optional true} [:maybe :int]]]]]
-                                                    [:safe_mode {:optional true} [:maybe :boolean]]
-                                                    [:chat_collection_id {:optional true} [:maybe :int]]]]
+    chat-collection-id   :chat_collection_id
+    file                 :file} :- [:map
+                                     [:message              ms/NonBlankString]
+                                     [:previous_response_id {:optional true} [:maybe :string]]
+                                     [:context              {:optional true}
+                                      [:maybe [:map
+                                               [:id    :int]
+                                               [:name  :string]
+                                               [:model :string]
+                                               [:db_id {:optional true} [:maybe :int]]]]]
+                                     [:datasource           {:optional true}
+                                      [:maybe [:map
+                                               [:type  :string]
+                                               [:id    :int]
+                                               [:name  :string]
+                                               [:db_id {:optional true} [:maybe :int]]]]]
+                                     [:safe_mode {:optional true} [:maybe :boolean]]
+                                     [:chat_collection_id {:optional true} [:maybe :int]]
+                                     [:file {:optional true}
+                                      [:maybe [:map
+                                               [:filename  :string]
+                                               [:file_data :string]]]]]
   (api/check-403 (ai.settings/ai-agent-enabled))
   (api/check-403 (current-user-in-ai-group?))
   (let [params (prepare-chat-params {:message              message
@@ -746,7 +760,8 @@
                                      :context              context
                                      :datasource           datasource
                                      :safe-mode            safe-mode
-                                     :chat-collection-id   chat-collection-id})]
+                                     :chat-collection-id   chat-collection-id
+                                     :file                 file})]
     ;; Use Metabase's streaming-response which writes directly to the Jetty
     ;; servlet OutputStream — bypasses all buffering middleware (gzip, etc.)
     ;; so SSE events are flushed to the client immediately.

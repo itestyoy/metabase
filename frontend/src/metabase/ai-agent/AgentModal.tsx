@@ -130,6 +130,8 @@ export function AgentModal({ onClose }: AgentModalProps) {
     useAgentChat();
   const composerRef = useRef<ComposerInputHandle>(null);
   const composerDivRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [attachedFile, setAttachedFile] = useState<{ name: string; data: string; mimeType: string } | null>(null);
 
   // Auto-populate datasource from default_database setting
   useEffect(() => {
@@ -320,18 +322,41 @@ export function AgentModal({ onClose }: AgentModalProps) {
     [],
   );
 
+  // ── File attachment ────────────────────────────────────────────────────
+  const getMimeType = (filename: string) => {
+    const ext = filename.split(".").pop()?.toLowerCase();
+    const map: Record<string, string> = { md: "text/markdown", txt: "text/plain", csv: "text/csv", json: "application/json", sql: "text/plain" };
+    return map[ext ?? ""] ?? "text/plain";
+  };
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const mimeType = getMimeType(file.name);
+    const reader = new FileReader();
+    reader.onload = () => {
+      // reader.result is already "data:<mime>;base64,<b64>" when using readAsDataURL
+      setAttachedFile({ name: file.name, data: reader.result as string, mimeType });
+    };
+    reader.readAsDataURL(file);
+    // Reset so the same file can be re-attached
+    e.target.value = "";
+  }, []);
+
   // ── Send ───────────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
     const text = composerRef.current?.serialize()?.trim() ?? inputText.trim();
-    if (!text || isLoading) return;
+    if ((!text && !attachedFile) || isLoading) return;
 
     const langHint = lang === "ru" ? "\n[Respond in Russian]" : "\n[Respond in English]";
 
     setInputText("");
     composerRef.current?.clear();
-    sendMessage(text + langHint, context, safeMode, saveLocation?.id, datasource);
+    const fileToSend = attachedFile;
+    setAttachedFile(null);
+    sendMessage((text || "") + langHint, context, safeMode, saveLocation?.id, datasource, fileToSend);
     setTimeout(() => composerRef.current?.focus(), 50);
-  }, [inputText, isLoading, sendMessage, context, safeMode, saveLocation, datasource, lang]);
+  }, [inputText, attachedFile, isLoading, sendMessage, context, safeMode, saveLocation, datasource, lang]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -567,6 +592,23 @@ export function AgentModal({ onClose }: AgentModalProps) {
                 )}
                 <div className={S.inputArea}>
                   <div ref={composerDivRef} className={S.composer}>
+                    {attachedFile && (
+                      <Flex align="center" gap={4} px={8} pt={6} style={{ flexShrink: 0 }}>
+                        <Icon name="attachment" size={12} color="var(--mb-color-brand)" />
+                        <Text size="xs" c="brand" fw={500} style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 200 }}>
+                          {attachedFile.name}
+                        </Text>
+                        <ActionIcon
+                          variant="transparent"
+                          size="xs"
+                          onClick={() => setAttachedFile(null)}
+                          aria-label={t`Remove file`}
+                          style={{ flexShrink: 0 }}
+                        >
+                          <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
+                        </ActionIcon>
+                      </Flex>
+                    )}
                     <ComposerInput
                       ref={composerRef}
                       onChange={handleComposerChange}
@@ -657,6 +699,24 @@ export function AgentModal({ onClose }: AgentModalProps) {
                         </Text>
                       </Flex>
                       <Flex gap={2} align="center">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".md,.txt,.csv,.json,.sql"
+                          style={{ display: "none" }}
+                          onChange={handleFileChange}
+                        />
+                        <Tooltip label={t`Attach file (.md, .txt, .csv, .json, .sql)`}>
+                          <ActionIcon
+                            variant="transparent"
+                            size="sm"
+                            onClick={() => fileInputRef.current?.click()}
+                            aria-label={t`Attach file`}
+                            color={attachedFile ? "brand" : undefined}
+                          >
+                            <Icon name="attachment" size={14} color={attachedFile ? "var(--mb-color-brand)" : "var(--mb-color-text-tertiary)"} />
+                          </ActionIcon>
+                        </Tooltip>
                         <Menu position="top-end" shadow="md" width={140}>
                           <Menu.Target>
                             <Tooltip label={lang === "ru" ? "Русский" : "English"}>
@@ -696,13 +756,13 @@ export function AgentModal({ onClose }: AgentModalProps) {
                             variant="transparent"
                             size="sm"
                             onClick={handleSend}
-                            disabled={!inputText.trim()}
+                            disabled={!inputText.trim() && !attachedFile}
                             aria-label={t`Send message`}
                           >
                             <Icon
                               name="send"
                               size={14}
-                              color={!inputText.trim() ? "var(--mb-color-text-tertiary)" : "var(--mb-color-brand)"}
+                              color={(!inputText.trim() && !attachedFile) ? "var(--mb-color-text-tertiary)" : "var(--mb-color-brand)"}
                             />
                           </ActionIcon>
                         )}

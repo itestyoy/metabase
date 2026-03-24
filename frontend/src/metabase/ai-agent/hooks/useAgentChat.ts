@@ -242,7 +242,7 @@ export function useAgentChat() {
   }, []);
 
   const sendMessage = useCallback(
-    async (userText: string, context?: AgentContextValue | null, safeMode?: boolean, targetCollectionId?: number | null, datasource?: AgentDatasource | null) => {
+    async (userText: string, context?: AgentContextValue | null, safeMode?: boolean, targetCollectionId?: number | null, datasource?: AgentDatasource | null, attachedFile?: { name: string; data: string; mimeType: string } | null) => {
       lastSendArgsRef.current = { text: userText, context, safeMode, collectionId: targetCollectionId, datasource };
       setError(null);
       setIsLoading(true);
@@ -252,6 +252,7 @@ export function useAgentChat() {
         role: "user",
         content: userText.replace(/\n\[Respond in (?:Russian|English)\]$/, ""),
         timestamp: new Date().toISOString(),
+        ...(attachedFile ? { attachedFile: { name: attachedFile.name, mimeType: attachedFile.mimeType } } : {}),
       };
       setMessages(prev => [...prev, userMsg]);
 
@@ -262,7 +263,10 @@ export function useAgentChat() {
         { id: loadingId, role: "assistant", content: null },
       ]);
 
-      const body: Record<string, unknown> = { message: userText };
+      const body: Record<string, unknown> = { message: userText || " " };
+      if (attachedFile) {
+        body.file = { filename: attachedFile.name, file_data: attachedFile.data };
+      }
       if (previousResponseId) {
         body.previous_response_id = previousResponseId;
       }

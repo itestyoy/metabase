@@ -48,8 +48,8 @@
   "Build the `input` array for a Responses API request.
 
   - Tool result turn: array of function_call_output items (one per tool result).
-  - User message turn: array with a single user message item."
-  [{:keys [message tool-results]}]
+  - User message turn: array with a single user message item (optionally with a file attachment)."
+  [{:keys [message tool-results file]}]
   (if (seq tool-results)
     ;; Submitting tool outputs — field is `call_id` (not `tool_call_id`)
     (mapv (fn [{:keys [call-id output]}]
@@ -57,9 +57,12 @@
              :call_id call-id
              :output  (str output)})
           tool-results)
-    ;; Regular user turn
+    ;; Regular user turn — optionally attach a file
     [{:role    "user"
-      :content (str message)}]))
+      :content (cond-> [{:type "input_text" :text (str message)}]
+                 file (conj {:type      "input_file"
+                             :filename  (:filename file)
+                             :file_data (:file-data file)}))}]))
 
 (def ^:private response-json-schema
   "Unified JSON schema for structured output. 6 universal fields per block.
