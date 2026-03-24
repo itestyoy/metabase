@@ -195,12 +195,20 @@
                 :input-count      (count (:input body))
                 :prev-response-id (:previous_response_id body)
                 :tool-count       (count (:tools body))})
-    (let [resp (http/post openai-responses-url
-                          {:headers         {"Authorization" (str "Bearer " api-key)
-                                             "Content-Type"  "application/json"}
-                           :body            (json/generate-string body)
-                           :as              :json
-                           :throw-exceptions false})]
+    (let [do-request (fn []
+                       (http/post openai-responses-url
+                                  {:headers         {"Authorization" (str "Bearer " api-key)
+                                                     "Content-Type"  "application/json"}
+                                   :body            (json/generate-string body)
+                                   :as              :json
+                                   :throw-exceptions false}))
+          ;; Retry once on 5xx — transient OpenAI server errors happen occasionally
+          resp       (let [r (do-request)]
+                       (if (>= (:status r) 500)
+                         (do (log/warn "OpenAI 5xx, retrying once…" {:status (:status r)})
+                             (Thread/sleep 1500)
+                             (do-request))
+                         r))]
       (if (= 200 (:status resp))
         (:body resp)
         (let [err-body (:body resp)
