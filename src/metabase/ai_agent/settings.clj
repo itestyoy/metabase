@@ -35,3 +35,10 @@
   :type        :integer
   :default     nil
   :export?     false)
+
+(defsetting ai-agent-max-file-bytes
+  (deferred-tru "Maximum file size (in bytes) allowed for AI Agent file attachments (MB_AI_AGENT_MAX_FILE_BYTES). Default is 204800 (200 KB).")
+  :visibility  :authenticated
+  :type        :integer
+  :default     204800
+  :export?     false)

@@ -353,9 +353,17 @@ export function AgentModal({ onClose }: AgentModalProps) {
     return map[ext] ?? "text/plain";
   };
 
+  const maxFileBytes = agentSettings?.max_file_bytes ?? 200 * 1024;
+  const maxFileKb = Math.round(maxFileBytes / 1024);
+
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > maxFileBytes) {
+      alert(t`File is too large. Maximum allowed size is ${maxFileKb} KB.`);
+      e.target.value = "";
+      return;
+    }
     const mimeType = getMimeType(file.name);
     const reader = new FileReader();
     reader.onload = () => {

@@ -629,16 +629,18 @@
                          previous-response-id
                          (assoc :previous-response-id previous-response-id)
                          file
-                         (assoc :file (let [raw (:file_data file)
-                                            ;; file_data from JSON path is already a data URL
-                                            ;; "data:<mime>;base64,<b64>" — parse it
-                                            [header b64] (clojure.string/split raw #"," 2)
-                                            mime (-> header
-                                                     (clojure.string/replace #"^data:" "")
-                                                     (clojure.string/replace #";base64$" ""))]
-                                        {:filename  (:filename file)
-                                         :mime-type mime
-                                         :file-data b64})))]
+                         (assoc :file (if (:file-data file)
+                                        ;; Already processed by multipart handler — pass through as-is
+                                        file
+                                        ;; JSON path — parse data URL "data:<mime>;base64,<b64>"
+                                        (let [raw (:file_data file)
+                                              [header b64] (clojure.string/split raw #"," 2)
+                                              mime (-> header
+                                                       (clojure.string/replace #"^data:" "")
+                                                       (clojure.string/replace #";base64$" ""))]
+                                          {:filename  (:filename file)
+                                           :mime-type mime
+                                           :file-data b64}))))]
     {:api-key           api-key
      :model             model
      :opts              opts
@@ -835,16 +837,19 @@
                                (parse-long s))
         ;; File from multipart upload — convert to base64 for OpenAI input_file
         file-entry           (get multipart-params "file")
+        max-file-bytes       (ai.settings/ai-agent-max-file-bytes)
         file                 (when (and file-entry (:tempfile file-entry))
                                (let [tempfile  ^java.io.File (:tempfile file-entry)
                                      filename  (or (:filename file-entry) "attachment")
                                      mime-type (or (:content-type file-entry) "text/plain")
-                                     bytes     (java.nio.file.Files/readAllBytes (.toPath tempfile))
-                                     b64       (.encodeToString (java.util.Base64/getEncoder) bytes)]
-                                 (log/info "File upload:" {:filename filename :mime-type mime-type :bytes (count bytes)})
-                                 {:filename  filename
-                                  :mime-type mime-type
-                                  :file-data b64}))
+                                     bytes     (java.nio.file.Files/readAllBytes (.toPath tempfile))]
+                                 (when (> (count bytes) max-file-bytes)
+                                   (throw (ex-info "File too large" {:status 400 :message (str "File exceeds the 200 KB limit.")})))
+                                 (let [b64 (.encodeToString (java.util.Base64/getEncoder) bytes)]
+                                   (log/info "File upload:" {:filename filename :mime-type mime-type :bytes (count bytes)})
+                                   {:filename  filename
+                                    :mime-type mime-type
+                                    :file-data b64})))
         params               (prepare-chat-params {:message              message
                                                    :previous-response-id previous-response-id
                                                    :context              context
@@ -896,6 +901,7 @@
    :access           true
    :model            (or (ai.settings/ai-agent-openai-model) "gpt-5.4")
    :enabled          (ai.settings/ai-agent-enabled)
+   :max_file_bytes    (ai.settings/ai-agent-max-file-bytes)
    :default_database (when-let [db-id (ai.settings/ai-agent-default-database-id)]
                        (when-let [db (t2/select-one :model/Database :id db-id)]
                          {:id (:id db) :name (:name db)}))

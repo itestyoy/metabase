@@ -116,6 +116,7 @@ export interface AgentSettings {
   enabled: boolean;
   access: boolean;
   default_database?: { id: number; name: string } | null;
+  max_file_bytes?: number | null;
 }
 
 interface AgentResponse {
@@ -201,12 +202,17 @@ export function useAgentChat() {
           enabled?: boolean;
           access?: boolean;
         };
+        const full = s as {
+          default_database?: { id: number; name: string } | null;
+          max_file_bytes?: number | null;
+        };
         setAgentSettings({
           configured: s.configured ?? false,
           model: s.model ?? "gpt-5.4",
           enabled: s.enabled ?? true,
           access: s.access ?? false,
-          default_database: (s as { default_database?: { id: number; name: string } | null }).default_database ?? null,
+          default_database: full.default_database ?? null,
+          max_file_bytes: full.max_file_bytes ?? null,
         });
       })
       .catch(() => {
