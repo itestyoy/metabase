@@ -799,6 +799,83 @@
           (try (sse-write! os "error" {:message (.getMessage e)}) (catch Exception _)))))))
 
 #_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :post "/chat-stream-upload"
+  "Multipart variant of /chat-stream. Accepts a binary file upload alongside the message.
+  The file is read server-side and forwarded to OpenAI as an input_file content block.
+
+  Fields (multipart/form-data):
+  - `file`                  — binary file (.md, .txt, .csv, .json, .sql …)
+  - `message`               — user message text (may be empty when file is the only content)
+  - `previous_response_id`  — optional, for conversation continuity
+  - `context`, `datasource`, `safe_mode`, `chat_collection_id` — same as /chat-stream"
+  {:multipart true}
+  [_route-params
+   _query-params
+   _body
+   {:keys [multipart-params params], :as _request}]
+  (api/check-403 (ai.settings/ai-agent-enabled))
+  (api/check-403 (current-user-in-ai-group?))
+  (let [;; Scalar fields come in as strings from multipart form
+        message              (or (get params "message") (get multipart-params "message") " ")
+        previous-response-id (or (get params "previous_response_id") (get multipart-params "previous_response_id"))
+        context              (when-let [s (or (get params "context") (get multipart-params "context"))]
+                               (json/parse-string s keyword))
+        datasource           (when-let [s (or (get params "datasource") (get multipart-params "datasource"))]
+                               (json/parse-string s keyword))
+        safe-mode            (= "true" (or (get params "safe_mode") (get multipart-params "safe_mode")))
+        chat-collection-id   (when-let [s (or (get params "chat_collection_id") (get multipart-params "chat_collection_id"))]
+                               (parse-long s))
+        ;; File from multipart upload — convert to base64 for OpenAI input_file
+        file-entry           (get multipart-params "file")
+        file                 (when (and file-entry (:tempfile file-entry))
+                               (let [tempfile  ^java.io.File (:tempfile file-entry)
+                                     filename  (or (:filename file-entry) "attachment")
+                                     mime-type (or (:content-type file-entry) "text/plain")
+                                     bytes     (java.nio.file.Files/readAllBytes (.toPath tempfile))
+                                     b64       (.encodeToString (java.util.Base64/getEncoder) bytes)]
+                                 {:filename  filename
+                                  :file-data (str "data:" mime-type ";base64," b64)}))
+        params               (prepare-chat-params {:message              message
+                                                   :previous-response-id previous-response-id
+                                                   :context              context
+                                                   :datasource           datasource
+                                                   :safe-mode            safe-mode
+                                                   :chat-collection-id   chat-collection-id
+                                                   :file                 file})]
+    (streaming-response/streaming-response
+      {:content-type "text/event-stream; charset=utf-8"
+       :headers      {"Cache-Control" "no-cache, no-transform"
+                      "Connection"    "keep-alive"
+                      "X-Accel-Buffering" "no"}}
+      [os _canceled-chan]
+      (try
+        (let [{:keys [api-key model opts safe-mode? ensure-chat-coll!
+                      chat-coll-id-atom chat-coll-name]} params
+              emit!      (fn [event data] (sse-write! os event data))
+              result (run-tool-loop api-key model opts
+                                   :safe-mode? safe-mode?
+                                   :ensure-chat-coll! ensure-chat-coll!
+                                   :emit! emit!)
+              {:keys [content title]} (convert-unified-response (:content result))
+              coll-name (if (and title (not (clojure.string/blank? title)) @chat-coll-id-atom)
+                          (let [new-name (str "AI: " title)]
+                            (try (t2/update! :model/Collection @chat-coll-id-atom {:name new-name})
+                                 (catch Exception e (log/warn "Failed to rename chat collection" (.getMessage e))))
+                            new-name)
+                          chat-coll-name)]
+          (sse-write! os "done"
+                      {:response_id         (:response-id result)
+                       :content             content
+                       :chat_collection_id   @chat-coll-id-atom
+                       :chat_collection_name (when @chat-coll-id-atom coll-name)
+                       :tool_calls           (mapv (fn [{:keys [name args result]}]
+                                                     {:name name :args args :result result})
+                                                   (:tool-calls result))}))
+        (catch Exception e
+          (log/error "SSE chat-stream-upload error" (.getMessage e))
+          (try (sse-write! os "error" {:message (.getMessage e)}) (catch Exception _)))))))
+
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
 (api.macros/defendpoint :get "/settings"
   "Return AI Agent settings visible to authenticated users:
   whether it is configured and which model is active."

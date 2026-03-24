@@ -263,37 +263,59 @@ export function useAgentChat() {
         { id: loadingId, role: "assistant", content: null },
       ]);
 
-      const body: Record<string, unknown> = { message: userText || " " };
+      // Build request — multipart when file attached, JSON otherwise
+      let fetchBody: BodyInit;
+      let fetchHeaders: Record<string, string> = {};
+      const endpoint = attachedFile ? "/api/ai-agent/chat-stream-upload" : "/api/ai-agent/chat-stream";
+
       if (attachedFile) {
-        body.file = { filename: attachedFile.name, file_data: attachedFile.data };
+        // Convert base64 DataURL back to Blob for binary multipart upload
+        const [meta, b64] = attachedFile.data.split(",");
+        const mime = meta.replace("data:", "").replace(";base64", "");
+        const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        const blob = new Blob([bytes], { type: mime });
+
+        const form = new FormData();
+        form.append("file", blob, attachedFile.name);
+        form.append("message", userText || " ");
+        if (previousResponseId) form.append("previous_response_id", previousResponseId);
+        if (context) form.append("context", JSON.stringify(context));
+        if (datasource) form.append("datasource", JSON.stringify(datasource));
+        if (safeMode) form.append("safe_mode", "true");
+        const effectiveCollectionId = targetCollectionId ?? chatCollectionId;
+        if (effectiveCollectionId) form.append("chat_collection_id", String(effectiveCollectionId));
+        fetchBody = form;
+        // Don't set Content-Type — browser sets it automatically with boundary
+      } else {
+        const jsonBody: Record<string, unknown> = { message: userText };
+        if (previousResponseId) jsonBody.previous_response_id = previousResponseId;
+        fetchBody = JSON.stringify(jsonBody);
+        fetchHeaders["Content-Type"] = "application/json";
       }
-      if (previousResponseId) {
-        body.previous_response_id = previousResponseId;
-      }
-      if (context) {
-        body.context = {
-          id: context.id,
-          name: context.name,
-          model: context.model,
-          ...(context.db_id != null ? { db_id: context.db_id } : {}),
-          ...(context.url_params ? { url_params: context.url_params } : {}),
-          ...(context.dataset_query ? { dataset_query: context.dataset_query } : {}),
-        };
-      }
-      if (datasource) {
-        body.datasource = {
-          type: datasource.type,
-          id:   datasource.id,
-          name: datasource.name,
-          ...(datasource.db_id != null ? { db_id: datasource.db_id } : {}),
-        };
-      }
-      if (safeMode) {
-        body.safe_mode = true;
-      }
-      const effectiveCollectionId = targetCollectionId ?? chatCollectionId;
-      if (effectiveCollectionId) {
-        body.chat_collection_id = effectiveCollectionId;
+      // For JSON path: build full body with all fields
+      if (!attachedFile) {
+        if (previousResponseId) (fetchBody as any) = undefined; // will rebuild below
+        const jsonBody: Record<string, unknown> = { message: userText };
+        if (previousResponseId) jsonBody.previous_response_id = previousResponseId;
+        if (context) {
+          jsonBody.context = {
+            id: context.id, name: context.name, model: context.model,
+            ...(context.db_id != null ? { db_id: context.db_id } : {}),
+            ...(context.url_params ? { url_params: context.url_params } : {}),
+            ...(context.dataset_query ? { dataset_query: context.dataset_query } : {}),
+          };
+        }
+        if (datasource) {
+          jsonBody.datasource = {
+            type: datasource.type, id: datasource.id, name: datasource.name,
+            ...(datasource.db_id != null ? { db_id: datasource.db_id } : {}),
+          };
+        }
+        if (safeMode) jsonBody.safe_mode = true;
+        const effectiveCollectionId = targetCollectionId ?? chatCollectionId;
+        if (effectiveCollectionId) jsonBody.chat_collection_id = effectiveCollectionId;
+        fetchBody = JSON.stringify(jsonBody);
+        fetchHeaders = { "Content-Type": "application/json" };
       }
 
       // Map of tool_name → message_id for tracking running tools
@@ -302,17 +324,14 @@ export function useAgentChat() {
       abortRef.current = abortController;
 
       try {
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-        };
         if (api.sessionToken) {
-          headers["X-Metabase-Session"] = api.sessionToken;
+          fetchHeaders["X-Metabase-Session"] = api.sessionToken;
         }
 
-        const response = await fetch("/api/ai-agent/chat-stream", {
+        const response = await fetch(endpoint, {
           method: "POST",
-          headers,
-          body: JSON.stringify(body),
+          headers: fetchHeaders,
+          body: fetchBody,
           signal: abortController.signal,
         });
 
