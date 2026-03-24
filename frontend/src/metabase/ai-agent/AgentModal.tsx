@@ -323,10 +323,34 @@ export function AgentModal({ onClose }: AgentModalProps) {
   );
 
   // ── File attachment ────────────────────────────────────────────────────
-  const getMimeType = (filename: string) => {
-    const ext = filename.split(".").pop()?.toLowerCase();
-    const map: Record<string, string> = { md: "text/markdown", txt: "text/plain", csv: "text/csv", json: "application/json", sql: "text/plain" };
-    return map[ext ?? ""] ?? "text/plain";
+  // MIME types accepted by OpenAI Responses API input_file
+  const getMimeType = (filename: string): string => {
+    const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+    const map: Record<string, string> = {
+      // Text & code
+      md: "text/markdown", markdown: "text/markdown",
+      txt: "text/plain", text: "text/plain",
+      json: "application/json",
+      sql: "text/x-sql",
+      csv: "text/csv", tsv: "text/tsv",
+      html: "text/html", htm: "text/html",
+      xml: "text/xml",
+      py: "text/x-python", js: "text/javascript",
+      ts: "text/x-typescript", jsx: "text/jsx", tsx: "text/tsx",
+      css: "text/css",
+      yaml: "application/x-yaml", yml: "application/x-yaml",
+      toml: "application/toml",
+      sh: "text/x-sh", bash: "text/x-bash",
+      // Documents
+      pdf: "application/pdf",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      doc: "application/msword",
+      rtf: "application/rtf",
+      // Spreadsheets
+      xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      xls: "application/vnd.ms-excel",
+    };
+    return map[ext] ?? "text/plain";
   };
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -335,8 +359,13 @@ export function AgentModal({ onClose }: AgentModalProps) {
     const mimeType = getMimeType(file.name);
     const reader = new FileReader();
     reader.onload = () => {
-      // reader.result is already "data:<mime>;base64,<b64>" when using readAsDataURL
-      setAttachedFile({ name: file.name, data: reader.result as string, mimeType });
+      const rawResult = reader.result as string;
+      // FileReader.readAsDataURL produces "data:<browser-mime>;base64,<b64>"
+      // but browser may misdetect the MIME (e.g. .md → text/plain).
+      // Replace with our correct MIME type to match OpenAI's accepted list.
+      const b64 = rawResult.split(",")[1];
+      const correctedDataUrl = `data:${mimeType};base64,${b64}`;
+      setAttachedFile({ name: file.name, data: correctedDataUrl, mimeType });
     };
     reader.readAsDataURL(file);
     // Reset so the same file can be re-attached
@@ -702,11 +731,11 @@ export function AgentModal({ onClose }: AgentModalProps) {
                         <input
                           ref={fileInputRef}
                           type="file"
-                          accept=".md,.txt,.csv,.json,.sql"
+                          accept=".md,.txt,.csv,.tsv,.json,.sql,.html,.xml,.py,.js,.ts,.jsx,.tsx,.css,.yaml,.yml,.toml,.sh,.pdf,.docx,.doc,.rtf,.xlsx,.xls"
                           style={{ display: "none" }}
                           onChange={handleFileChange}
                         />
-                        <Tooltip label={t`Attach file (.md, .txt, .csv, .json, .sql)`}>
+                        <Tooltip label={t`Attach file (md, txt, csv, json, sql, pdf, docx, xlsx, py, js, …)`}>
                           <ActionIcon
                             variant="transparent"
                             size="sm"
