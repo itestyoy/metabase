@@ -629,8 +629,16 @@
                          previous-response-id
                          (assoc :previous-response-id previous-response-id)
                          file
-                         (assoc :file {:filename  (:filename file)
-                                       :file-data (:file_data file)}))]
+                         (assoc :file (let [raw (:file_data file)
+                                            ;; file_data from JSON path is already a data URL
+                                            ;; "data:<mime>;base64,<b64>" — parse it
+                                            [header b64] (clojure.string/split raw #"," 2)
+                                            mime (-> header
+                                                     (clojure.string/replace #"^data:" "")
+                                                     (clojure.string/replace #";base64$" ""))]
+                                        {:filename  (:filename file)
+                                         :mime-type mime
+                                         :file-data b64})))]
     {:api-key           api-key
      :model             model
      :opts              opts
@@ -833,8 +841,10 @@
                                      mime-type (or (:content-type file-entry) "text/plain")
                                      bytes     (java.nio.file.Files/readAllBytes (.toPath tempfile))
                                      b64       (.encodeToString (java.util.Base64/getEncoder) bytes)]
+                                 (log/info "File upload:" {:filename filename :mime-type mime-type :bytes (count bytes)})
                                  {:filename  filename
-                                  :file-data (str "data:" mime-type ";base64," b64)}))
+                                  :mime-type mime-type
+                                  :file-data b64}))
         params               (prepare-chat-params {:message              message
                                                    :previous-response-id previous-response-id
                                                    :context              context

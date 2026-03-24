@@ -64,7 +64,7 @@
                  ;; input_text is always included — OpenAI requires at least one text block.
                  [{:type      "input_file"
                    :filename  (:filename file)
-                   :file_data (:file-data file)}
+                   :file_data (str "data:" (or (:mime-type file) "text/plain") ";base64," (:file-data file))}
                   {:type "input_text"
                    :text (let [t (clojure.string/trim (str message))]
                            (if (seq t) t "Please analyze this file."))}]
@@ -190,11 +190,24 @@
   {:pre [(string? api-key) (seq api-key)
          (string? model)   (seq model)]}
   (let [body (build-request-body opts)]
-    (log/debug "OpenAI Responses API →"
-               {:model model
-                :input-count      (count (:input body))
-                :prev-response-id (:previous_response_id body)
-                :tool-count       (count (:tools body))})
+    (let [input-preview (mapv (fn [item]
+                                (if-let [content (:content item)]
+                                  (assoc item :content
+                                    (if (string? content)
+                                      (subs content 0 (min 100 (count content)))
+                                      (mapv (fn [b]
+                                              (if (= "input_file" (:type b))
+                                                (assoc b :file_data (str (subs (or (:file_data b) "") 0 (min 50 (count (or (:file_data b) "")))) "…"))
+                                                b))
+                                            content)))
+                                  item))
+                              (:input body))]
+      (log/info "OpenAI Responses API →"
+                {:model       model
+                 :input       input-preview
+                 :tool-count  (count (:tools body))
+                 :has-file?   (some #(= "input_file" (:type %))
+                                    (mapcat #(if (vector? (:content %)) (:content %) []) (:input body)))}))
     (let [do-request (fn []
                        (http/post openai-responses-url
                                   {:headers         {"Authorization" (str "Bearer " api-key)
