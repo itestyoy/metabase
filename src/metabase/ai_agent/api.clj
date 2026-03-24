@@ -683,7 +683,7 @@
                                      [:file {:optional true}
                                       [:maybe [:map
                                                [:filename  :string]
-                                               [:file_data :string]]]]]
+                                               [:file_data :string]]]]]]
   (api/check-403 (ai.settings/ai-agent-enabled))
   (api/check-403 (current-user-in-ai-group?))
   (let [{:keys [api-key model opts safe-mode? ensure-chat-coll!
@@ -752,7 +752,7 @@
                                      [:file {:optional true}
                                       [:maybe [:map
                                                [:filename  :string]
-                                               [:file_data :string]]]]]
+                                               [:file_data :string]]]]]]
   (api/check-403 (ai.settings/ai-agent-enabled))
   (api/check-403 (current-user-in-ai-group?))
   (let [params (prepare-chat-params {:message              message
