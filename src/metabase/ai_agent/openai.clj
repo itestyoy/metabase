@@ -60,14 +60,14 @@
     ;; Regular user turn — string content when no file, array when file attached
     [{:role    "user"
       :content (if file
-                 ;; Array of content parts required when file is present
-                 (cond-> []
-                   (seq (clojure.string/trim (str message)))
-                   (conj {:type "input_text" :text (clojure.string/trim (str message))})
-                   file
-                   (conj {:type      "input_file"
-                          :filename  (:filename file)
-                          :file_data (:file-data file)}))
+                 ;; input_file first (per OpenAI docs), then input_text.
+                 ;; input_text is always included — OpenAI requires at least one text block.
+                 [{:type      "input_file"
+                   :filename  (:filename file)
+                   :file_data (:file-data file)}
+                  {:type "input_text"
+                   :text (let [t (clojure.string/trim (str message))]
+                           (if (seq t) t "Please analyze this file."))}]
                  ;; Plain string for text-only messages (simpler, backward-compatible)
                  (str message))}]))
 
