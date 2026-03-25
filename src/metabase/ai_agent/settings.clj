@@ -42,3 +42,11 @@
   :type        :integer
   :default     204800
   :export?     false)
+
+(defsetting ai-agent-mcp-oauth-db-path
+  (deferred-tru "Path to the SQLite database file used to store per-user MCP OAuth2 tokens (MB_AI_AGENT_MCP_OAUTH_DB_PATH). Default is mcp_oauth.db in the current directory.")
+  :visibility  :admin
+  :type        :string
+  :encryption  :no
+  :default     "mcp_oauth.db"
+  :export?     false)

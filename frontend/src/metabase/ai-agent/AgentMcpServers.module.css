@@ -37,6 +37,31 @@
   color: color-mix(in srgb, var(--mb-color-success) 70%, transparent);
 }
 
+.mcpChipUnauthorized {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 6px;
+  background: color-mix(in srgb, var(--mb-color-warning) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mb-color-warning) 40%, transparent);
+  border-radius: 12px;
+  color: var(--mb-color-warning);
+  font-family: inherit;
+  font-size: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.mcpChipUnauthorized:hover {
+  background: color-mix(in srgb, var(--mb-color-warning) 20%, transparent);
+}
+
+.mcpChipNameUnauthorized {
+  color: var(--mb-color-warning);
+  font-weight: 500;
+}
+
 .mcpEmpty {
   display: inline-flex;
   align-items: center;

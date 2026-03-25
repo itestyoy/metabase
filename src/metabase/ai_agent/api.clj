@@ -8,6 +8,7 @@
   (:require
    [cheshire.core :as json]
    [metabase.ai-agent.mcp :as ai.mcp]
+   [metabase.ai-agent.mcp-oauth :as ai.mcp-oauth]
    [metabase.ai-agent.openai :as ai.openai]
    [metabase.ai-agent.settings :as ai.settings]
    [metabase.ai-agent.tools :as ai.tools]
@@ -359,7 +360,7 @@
       (let [response    (ai.openai/create-response (assoc opts
                                                           :api-key api-key
                                                           :model   model
-                                                          :tools   (ai.tools/all-tool-definitions safe-mode?)))
+                                                          :tools   (ai.tools/all-tool-definitions safe-mode? api/*current-user-id*)))
             response-id (ai.openai/response-id response)
             _           (when (ai.openai/failed? response)
                           (throw (ex-info (str "OpenAI returned status: " (get response :status))
@@ -373,7 +374,7 @@
                                    (let [args (maybe-inject-collection-id name arguments ensure-chat-coll!)]
                                      ;; Emit tool_start event
                                      (when emit! (emit! "tool_start" {:name name}))
-                                     (let [result (ai.tools/execute-tool name args)]
+                                     (let [result (ai.tools/execute-tool name args api/*current-user-id*)]
                                        ;; Emit tool_result event
                                        (when emit! (emit! "tool_result" {:name   name
                                                                          :result result}))
@@ -936,19 +937,28 @@
 #_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
 (api.macros/defendpoint :get "/mcp-servers"
   "Return status of connected MCP servers and their available tools.
-   AI-group users see server names and tool lists; superusers also see URLs."
+   AI-group users see server names and tool lists; superusers also see URLs.
+   For OAuth2 servers, includes auth_type and user's authorization status."
   []
   (api/check-403 (ai.settings/ai-agent-enabled))
   (api/check-403 (current-user-in-ai-group?))
-  (let [registry  (ai.mcp/ensure-connected)
-        su?       api/*is-superuser?*]
+  (let [registry    (ai.mcp/ensure-connected)
+        su?         api/*is-superuser?*
+        user-id     api/*current-user-id*
+        oauth-names (ai.mcp-oauth/parse-oauth-servers)
+        auth-status (when (seq oauth-names)
+                      (try (ai.mcp-oauth/user-auth-status user-id oauth-names)
+                           (catch Exception _ {})))]
     {:servers (mapv (fn [[name server]]
-                      (let [tools (try (ai.mcp/list-tools server) (catch Exception _ []))]
+                      (let [tools     (try (ai.mcp/list-tools server user-id) (catch Exception _ []))
+                            is-oauth? (= :oauth2 (:auth-type server))]
                         (cond-> {:name  name
                                  :tools (mapv (fn [t] {:name (:name t) :description (:description t)})
                                               tools)}
-                          su? (assoc :sse_url          (:sse-url server)
-                                     :message_endpoint (:message-endpoint server)))))
+                          su?       (assoc :sse_url          (:sse-url server)
+                                           :message_endpoint (:message-endpoint server))
+                          is-oauth? (assoc :auth_type  "oauth2"
+                                           :authorized (get-in auth-status [name :authorized] false)))))
                     registry)}))
 
 #_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
@@ -959,6 +969,93 @@
   (let [registry (ai.mcp/reconnect!)]
     {:reconnected (count registry)
      :servers     (keys registry)}))
+
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;; MCP OAuth2 endpoints
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :get "/mcp-oauth/authorize/:server-name"
+  "Start the OAuth2 authorization flow for an MCP server.
+   Returns a redirect URL that the frontend should open in a popup/new tab."
+  [{:keys [server-name]} :- [:map [:server-name ms/NonBlankString]]]
+  (api/check-403 (ai.settings/ai-agent-enabled))
+  (api/check-403 (current-user-in-ai-group?))
+  (let [;; Find the server URL from env
+        env-key    (str "MB_AI_MCP_SERVER_"
+                        (clojure.string/upper-case (clojure.string/replace server-name #"-" "_"))
+                        "_URL")
+        server-url (System/getenv env-key)
+        _          (when-not server-url
+                     (throw (ex-info "MCP server not found" {:server-name server-name})))
+        site-url   (or (System/getenv "MB_SITE_URL") "http://localhost:3000")
+        callback   (str site-url "/api/ai-agent/mcp-oauth/callback")
+        result     (ai.mcp-oauth/build-authorize-url
+                     server-name server-url callback api/*current-user-id*)]
+    {:authorize_url (:url result)
+     :state         (:state result)}))
+
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :get "/mcp-oauth/callback"
+  "OAuth2 callback endpoint. Receives authorization code, exchanges for tokens.
+   Renders a minimal HTML page that closes the popup and notifies the opener."
+  [{:keys [code state error]} :- [:map
+                                   [:code  {:optional true} [:maybe ms/NonBlankString]]
+                                   [:state ms/NonBlankString]
+                                   [:error {:optional true} [:maybe ms/NonBlankString]]]]
+  ;; Note: no auth check here — state param validates the user
+  ;; Sanitize values for safe HTML/JS embedding (prevent XSS)
+  (letfn [(sanitize [^String s]
+            (when s
+              (-> s
+                  (clojure.string/replace "&" "&amp;")
+                  (clojure.string/replace "<" "&lt;")
+                  (clojure.string/replace ">" "&gt;")
+                  (clojure.string/replace "'" "\\'")
+                  (clojure.string/replace "\"" "&quot;"))))]
+    (if error
+      {:status  200
+       :headers {"Content-Type" "text/html"}
+       :body    (str "<html><body><script>"
+                     "window.opener && window.opener.postMessage({type:'mcp-oauth-error',error:'"
+                     (sanitize error) "'},'*'); window.close();"
+                     "</script><p>Authorization failed. You can close this window.</p></body></html>")}
+      (try
+        (let [result (ai.mcp-oauth/handle-callback! code state)]
+          {:status  200
+           :headers {"Content-Type" "text/html"}
+           :body    (str "<html><body><script>"
+                         "window.opener && window.opener.postMessage({type:'mcp-oauth-success',server:'"
+                         (sanitize (:server-name result)) "'},'*'); window.close();"
+                         "</script><p>Authorization successful for " (sanitize (:server-name result))
+                         ". You can close this window.</p></body></html>")})
+        (catch Exception e
+          (log/error "MCP OAuth callback error" (.getMessage e))
+          {:status  200
+           :headers {"Content-Type" "text/html"}
+           :body    (str "<html><body><script>"
+                         "window.opener && window.opener.postMessage({type:'mcp-oauth-error',error:'token_exchange_failed'},'*'); window.close();"
+                         "</script><p>Authorization failed. You can close this window.</p></body></html>")})))))
+
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :get "/mcp-oauth/status"
+  "Return the OAuth authorization status for the current user across all OAuth MCP servers."
+  []
+  (api/check-403 (ai.settings/ai-agent-enabled))
+  (api/check-403 (current-user-in-ai-group?))
+  (let [oauth-names (ai.mcp-oauth/parse-oauth-servers)]
+    (if (seq oauth-names)
+      {:servers (ai.mcp-oauth/user-auth-status api/*current-user-id* oauth-names)}
+      {:servers {}})))
+
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :post "/mcp-oauth/revoke/:server-name"
+  "Revoke (delete) stored OAuth tokens for the current user and a specific MCP server."
+  [{:keys [server-name]} :- [:map [:server-name ms/NonBlankString]]]
+  (api/check-403 (ai.settings/ai-agent-enabled))
+  (api/check-403 (current-user-in-ai-group?))
+  (ai.mcp-oauth/revoke-token! api/*current-user-id* server-name)
+  {:success true :server_name server-name})
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Admin Toolbar — query history

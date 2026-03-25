@@ -16,6 +16,7 @@
    [cheshire.core :as json]
    [clj-http.client :as http]
    [clojure.string :as str]
+   [metabase.ai-agent.mcp-oauth :as mcp-oauth]
    [metabase.util.log :as log])
   (:import
    [java.io BufferedReader InputStreamReader]
@@ -167,51 +168,57 @@
 
 (defn- json-rpc-request
   "Send a JSON-RPC 2.0 request to `endpoint` and return the result.
-   Handles both JSON and SSE response formats (Streamable HTTP transport)."
-  [endpoint method params]
-  (let [request-id (str (java.util.UUID/randomUUID))
-        body       {:jsonrpc "2.0"
-                    :id      request-id
-                    :method  method
-                    :params  (or params {})}
-        resp       (http/post endpoint
-                     {:headers          {"Content-Type" "application/json"
-                                         "Accept"       "application/json, text/event-stream"}
-                      :body             (json/generate-string body)
-                      :as               :string
-                      :throw-exceptions false
-                      :socket-timeout   30000
-                      :connection-timeout 5000})]
-    (if (= 200 (:status resp))
-      (let [content-type (get-in resp [:headers "content-type"] "")
-            rpc-resp     (if (str/includes? content-type "text/event-stream")
-                           ;; SSE response — parse events to find JSON-RPC result
-                           (or (parse-sse-json-rpc (:body resp))
-                               (throw (ex-info "MCP SSE response contained no JSON-RPC result"
-                                               {:body (subs (:body resp) 0
-                                                            (min 500 (count (:body resp))))})))
-                           ;; JSON response — parse directly
-                           (json/parse-string (:body resp) true))]
-        (if-let [error (:error rpc-resp)]
-          (throw (ex-info (str "MCP JSON-RPC error: " (:message error))
-                          {:code (:code error) :data (:data error)}))
-          (:result rpc-resp)))
-      (throw (ex-info (str "MCP HTTP error " (:status resp))
-                      {:status (:status resp) :body (:body resp)})))))
+   Handles both JSON and SSE response formats (Streamable HTTP transport).
+   Optional `extra-headers` map is merged into the request headers."
+  ([endpoint method params]
+   (json-rpc-request endpoint method params nil))
+  ([endpoint method params extra-headers]
+   (let [request-id (str (java.util.UUID/randomUUID))
+         body       {:jsonrpc "2.0"
+                     :id      request-id
+                     :method  method
+                     :params  (or params {})}
+         headers    (merge {"Content-Type" "application/json"
+                            "Accept"       "application/json, text/event-stream"}
+                           extra-headers)
+         resp       (http/post endpoint
+                      {:headers          headers
+                       :body             (json/generate-string body)
+                       :as               :string
+                       :throw-exceptions false
+                       :socket-timeout   30000
+                       :connection-timeout 5000})]
+     (if (= 200 (:status resp))
+       (let [content-type (get-in resp [:headers "content-type"] "")
+             rpc-resp     (if (str/includes? content-type "text/event-stream")
+                            ;; SSE response — parse events to find JSON-RPC result
+                            (or (parse-sse-json-rpc (:body resp))
+                                (throw (ex-info "MCP SSE response contained no JSON-RPC result"
+                                                {:body (subs (:body resp) 0
+                                                             (min 500 (count (:body resp))))})))
+                            ;; JSON response — parse directly
+                            (json/parse-string (:body resp) true))]
+         (if-let [error (:error rpc-resp)]
+           (throw (ex-info (str "MCP JSON-RPC error: " (:message error))
+                           {:code (:code error) :data (:data error)}))
+           (:result rpc-resp)))
+       (throw (ex-info (str "MCP HTTP error " (:status resp))
+                       {:status (:status resp) :body (:body resp)}))))))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; MCP server connection
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
-(defrecord McpServer [name sse-url message-endpoint transport])
+(defrecord McpServer [name sse-url message-endpoint transport auth-type])
 
 (defn connect-server
   "Connect to an MCP server. Auto-detects transport:
    - SSE: GET /sse → endpoint event → POST JSON-RPC to endpoint
    - Streamable HTTP: POST JSON-RPC directly to the URL
-   Returns an McpServer record."
-  [server-name server-url]
-  (log/info "MCP: connecting to server" server-name "at" server-url)
+   Returns an McpServer record.
+   `auth-type` is :oauth2 or nil (no auth)."
+  [server-name server-url & {:keys [auth-type]}]
+  (log/info "MCP: connecting to server" server-name "at" server-url "auth:" (or auth-type "none"))
   (let [transport (detect-transport server-url)
         _         (log/info "MCP: detected transport for" server-name "→" (name transport))
         message-endpoint (case transport
@@ -235,29 +242,45 @@
          :socket-timeout   5000})
       (catch Exception _ nil))
     (log/info "MCP: initialized session with" server-name)
-    (->McpServer server-name server-url message-endpoint transport)))
+    (->McpServer server-name server-url message-endpoint transport auth-type)))
+
+(defn- bearer-headers
+  "Build Authorization header map if user has a valid OAuth token for this server."
+  [^McpServer server user-id]
+  (when (and (= :oauth2 (:auth-type server)) user-id)
+    (when-let [token (mcp-oauth/get-access-token user-id (:name server))]
+      {"Authorization" (str "Bearer " token)})))
 
 (defn list-tools
   "List available tools from a connected MCP server.
-   Returns a seq of tool maps with :name, :description, :inputSchema."
-  [^McpServer server]
-  (let [result (json-rpc-request (:message-endpoint server) "tools/list" {})]
-    (:tools result)))
+   Returns a seq of tool maps with :name, :description, :inputSchema.
+   Pass `user-id` for OAuth2 servers to include Bearer token."
+  ([^McpServer server]
+   (list-tools server nil))
+  ([^McpServer server user-id]
+   (let [headers (bearer-headers server user-id)
+         result  (json-rpc-request (:message-endpoint server) "tools/list" {} headers)]
+     (:tools result))))
 
 (defn call-tool
   "Call a tool on a connected MCP server.
-   Returns the tool result as a string."
-  [^McpServer server tool-name arguments]
-  (let [result (json-rpc-request (:message-endpoint server) "tools/call"
-                                  {:name      tool-name
-                                   :arguments (or arguments {})})]
-    ;; MCP tool results have a `content` array of {type, text} blocks
-    (if-let [content (:content result)]
-      (->> content
-           (filter #(= "text" (:type %)))
-           (map :text)
-           (str/join "\n"))
-      (json/generate-string result))))
+   Returns the tool result as a string.
+   Pass `user-id` for OAuth2 servers to include Bearer token."
+  ([^McpServer server tool-name arguments]
+   (call-tool server tool-name arguments nil))
+  ([^McpServer server tool-name arguments user-id]
+   (let [headers (bearer-headers server user-id)
+         result  (json-rpc-request (:message-endpoint server) "tools/call"
+                                    {:name      tool-name
+                                     :arguments (or arguments {})}
+                                    headers)]
+     ;; MCP tool results have a `content` array of {type, text} blocks
+     (if-let [content (:content result)]
+       (->> content
+            (filter #(= "text" (:type %)))
+            (map :text)
+            (str/join "\n"))
+       (json/generate-string result)))))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Server registry (cached connections)
@@ -272,25 +295,28 @@
 
 (defn- parse-server-config
   "Parse MCP server configuration from environment variables.
-   Returns a seq of {:name, :url} maps."
+   Returns a seq of {:name, :url, :auth-type} maps.
+   Auth type detected from MB_AI_MCP_SERVER_<NAME>_AUTH=oauth2"
   []
   (when-let [names-str (env-get "MB_AI_MCP_SERVER_NAMES")]
     (let [names (map str/trim (str/split names-str #","))]
       (for [n names
-            :let [env-key (str "MB_AI_MCP_SERVER_" (str/upper-case (str/replace n #"-" "_")) "_URL")
-                  url     (env-get env-key)]
+            :let [env-prefix (str "MB_AI_MCP_SERVER_" (str/upper-case (str/replace n #"-" "_")))
+                  url        (env-get (str env-prefix "_URL"))
+                  auth-str   (env-get (str env-prefix "_AUTH"))
+                  auth-type  (when (= "oauth2" auth-str) :oauth2)]
             :when (some? url)]
-        {:name n :url url}))))
+        {:name n :url url :auth-type auth-type}))))
 
 (defn ensure-connected
   "Ensure all configured MCP servers are connected. Returns the current registry map."
   []
   (let [configs (parse-server-config)]
     (when (seq configs)
-      (doseq [{:keys [name url]} configs]
+      (doseq [{:keys [name url auth-type]} configs]
         (when-not (get @server-registry name)
           (try
-            (let [server (connect-server name url)]
+            (let [server (connect-server name url :auth-type auth-type)]
               (swap! server-registry assoc name server))
             (catch Exception e
               (log/error "MCP: failed to connect to server" name "at" url (.getMessage e)))))))
@@ -311,50 +337,66 @@
    Each tool name is prefixed with the server name to avoid collisions:
    e.g. 'slack__send_message'.
 
+   Pass `user-id` to include Bearer token for OAuth2 servers.
    Caches connections — first call may be slow as it connects to servers."
-  []
-  (let [registry (ensure-connected)]
-    (when (seq registry)
-      (->> registry
-           vals
-           (mapcat (fn [^McpServer server]
-                     (try
-                       (let [tools (list-tools server)]
-                         (map (fn [tool]
-                                (let [prefixed-name (str (:name server) "__" (:name tool))]
-                                  {:type        "function"
-                                   :name        prefixed-name
-                                   :description (str "[" (:name server) "] "
-                                                     (or (:description tool) ""))
-                                   :parameters  (or (:inputSchema tool)
-                                                    {:type       "object"
-                                                     :properties {}
-                                                     :required   []})}))
-                              tools))
-                       (catch Exception e
-                         (log/warn "MCP: failed to list tools from" (:name server) (.getMessage e))
-                         nil))))
-           (remove nil?)
-           vec))))
+  ([]
+   (mcp-tool-definitions nil))
+  ([user-id]
+   (let [registry (ensure-connected)]
+     (when (seq registry)
+       (->> registry
+            vals
+            (mapcat (fn [^McpServer server]
+                      (try
+                        (let [tools (list-tools server user-id)]
+                          (map (fn [tool]
+                                 (let [prefixed-name (str (:name server) "__" (:name tool))]
+                                   {:type        "function"
+                                    :name        prefixed-name
+                                    :description (str "[" (:name server) "] "
+                                                      (or (:description tool) ""))
+                                    :parameters  (or (:inputSchema tool)
+                                                     {:type       "object"
+                                                      :properties {}
+                                                      :required   []})}))
+                               tools))
+                        (catch Exception e
+                          (log/warn "MCP: failed to list tools from" (:name server) (.getMessage e))
+                          nil))))
+            (remove nil?)
+            vec)))))
 
 (defn execute-mcp-tool
   "Execute a prefixed MCP tool call (e.g. 'slack__send_message').
    Splits the prefix to find the right server and calls the tool.
+   Pass `user-id` to include Bearer token for OAuth2 servers.
    Returns the result string."
-  [prefixed-name arguments]
-  (let [parts       (str/split prefixed-name #"__" 2)
-        server-name (first parts)
-        tool-name   (second parts)]
-    (if-let [server (get @server-registry server-name)]
-      (try
-        (call-tool server tool-name arguments)
-        (catch Exception e
-          (log/warn "MCP: tool call failed" prefixed-name (.getMessage e))
-          (str "Error calling MCP tool " prefixed-name ": " (.getMessage e))))
-      (str "MCP server not found: " server-name ". Available: "
-           (str/join ", " (keys @server-registry))))))
+  ([prefixed-name arguments]
+   (execute-mcp-tool prefixed-name arguments nil))
+  ([prefixed-name arguments user-id]
+   (let [parts       (str/split prefixed-name #"__" 2)
+         server-name (first parts)
+         tool-name   (second parts)]
+     (if-let [server (get @server-registry server-name)]
+       (try
+         (call-tool server tool-name arguments user-id)
+         (catch Exception e
+           (log/warn "MCP: tool call failed" prefixed-name (.getMessage e))
+           (str "Error calling MCP tool " prefixed-name ": " (.getMessage e))))
+       (str "MCP server not found: " server-name ". Available: "
+            (str/join ", " (keys @server-registry)))))))
 
 (defn mcp-tool?
   "Returns true if the tool name is an MCP tool (contains __ prefix separator)."
   [^String tool-name]
   (and tool-name (str/includes? tool-name "__")))
+
+(defn oauth-servers
+  "Return a seq of {:name, :url} for MCP servers that require OAuth2 auth."
+  []
+  (let [registry (ensure-connected)]
+    (->> registry
+         vals
+         (filter #(= :oauth2 (:auth-type %)))
+         (map (fn [s] {:name (:name s) :url (:sse-url s)}))
+         vec)))
