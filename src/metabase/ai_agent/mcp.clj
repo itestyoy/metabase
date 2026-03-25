@@ -209,7 +209,7 @@
 ;;; MCP server connection
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
-(defrecord McpServer [name sse-url message-endpoint transport auth-type])
+(defrecord McpServer [name sse-url message-endpoint transport auth-type connected?])
 
 (defn connect-server
   "Connect to an MCP server. Auto-detects transport:
@@ -242,7 +242,24 @@
          :socket-timeout   5000})
       (catch Exception _ nil))
     (log/info "MCP: initialized session with" server-name)
-    (->McpServer server-name server-url message-endpoint transport auth-type)))
+    (->McpServer server-name server-url message-endpoint transport auth-type true)))
+
+(defn- placeholder-server
+  "Create a placeholder McpServer for OAuth2 servers that can't be connected
+   without user tokens. They appear in the UI so users can authorize."
+  [server-name server-url auth-type]
+  (->McpServer server-name server-url nil nil auth-type false))
+
+(defn- try-connect-oauth-server
+  "Try to connect an OAuth server. If it fails (likely 401), create a placeholder
+   so the server is visible in the UI for authorization."
+  [server-name server-url]
+  (try
+    (connect-server server-name server-url :auth-type :oauth2)
+    (catch Exception e
+      (log/info "MCP: OAuth server" server-name "needs authorization, creating placeholder"
+                (.getMessage e))
+      (placeholder-server server-name server-url :oauth2))))
 
 (defn- bearer-headers
   "Build Authorization header map if user has a valid OAuth token for this server."
@@ -254,13 +271,16 @@
 (defn list-tools
   "List available tools from a connected MCP server.
    Returns a seq of tool maps with :name, :description, :inputSchema.
-   Pass `user-id` for OAuth2 servers to include Bearer token."
+   Pass `user-id` for OAuth2 servers to include Bearer token.
+   Returns empty list for placeholder (unconnected) servers."
   ([^McpServer server]
    (list-tools server nil))
   ([^McpServer server user-id]
-   (let [headers (bearer-headers server user-id)
-         result  (json-rpc-request (:message-endpoint server) "tools/list" {} headers)]
-     (:tools result))))
+   (if-not (:connected? server)
+     []  ;; Placeholder server — no tools until authorized & connected
+     (let [headers (bearer-headers server user-id)
+           result  (json-rpc-request (:message-endpoint server) "tools/list" {} headers)]
+       (:tools result)))))
 
 (defn call-tool
   "Call a tool on a connected MCP server.
@@ -269,18 +289,20 @@
   ([^McpServer server tool-name arguments]
    (call-tool server tool-name arguments nil))
   ([^McpServer server tool-name arguments user-id]
-   (let [headers (bearer-headers server user-id)
-         result  (json-rpc-request (:message-endpoint server) "tools/call"
-                                    {:name      tool-name
-                                     :arguments (or arguments {})}
-                                    headers)]
-     ;; MCP tool results have a `content` array of {type, text} blocks
-     (if-let [content (:content result)]
-       (->> content
-            (filter #(= "text" (:type %)))
-            (map :text)
-            (str/join "\n"))
-       (json/generate-string result)))))
+   (if-not (:connected? server)
+     (str "MCP server " (:name server) " requires OAuth2 authorization. Please authorize first.")
+     (let [headers (bearer-headers server user-id)
+           result  (json-rpc-request (:message-endpoint server) "tools/call"
+                                      {:name      tool-name
+                                       :arguments (or arguments {})}
+                                      headers)]
+       ;; MCP tool results have a `content` array of {type, text} blocks
+       (if-let [content (:content result)]
+         (->> content
+              (filter #(= "text" (:type %)))
+              (map :text)
+              (str/join "\n"))
+         (json/generate-string result))))))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Server registry (cached connections)
@@ -309,14 +331,17 @@
         {:name n :url url :auth-type auth-type}))))
 
 (defn ensure-connected
-  "Ensure all configured MCP servers are connected. Returns the current registry map."
+  "Ensure all configured MCP servers are connected. Returns the current registry map.
+   OAuth2 servers that fail to connect get placeholder entries so they're visible in UI."
   []
   (let [configs (parse-server-config)]
     (when (seq configs)
       (doseq [{:keys [name url auth-type]} configs]
         (when-not (get @server-registry name)
           (try
-            (let [server (connect-server name url :auth-type auth-type)]
+            (let [server (if (= :oauth2 auth-type)
+                           (try-connect-oauth-server name url)
+                           (connect-server name url :auth-type auth-type))]
               (swap! server-registry assoc name server))
             (catch Exception e
               (log/error "MCP: failed to connect to server" name "at" url (.getMessage e)))))))

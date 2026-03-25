@@ -19,6 +19,7 @@
    [next.jdbc :as jdbc]
    [next.jdbc.result-set :as rs])
   (:import
+   [java.io File]
    [java.nio.charset StandardCharsets]
    [java.security MessageDigest SecureRandom]
    [java.time Instant]
@@ -38,9 +39,14 @@
       (locking ds-atom
         (or @ds-atom
             (let [db-path (ai.settings/ai-agent-mcp-oauth-db-path)
-                  ds      (jdbc/get-datasource (str "jdbc:sqlite:" db-path))]
-              (reset! ds-atom ds)
-              ds)))))
+                  parent  (.getParentFile (File. ^String db-path))]
+              ;; Ensure parent directories exist
+              (when (and parent (not (.exists parent)))
+                (.mkdirs parent)
+                (log/info "MCP OAuth: created directory" (.getAbsolutePath parent)))
+              (let [ds (jdbc/get-datasource (str "jdbc:sqlite:" db-path))]
+                (reset! ds-atom ds)
+                ds))))))
 
 (defn init-db!
   "Create tables if they don't exist. Idempotent — skips if already initialized."
