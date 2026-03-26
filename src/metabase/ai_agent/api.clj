@@ -936,39 +936,25 @@
 
 #_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
 (api.macros/defendpoint :get "/mcp-servers"
-  "Return status of connected MCP servers and their available tools.
-   AI-group users see server names and tool lists; superusers also see URLs.
-   For OAuth2 servers, includes auth_type and user's authorization status."
+  "Return configured MCP servers and their authorization status.
+   Native servers: OpenAI connects directly. Proxy servers: our backend connects."
   []
   (api/check-403 (ai.settings/ai-agent-enabled))
   (api/check-403 (current-user-in-ai-group?))
-  (let [registry    (ai.mcp/ensure-connected)
+  (let [configs     (ai.mcp/server-configs)
         su?         api/*is-superuser?*
         user-id     api/*current-user-id*
-        oauth-names (ai.mcp-oauth/parse-oauth-servers)
+        oauth-names (ai.mcp/oauth-server-names)
         auth-status (when (seq oauth-names)
                       (try (ai.mcp-oauth/user-auth-status user-id oauth-names)
                            (catch Exception _ {})))]
-    {:servers (mapv (fn [[name server]]
-                      (let [tools     (try (ai.mcp/list-tools server user-id) (catch Exception _ []))
-                            is-oauth? (= :oauth2 (:auth-type server))]
-                        (cond-> {:name  name
-                                 :tools (mapv (fn [t] {:name (:name t) :description (:description t)})
-                                              tools)}
-                          su?       (assoc :sse_url          (:sse-url server)
-                                           :message_endpoint (:message-endpoint server))
+    {:servers (mapv (fn [{:keys [name url auth-type mode]}]
+                      (let [is-oauth? (= :oauth2 auth-type)]
+                        (cond-> {:name name :mode (clojure.core/name mode)}
+                          su?       (assoc :url url)
                           is-oauth? (assoc :auth_type  "oauth2"
                                            :authorized (get-in auth-status [name :authorized] false)))))
-                    registry)}))
-
-#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
-(api.macros/defendpoint :post "/mcp-servers/reconnect"
-  "Force reconnect all MCP servers. Superuser only."
-  []
-  (api/check-superuser)
-  (let [registry (ai.mcp/reconnect!)]
-    {:reconnected (count registry)
-     :servers     (keys registry)}))
+                    configs)}))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; MCP OAuth2 endpoints
@@ -1023,8 +1009,8 @@
                      "</script><p>Authorization failed. You can close this window.</p></body></html>")}
       (try
         (let [result (ai.mcp-oauth/handle-callback! code state)]
-          ;; Force reconnect the server so it upgrades from placeholder
-          (try (ai.mcp/reconnect-server! (:server-name result)) (catch Exception _))
+          ;; No reconnect needed — OpenAI connects to MCP servers natively.
+          ;; Token is now stored in SQLite; next API call will include it.
           {:status  200
            :headers {"Content-Type" "text/html"}
            :body    (str "<html><body><script>"
@@ -1046,7 +1032,7 @@
   []
   (api/check-403 (ai.settings/ai-agent-enabled))
   (api/check-403 (current-user-in-ai-group?))
-  (let [oauth-names (ai.mcp-oauth/parse-oauth-servers)]
+  (let [oauth-names (ai.mcp/oauth-server-names)]
     (if (seq oauth-names)
       {:servers (ai.mcp-oauth/user-auth-status api/*current-user-id* oauth-names)}
       {:servers {}})))

@@ -307,7 +307,7 @@
            user-id server-name access_token refresh_token
            (or token_type "Bearer") expires-at scope])
         (log/info "MCP OAuth: stored tokens for user" user-id "server" server-name)
-        {:success true :server-name server-name})
+        {:success true :server-name server-name :user-id user-id})
       (throw (ex-info "Token exchange failed"
                       {:status (:status resp) :body (:body resp)
                        :server-name server-name})))))

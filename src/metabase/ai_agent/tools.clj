@@ -1540,10 +1540,11 @@ Rules:
   {:type "tool_search"})
 
 (defn all-tool-definitions
-  "Return built-in tool definitions combined with MCP server tools.
-   Immediate tools are loaded directly. Deferred tools are marked with defer_loading.
+  "Return built-in tool definitions combined with native MCP tool entries.
+   Built-in tools are type=function. MCP tools are type=mcp — OpenAI handles
+   connecting to MCP servers, discovering tools, and executing them natively.
    A tool_search entry enables the model to request deferred tools on demand.
-   When safe-mode? is true, all write/modify tools are excluded."
+   When safe-mode? is true, all write/modify tools and MCP tools are excluded."
   ([] (all-tool-definitions false nil))
   ([safe-mode?] (all-tool-definitions safe-mode? nil))
   ([safe-mode? user-id]
@@ -1556,62 +1557,58 @@ Rules:
                           built-in)
          ;; Add tool_search entry
          with-search (conj marked tool-search-entry)
-         ;; Add MCP tools (always deferred since they're external)
-         mcp-tools  (try (mcp/mcp-tool-definitions user-id) (catch Exception _ nil))
+         ;; Add MCP servers as native OpenAI MCP tools (type=mcp)
+         ;; OpenAI connects to them directly — no local MCP client needed
+         mcp-tools  (when-not safe-mode?
+                      (try (mcp/mcp-tool-definitions user-id) (catch Exception _ nil)))
          all-tools  (if (seq mcp-tools)
-                      (into with-search
-                            (if safe-mode?
-                              []
-                              (mapv #(assoc % :defer_loading true) mcp-tools)))
+                      (into with-search mcp-tools)
                       with-search)]
      all-tools)))
 
 (defn execute-tool
   "Execute a tool call and return its string result.
-   Routes MCP tools (containing '__') to the MCP client,
-   built-in tools to the local dispatcher.
-   Pass `user-id` for OAuth2 MCP servers.
+   Proxy MCP tools (containing '__') are routed to our MCP client.
+   Native MCP tools are executed by OpenAI directly (never reach here).
    Runs under the current user's bound identity/permissions."
   ([tool-name args] (execute-tool tool-name args nil))
-  ([tool-name args user-id]
+  ([tool-name args _user-id]
    (try
-     (if (mcp/mcp-tool? tool-name)
-       ;; MCP tool — delegate to external server
-       (mcp/execute-mcp-tool tool-name args user-id)
-       ;; Built-in tool
+     (if (mcp/proxy-tool? tool-name)
+       (mcp/execute-proxy-tool tool-name args)
        (case tool-name
-         "list_databases"    (list-databases (get args "search"))
-         "get_database_schema" (get-database-schema (get args "database_id"))
-         "list_questions"    (list-questions (get args "search"))
-         "search_items"      (search-items (get args "query") (get args "type"))
-         "run_query"         (run-query (get args "database_id") (get args "sql"))
-         "execute_card"      (execute-card (get args "card_id"))
-         "get_card_details"  (get-card-details (get args "card_id"))
-         "get_dashboard_details" (get-dashboard-details (get args "dashboard_id"))
-         "get_table_details"  (get-table-details (get args "table_id"))
-         "list_collections"   (list-collections (get args "parent_id") (get args "search"))
-         "get_collection_contents" (get-collection-contents (get args "collection_id"))
-         "create_question"   (create-question args)
-         "update_question"   (update-question args)
-         "create_dashboard"  (create-dashboard args)
-         "add_card_to_dashboard" (add-card-to-dashboard args)
-         "archive_item"      (archive-item (get args "item_type") (get args "item_id"))
-         "move_item"         (move-item (get args "item_type") (get args "item_id") (get args "collection_id"))
-         "get_database_tables" (get-database-tables (get args "database_id"))
-         "list_metrics"       (list-metrics (get args "database_id") (get args "table_id") (get args "search"))
-         "get_metric"         (get-metric (get args "metric_id"))
-         "create_notebook_question" (create-notebook-question args)
-         "get_sql_guide"  (get-sql-guide (get args "database_id"))
-         "get_analytical_guide" (get-analytical-guide)
-         "get_metrics_guide"    (get-metrics-guide)
-         "get_search_guide"     (get-search-guide)
-         "run_mbql_query"  (run-mbql-query args)
-         "create_document" (create-document args)
-         "get_document"    (get-document-details (get args "document_id"))
-         "update_document" (update-document args)
-         "append_to_document" (append-to-document args)
-         "delegate_task"      (delegate-task (get args "task") (get args "response_format"))
-         (str "Unknown tool: " tool-name)))
+       "list_databases"    (list-databases (get args "search"))
+       "get_database_schema" (get-database-schema (get args "database_id"))
+       "list_questions"    (list-questions (get args "search"))
+       "search_items"      (search-items (get args "query") (get args "type"))
+       "run_query"         (run-query (get args "database_id") (get args "sql"))
+       "execute_card"      (execute-card (get args "card_id"))
+       "get_card_details"  (get-card-details (get args "card_id"))
+       "get_dashboard_details" (get-dashboard-details (get args "dashboard_id"))
+       "get_table_details"  (get-table-details (get args "table_id"))
+       "list_collections"   (list-collections (get args "parent_id") (get args "search"))
+       "get_collection_contents" (get-collection-contents (get args "collection_id"))
+       "create_question"   (create-question args)
+       "update_question"   (update-question args)
+       "create_dashboard"  (create-dashboard args)
+       "add_card_to_dashboard" (add-card-to-dashboard args)
+       "archive_item"      (archive-item (get args "item_type") (get args "item_id"))
+       "move_item"         (move-item (get args "item_type") (get args "item_id") (get args "collection_id"))
+       "get_database_tables" (get-database-tables (get args "database_id"))
+       "list_metrics"       (list-metrics (get args "database_id") (get args "table_id") (get args "search"))
+       "get_metric"         (get-metric (get args "metric_id"))
+       "create_notebook_question" (create-notebook-question args)
+       "get_sql_guide"  (get-sql-guide (get args "database_id"))
+       "get_analytical_guide" (get-analytical-guide)
+       "get_metrics_guide"    (get-metrics-guide)
+       "get_search_guide"     (get-search-guide)
+       "run_mbql_query"  (run-mbql-query args)
+       "create_document" (create-document args)
+       "get_document"    (get-document-details (get args "document_id"))
+       "update_document" (update-document args)
+       "append_to_document" (append-to-document args)
+       "delegate_task"      (delegate-task (get args "task") (get args "response_format"))
+       (str "Unknown tool: " tool-name)))
      (catch Exception e
        (log/warn e "AI Agent tool execution failed" {:tool tool-name})
        (str "Error executing " tool-name ": " (.getMessage e))))))

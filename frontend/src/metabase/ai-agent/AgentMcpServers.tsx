@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { t } from "ttag";
 
 import api from "metabase/lib/api";
-import { ActionIcon, Icon, Text, Tooltip } from "metabase/ui";
+import { ActionIcon, Icon, Menu, Text, Tooltip } from "metabase/ui";
 
 import S from "./AgentMcpServers.module.css";
 
@@ -10,20 +10,15 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-interface McpTool {
-  name: string;
-  description: string;
-}
-
 interface McpServer {
   name: string;
-  tools: McpTool[];
   auth_type?: "oauth2";
   authorized?: boolean;
 }
 
 export function AgentMcpServers() {
   const [servers, setServers] = useState<McpServer[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
 
   const fetchServers = useCallback(() => {
     api
@@ -41,11 +36,9 @@ export function AgentMcpServers() {
     fetchServers();
   }, [fetchServers]);
 
-  // Listen for OAuth popup messages
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       if (event.data?.type === "mcp-oauth-success") {
-        // Re-fetch servers to get updated auth status
         fetchServers();
       }
     };
@@ -58,94 +51,85 @@ export function AgentMcpServers() {
       const resp = await api.GET(`/api/ai-agent/mcp-oauth/authorize/${serverName}`)({});
       const data = resp as { authorize_url?: string };
       if (data.authorize_url) {
-        // Open OAuth flow in popup
-        const w = 600;
-        const h = 700;
+        const w = 600, h = 700;
         const left = window.screenX + (window.innerWidth - w) / 2;
         const top = window.screenY + (window.innerHeight - h) / 2;
-        window.open(
-          data.authorize_url,
-          `mcp-oauth-${serverName}`,
-          `width=${w},height=${h},left=${left},top=${top},popup=yes`,
-        );
+        window.open(data.authorize_url, `mcp-oauth-${serverName}`, `width=${w},height=${h},left=${left},top=${top},popup=yes`);
       }
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   }, []);
 
-  const handleRevoke = useCallback(
-    async (serverName: string) => {
-      try {
-        await api.POST(`/api/ai-agent/mcp-oauth/revoke/${serverName}`)({});
-        fetchServers();
-      } catch {
-        // ignore
-      }
-    },
-    [fetchServers],
-  );
+  const handleRevoke = useCallback(async (serverName: string) => {
+    try {
+      await api.POST(`/api/ai-agent/mcp-oauth/revoke/${serverName}`)({});
+      fetchServers();
+    } catch { /* ignore */ }
+  }, [fetchServers]);
 
   if (servers.length === 0) {
     return null;
   }
 
+  const authorizedCount = servers.filter(s => !s.auth_type || s.authorized).length;
+  const needsAttention = servers.some(s => s.auth_type === "oauth2" && !s.authorized);
+
   return (
-    <div className={S.mcpBar}>
-      <div className={S.mcpChips}>
+    <Menu opened={isOpen} onChange={setIsOpen} position="top-start" shadow="md" width={260}>
+      <Menu.Target>
+        <Tooltip label={t`MCP`} position="top" withArrow>
+          <ActionIcon
+            variant="transparent"
+            size="sm"
+            onClick={() => setIsOpen(o => !o)}
+            aria-label={t`MCP`}
+            className={needsAttention ? S.mcpIconAttention : undefined}
+          >
+            <Icon name="bolt" size={14} color={needsAttention ? "var(--mb-color-success)" : "var(--mb-color-success)"} />
+          </ActionIcon>
+        </Tooltip>
+      </Menu.Target>
+
+      <Menu.Dropdown>
+        <Menu.Label>{t`MCP Servers`}</Menu.Label>
         {servers.map(server => {
           const isOAuth = server.auth_type === "oauth2";
-          const needsAuth = isOAuth && !server.authorized;
+          const authorized = !isOAuth || server.authorized;
 
           return (
-            <Tooltip
+            <Menu.Item
               key={server.name}
-              label={
-                needsAuth
-                  ? t`Click to authorize ${capitalize(server.name)}`
-                  : isOAuth
-                    ? t`${capitalize(server.name)} (authorized)`
-                    : capitalize(server.name)
-              }
-              multiline
-              maw={300}
-            >
-              <div
-                className={needsAuth ? S.mcpChipUnauthorized : S.mcpChip}
-                onClick={needsAuth ? () => handleAuthorize(server.name) : undefined}
-                style={needsAuth ? { cursor: "pointer" } : undefined}
-              >
+              leftSection={
                 <Icon
-                  name={needsAuth ? "lock" : "bolt"}
-                  size={10}
+                  name={authorized ? "bolt" : "lock"}
+                  size={14}
+                  color={authorized ? "var(--mb-color-success)" : "var(--mb-color-warning)"}
                 />
-                <Text
-                  size="xs"
-                  lh={1}
-                  component="span"
-                  className={needsAuth ? S.mcpChipNameUnauthorized : S.mcpChipName}
-                >
-                  {capitalize(server.name)}
+              }
+              rightSection={
+                isOAuth && authorized ? (
+                  <ActionIcon
+                    variant="transparent"
+                    size={18}
+                    onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleRevoke(server.name); }}
+                  >
+                    <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
+                  </ActionIcon>
+                ) : undefined
+              }
+              onClick={!authorized ? () => handleAuthorize(server.name) : undefined}
+            >
+              <div>
+                <Text size="xs" fw={500}>{capitalize(server.name)}</Text>
+                <Text size="xs" c={authorized ? "text-tertiary" : "warning"}>
+                  {authorized
+                    ? t`Connected`
+                    : t`Click to authorize`}
                 </Text>
-                {isOAuth && server.authorized && (
-                  <Tooltip label={t`Revoke access`}>
-                    <ActionIcon
-                      variant="transparent"
-                      size={14}
-                      onClick={e => {
-                        e.stopPropagation();
-                        handleRevoke(server.name);
-                      }}
-                    >
-                      <Icon name="close" size={8} color="var(--mb-color-success)" />
-                    </ActionIcon>
-                  </Tooltip>
-                )}
               </div>
-            </Tooltip>
+            </Menu.Item>
           );
         })}
-      </div>
-    </div>
+      </Menu.Dropdown>
+    </Menu>
   );
 }

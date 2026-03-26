@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { t } from "ttag";
 
-import { ActionIcon, Anchor, Box, Flex, Icon, Menu, Popover, Stack, Text, Tooltip } from "metabase/ui";
+import api from "metabase/lib/api";
+import { ActionIcon, Anchor, Box, Flex, Icon, Menu, Stack, Text, Tooltip } from "metabase/ui";
 // Textarea removed — replaced by ComposerInput (contentEditable)
 
 import { AgentChatMessages } from "./AgentChatMessages";
@@ -10,10 +11,9 @@ import type { ComposerInputHandle } from "./ComposerInput";
 import { ComposerInput } from "./ComposerInput";
 import type { MetricItem } from "./MetricSlashMenu";
 import { MetricSlashMenu } from "./MetricSlashMenu";
+import { MiniPicker } from "metabase/common/components/Pickers/MiniPicker";
+import type { MiniPickerPickableItem } from "metabase/common/components/Pickers/MiniPicker/types";
 import type { AgentContextValue } from "./AgentContextPicker";
-import { AgentContextPicker } from "./AgentContextPicker";
-import type { AgentDatasource } from "./AgentDatasourcePicker";
-import { AgentDatasourcePicker } from "./AgentDatasourcePicker";
 import { AgentMcpServers } from "./AgentMcpServers";
 import type { SaveLocation } from "./AgentSaveLocationPicker";
 import { AgentSaveLocationPicker } from "./AgentSaveLocationPicker";
@@ -85,6 +85,16 @@ function saveDockState(state: DockState) {
   }
 }
 
+const CONTEXT_ICON: Record<string, string> = {
+  card: "question",
+  dataset: "model",
+  metric: "metric",
+  table: "database",
+  dashboard: "dashboard",
+  document: "document",
+  database: "database",
+};
+
 interface AgentModalProps {
   onClose: () => void;
 }
@@ -97,7 +107,6 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState("");
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
-  const [tipsOpen, setTipsOpen] = useState(false);
   const [lang, setLang] = useState<"ru" | "en">("ru");
   const [tipsData, setTipsData] = useState<{
     templates: { icon: string; label: Record<string, string>; template: Record<string, string> }[];
@@ -112,9 +121,11 @@ export function AgentModal({ onClose }: AgentModalProps) {
       .catch(() => {});
   }, []);
   const slashMetricsRef = useRef<MetricItem[]>([]);
-  const [context, setContext] = useState<AgentContextValue | null>(null);
-  const [datasource, setDatasource] = useState<AgentDatasource | null>(null);
-  const isDatasourceManual = useRef(false);
+  const [contexts, setContexts] = useState<AgentContextValue[]>([]);
+  const [contextPickerOpen, setContextPickerOpen] = useState(false);
+  const [dbPickerOpen, setDbPickerOpen] = useState(false);
+  const [dbList, setDbList] = useState<{ id: number; name: string }[]>([]);
+  const [dbListLoaded, setDbListLoaded] = useState(false);
   const [safeMode, setSafeMode] = useState(false);
   const [saveLocation, setSaveLocation] = useState<SaveLocation | null>(null);
   const [dockMode, setDockMode] = useState<DockMode>(() => readDockState().mode);
@@ -124,8 +135,6 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const isDocked = dockMode !== "none";
   const isBottomDock = dockMode === "bottom";
   const isRightDock = dockMode === "right";
-  const isContextManual = useRef(false);
-
   const { messages, isLoading, error, agentSettings, chatCollectionId, chatCollectionName, sendMessage, clearMessages, stopGeneration, retryLastMessage } =
     useAgentChat();
   const composerRef = useRef<ComposerInputHandle>(null);
@@ -135,15 +144,18 @@ export function AgentModal({ onClose }: AgentModalProps) {
 
   // Auto-populate datasource from default_database setting
   useEffect(() => {
-    if (!isDatasourceManual.current && agentSettings?.default_database) {
-      setDatasource({
-        type: "database",
-        id: agentSettings.default_database.id,
-        name: agentSettings.default_database.name,
+    if (agentSettings?.default_database && contexts.length === 0) {
+      setContexts(prev => {
+        if (prev.some(c => c.model === "database")) return prev;
+        return [...prev, {
+          id: agentSettings.default_database.id,
+          name: agentSettings.default_database.name,
+          model: "database",
+        }];
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agentSettings?.default_database]);
+  }, [agentSettings]);
 
   // When the backend auto-creates a chat collection, show it in the save-location chip
   useEffect(() => {
@@ -259,20 +271,47 @@ export function AgentModal({ onClose }: AgentModalProps) {
   // Auto-populate context from current page; re-runs on every SPA navigation.
   const pageContext = usePageContext();
   useEffect(() => {
-    if (!isContextManual.current) {
-      setContext(pageContext);
+    if (pageContext && contexts.length === 0) {
+      setContexts([pageContext]);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageContext]);
 
-  const handleContextChange = useCallback((value: AgentContextValue | null) => {
-    isContextManual.current = true;
-    setContext(value);
+  const handleAddContext = useCallback((item: MiniPickerPickableItem) => {
+    const newCtx: AgentContextValue = {
+      id: item.id as number,
+      name: item.name,
+      model: item.model as string,
+      db_id: item.model === "table" ? (item as any).db_id : undefined,
+    };
+    setContexts(prev => {
+      if (prev.some(c => c.model === newCtx.model && c.id === newCtx.id)) return prev;
+      return [...prev, newCtx];
+    });
+    setContextPickerOpen(false);
   }, []);
 
-  const handleDatasourceChange = useCallback((value: AgentDatasource | null) => {
-    isDatasourceManual.current = true;
-    setDatasource(value);
+  const handleAddDatabase = useCallback((db: { id: number; name: string }) => {
+    setContexts(prev => {
+      if (prev.some(c => c.model === "database" && c.id === db.id)) return prev;
+      return [...prev, { id: db.id, name: db.name, model: "database" }];
+    });
+    setDbPickerOpen(false);
   }, []);
+
+  // Fetch databases for the add-context menu
+  useEffect(() => {
+    if (dbPickerOpen && !dbListLoaded) {
+      api
+        .GET("/api/database")({})
+        .then((data: unknown) => {
+          const d = data as { data?: { id: number; name: string }[] };
+          setDbList(Array.isArray(d.data) ? d.data : []);
+        })
+        .catch(() => setDbList([]))
+        .finally(() => setDbListLoaded(true));
+    }
+  }, [dbPickerOpen, dbListLoaded]);
 
   // Auto-focus textarea on mount
   useEffect(() => {
@@ -387,13 +426,24 @@ export function AgentModal({ onClose }: AgentModalProps) {
 
     const langHint = lang === "ru" ? "\n[Respond in Russian]" : "\n[Respond in English]";
 
+    // Extract context and datasource from unified contexts
+    const entityContext = contexts.find(c => c.model !== "database") ?? null;
+    const dbContext = contexts.find(c => c.model === "database" || c.model === "table") ?? null;
+
     setInputText("");
     composerRef.current?.clear();
     const fileToSend = attachedFile;
     setAttachedFile(null);
-    sendMessage((text || "") + langHint, context, safeMode, saveLocation?.id, datasource, fileToSend);
+    sendMessage(
+      (text || "") + langHint,
+      entityContext,
+      safeMode,
+      saveLocation?.id,
+      dbContext ? { type: dbContext.model === "table" ? "table" as const : "database" as const, id: dbContext.id, name: dbContext.name, db_id: dbContext.db_id } : null,
+      fileToSend,
+    );
     setTimeout(() => composerRef.current?.focus(), 50);
-  }, [inputText, attachedFile, isLoading, sendMessage, context, safeMode, saveLocation, datasource, lang]);
+  }, [inputText, contexts, attachedFile, isLoading, sendMessage, safeMode, saveLocation, lang]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -434,23 +484,27 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const handleSelectPrompt = useCallback(
     (prompt: string) => {
       setInputText("");
-      sendMessage(prompt, context, safeMode, saveLocation?.id, datasource);
+      const entityContext = contexts.find(c => c.model !== "database") ?? null;
+      const dbContext = contexts.find(c => c.model === "database" || c.model === "table") ?? null;
+      sendMessage(prompt, entityContext, safeMode, saveLocation?.id, dbContext ? { type: dbContext.model === "table" ? "table" as const : "database" as const, id: dbContext.id, name: dbContext.name, db_id: dbContext.db_id } : null);
     },
-    [sendMessage, context, safeMode, saveLocation, datasource],
+    [sendMessage, contexts, safeMode, saveLocation],
   );
 
   const handleSaveAsQuestion = useCallback(
     (sql: string) => {
       setInputText("");
+      const entityContext = contexts.find(c => c.model !== "database") ?? null;
+      const dbContext = contexts.find(c => c.model === "database" || c.model === "table") ?? null;
       sendMessage(
         `Save this SQL as a new question in my personal collection:\n\`\`\`sql\n${sql}\n\`\`\``,
-        context,
+        entityContext,
         safeMode,
         saveLocation?.id,
-        datasource,
+        dbContext ? { type: dbContext.model === "table" ? "table" as const : "database" as const, id: dbContext.id, name: dbContext.name, db_id: dbContext.db_id } : null,
       );
     },
-    [sendMessage, context, safeMode, saveLocation],
+    [sendMessage, contexts, safeMode, saveLocation],
   );
 
   const { isInteracting } = panelState;
@@ -629,23 +683,132 @@ export function AgentModal({ onClose }: AgentModalProps) {
                 )}
                 <div className={S.inputArea}>
                   <div ref={composerDivRef} className={S.composer}>
-                    {attachedFile && (
-                      <Flex align="center" gap={4} px={8} pt={6} style={{ flexShrink: 0 }}>
-                        <Icon name="attachment" size={12} color="var(--mb-color-brand)" />
-                        <Text size="xs" c="brand" fw={500} style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 200 }}>
-                          {attachedFile.name}
-                        </Text>
-                        <ActionIcon
-                          variant="transparent"
-                          size="xs"
-                          onClick={() => setAttachedFile(null)}
-                          aria-label={t`Remove file`}
-                          style={{ flexShrink: 0 }}
-                        >
-                          <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
-                        </ActionIcon>
-                      </Flex>
-                    )}
+                    {/* Context chips row — always visible so + is accessible */}
+                    <div className={S.contextChipsRow}>
+                      {contexts.map((ctx, i) => (
+                        <Tooltip key={`${ctx.model}-${ctx.id}-${i}`} label={`${ctx.model}: ${ctx.name}`} position="top" withArrow openDelay={400}>
+                          <div className={S.contextChipInline}>
+                            <Icon name={CONTEXT_ICON[ctx.model] ?? "database"} size={11} />
+                            <Text size="xs" lh={1} className={S.contextChipInlineText}>{ctx.name}</Text>
+                            <ActionIcon size={14} variant="transparent" onClick={() => setContexts(prev => prev.filter((_, j) => j !== i))}>
+                              <Icon name="close" size={9} color="var(--mb-color-brand)" style={{ opacity: 0.6 }} />
+                            </ActionIcon>
+                          </div>
+                        </Tooltip>
+                      ))}
+                      {attachedFile && (
+                        <div className={S.contextChipInline}>
+                          <Icon name="attachment" size={11} />
+                          <Text size="xs" lh={1} className={S.contextChipInlineText}>{attachedFile.name}</Text>
+                          <ActionIcon size={14} variant="transparent" onClick={() => setAttachedFile(null)}>
+                            <Icon name="close" size={9} color="var(--mb-color-brand)" style={{ opacity: 0.6 }} />
+                          </ActionIcon>
+                        </div>
+                      )}
+                      {/* Attach: entity, database, file, or template */}
+                      <Box className={S.contextAnchorInline}>
+                        {dbPickerOpen ? (
+                          <Menu opened onClose={() => setDbPickerOpen(false)} position="bottom-start" shadow="md" width={220}>
+                            <Menu.Target>
+                              <Tooltip label={t`Attach`} position="top" withArrow>
+                                <ActionIcon variant="transparent" size="xs" onClick={() => setDbPickerOpen(false)} className={S.addContextBtn}>
+                                  <Icon name="add" size={12} color="var(--mb-color-text-tertiary)" />
+                                </ActionIcon>
+                              </Tooltip>
+                            </Menu.Target>
+                            <Menu.Dropdown>
+                              <Menu.Label>{t`Databases`}</Menu.Label>
+                              {dbList.length === 0 ? (
+                                <Menu.Item disabled><Text size="xs" c="text-tertiary">{t`Loading…`}</Text></Menu.Item>
+                              ) : (
+                                dbList.map(db => (
+                                  <Menu.Item key={db.id} leftSection={<Icon name="database" size={14} />} onClick={() => handleAddDatabase(db)}>
+                                    <Text size="xs" truncate>{db.name}</Text>
+                                  </Menu.Item>
+                                ))
+                              )}
+                            </Menu.Dropdown>
+                          </Menu>
+                        ) : contextPickerOpen ? (
+                          <>
+                            <ActionIcon variant="transparent" size="xs" onClick={() => setContextPickerOpen(false)} className={S.addContextBtn}>
+                              <Icon name="add" size={12} color="var(--mb-color-text-tertiary)" />
+                            </ActionIcon>
+                            <MiniPicker
+                              opened
+                              onClose={() => setContextPickerOpen(false)}
+                              onChange={handleAddContext}
+                              models={["card", "dataset", "metric", "table", "document"]}
+                              dropdownMt={4}
+                            />
+                          </>
+                        ) : (
+                          <Menu position="bottom-start" shadow="md" width={200}>
+                            <Menu.Target>
+                              <Tooltip label={t`Attach`} position="top" withArrow>
+                                <ActionIcon variant="transparent" size="xs" className={S.addContextBtn}>
+                                  <Icon name="add" size={12} color="var(--mb-color-text-tertiary)" />
+                                </ActionIcon>
+                              </Tooltip>
+                            </Menu.Target>
+                            <Menu.Dropdown>
+                              <Menu.Item leftSection={<Icon name="search" size={14} />} onClick={() => setContextPickerOpen(true)}>
+                                <Text size="xs">{t`Question, model, table…`}</Text>
+                              </Menu.Item>
+                              <Menu.Item leftSection={<Icon name="database" size={14} />} onClick={() => setDbPickerOpen(true)}>
+                                <Text size="xs">{t`Database`}</Text>
+                              </Menu.Item>
+                              <Menu.Item leftSection={<Icon name="attachment" size={14} />} onClick={() => fileInputRef.current?.click()}>
+                                <Text size="xs">{t`File`}</Text>
+                              </Menu.Item>
+                              {(tipsData?.templates ?? []).length > 0 && (
+                                <>
+                                  <Menu.Divider />
+                                  <Menu.Label>{t`Templates`}</Menu.Label>
+                                  {(tipsData?.templates ?? []).map((tip) => {
+                                    const tipLabel = tip.label[lang] ?? tip.label.en ?? "";
+                                    const tipTemplate = tip.template[lang] ?? tip.template.en ?? "";
+                                    return (
+                                      <Menu.Item
+                                        key={tipLabel}
+                                        leftSection={<Icon name={tip.icon as any} size={14} color="var(--mb-color-brand)" />}
+                                        onClick={() => {
+                                          composerRef.current?.focus();
+                                          document.execCommand("insertText", false, tipTemplate);
+                                          setTimeout(() => {
+                                            const el = (composerRef.current as unknown as { getText?: () => string })?.getText?.() ?? "";
+                                            const match = el.match(/\{(\w+)\}/);
+                                            if (match) {
+                                              const sel = window.getSelection();
+                                              if (sel && sel.rangeCount > 0) {
+                                                const range = sel.getRangeAt(0);
+                                                const node = range.startContainer;
+                                                if (node.nodeType === Node.TEXT_NODE) {
+                                                  const text = node.textContent ?? "";
+                                                  const idx = text.indexOf(match[0]);
+                                                  if (idx >= 0) {
+                                                    range.setStart(node, idx);
+                                                    range.setEnd(node, idx + match[0].length);
+                                                    sel.removeAllRanges();
+                                                    sel.addRange(range);
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }, 50);
+                                        }}
+                                      >
+                                        <Text size="xs">{tipLabel}</Text>
+                                      </Menu.Item>
+                                    );
+                                  })}
+                                </>
+                              )}
+                            </Menu.Dropdown>
+                          </Menu>
+                        )}
+                      </Box>
+                    </div>
                     <ComposerInput
                       ref={composerRef}
                       onChange={handleComposerChange}
@@ -662,98 +825,24 @@ export function AgentModal({ onClose }: AgentModalProps) {
                         anchorRef={composerDivRef}
                         onLoaded={handleSlashMetricsLoaded}
                         onSelect={handleMetricSelect}
-                        datasourceId={datasource?.id}
+                        datasourceId={contexts.find(c => c.model === "database" || c.model === "table")?.id}
                       />
                     )}
                     <div className={S.composerFooter}>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".md,.txt,.csv,.tsv,.json,.sql,.html,.xml,.py,.js,.ts,.jsx,.tsx,.css,.yaml,.yml,.toml,.sh,.pdf,.docx,.doc,.rtf,.xlsx,.xls"
+                        style={{ display: "none" }}
+                        onChange={handleFileChange}
+                      />
                       <Flex gap={4} align="center" style={{ flex: 1, minWidth: 0 }}>
-                        <Popover position="top-start" shadow="md" width={280} opened={tipsOpen} onChange={setTipsOpen}>
-                          <Popover.Target>
-                            <ActionIcon variant="transparent" size="sm" aria-label={t`Tips`} onClick={() => setTipsOpen(o => !o)}>
-                              <Icon name="info" size={14} color="var(--mb-color-text-tertiary)" />
-                            </ActionIcon>
-                          </Popover.Target>
-                          <Popover.Dropdown p="xs">
-                            <Text size="xs" fw={600} c="text-secondary" mb={6}>{"Templates"}</Text>
-                            <Stack gap={2}>
-                              {(tipsData?.templates ?? []).map((tip) => {
-                                const tipLabel = tip.label[lang] ?? tip.label.en ?? "";
-                                const tipTemplate = tip.template[lang] ?? tip.template.en ?? "";
-                                return (
-                                <Flex
-                                  key={tipLabel}
-                                  align="center"
-                                  gap={8}
-                                  px={8}
-                                  py={5}
-                                  style={{ borderRadius: 6, cursor: "pointer", transition: "background 0.1s" }}
-                                  className={S.tipItem}
-                                  onClick={() => {
-                                    setTipsOpen(false);
-                                    composerRef.current?.focus();
-                                    document.execCommand("insertText", false, tipTemplate);
-                                    setTimeout(() => {
-                                      const el = (composerRef.current as unknown as { getText?: () => string })?.getText?.() ?? "";
-                                      const match = el.match(/\{(\w+)\}/);
-                                      if (match) {
-                                        const sel = window.getSelection();
-                                        if (sel && sel.rangeCount > 0) {
-                                          const range = sel.getRangeAt(0);
-                                          const node = range.startContainer;
-                                          if (node.nodeType === Node.TEXT_NODE) {
-                                            const text = node.textContent ?? "";
-                                            const idx = text.indexOf(match[0]);
-                                            if (idx >= 0) {
-                                              range.setStart(node, idx);
-                                              range.setEnd(node, idx + match[0].length);
-                                              sel.removeAllRanges();
-                                              sel.addRange(range);
-                                            }
-                                          }
-                                        }
-                                      }
-                                    }, 50);
-                                  }}
-                                >
-                                  <Icon name={tip.icon as any} size={13} color="var(--mb-color-brand)" style={{ flexShrink: 0 }} />
-                                  <Box style={{ flex: 1, minWidth: 0 }}>
-                                    <Text size="xs" fw={500} c="text-primary">{tipLabel}</Text>
-                                    <Text size="xs" c="text-tertiary" truncate>{tipTemplate}</Text>
-                                  </Box>
-                                </Flex>
-                                );
-                              })}
-                            </Stack>
-                            <Box mt={8} pt={6} style={{ borderTop: "1px solid var(--mb-color-border)" }}>
-                              <Text size="xs" c="text-tertiary" lh={1.4}>
-                                {tipsData?.hint?.[lang] ?? tipsData?.hint?.en ?? t`Replace {placeholders} with your values. Type / to insert metrics.`}
-                              </Text>
-                            </Box>
-                          </Popover.Dropdown>
-                        </Popover>
+                        <AgentMcpServers />
                         <Text size="xs" c="text-tertiary" className={S.inputHint}>
-                          {t`Enter to send · Shift+Enter for new line · / for metrics`}
+                          {t`Enter to send · Shift+Enter new line · / metrics`}
                         </Text>
                       </Flex>
                       <Flex gap={2} align="center">
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept=".md,.txt,.csv,.tsv,.json,.sql,.html,.xml,.py,.js,.ts,.jsx,.tsx,.css,.yaml,.yml,.toml,.sh,.pdf,.docx,.doc,.rtf,.xlsx,.xls"
-                          style={{ display: "none" }}
-                          onChange={handleFileChange}
-                        />
-                        <Tooltip label={t`Attach file (md, txt, csv, json, sql, pdf, docx, xlsx, py, js, …)`}>
-                          <ActionIcon
-                            variant="transparent"
-                            size="sm"
-                            onClick={() => fileInputRef.current?.click()}
-                            aria-label={t`Attach file`}
-                            color={attachedFile ? "brand" : undefined}
-                          >
-                            <Icon name="attachment" size={14} color={attachedFile ? "var(--mb-color-brand)" : "var(--mb-color-text-tertiary)"} />
-                          </ActionIcon>
-                        </Tooltip>
                         <Menu position="top-end" shadow="md" width={140}>
                           <Menu.Target>
                             <Tooltip label={lang === "ru" ? "Русский" : "English"}>
@@ -777,6 +866,17 @@ export function AgentModal({ onClose }: AgentModalProps) {
                             </Menu.Item>
                           </Menu.Dropdown>
                         </Menu>
+                        <Tooltip label={safeMode ? t`Safe mode ON — write tools disabled` : t`Safe mode OFF — all tools enabled`}>
+                          <ActionIcon
+                            variant={safeMode ? "light" : "subtle"}
+                            color={safeMode ? "green" : "gray"}
+                            size="sm"
+                            onClick={() => setSafeMode((v: boolean) => !v)}
+                            aria-label={t`Toggle safe mode`}
+                          >
+                            <Icon name="lock" size={14} color={safeMode ? "var(--mb-color-success)" : undefined} />
+                          </ActionIcon>
+                        </Tooltip>
                         {isLoading ? (
                           <Tooltip label={t`Stop generating`}>
                             <ActionIcon
@@ -808,24 +908,9 @@ export function AgentModal({ onClose }: AgentModalProps) {
                   </div>
                 </div>
 
-                {/* ── Bottom bar: context, save location, safe mode ── */}
+                {/* ── Bottom bar: save location ── */}
                 <div className={`${S.bottomBar} ${isBottomDock ? S.bottomBarVertical : ""}`}>
-                  <Tooltip label={safeMode ? t`Safe mode ON — write tools disabled` : t`Safe mode OFF — all tools enabled`}>
-                    <ActionIcon
-                      variant={safeMode ? "light" : "subtle"}
-                      color={safeMode ? "green" : "gray"}
-                      size="sm"
-                      onClick={() => setSafeMode((v: boolean) => !v)}
-                      aria-label={t`Toggle safe mode`}
-                    >
-                      <Icon name="lock" size={14} color={safeMode ? "var(--mb-color-success)" : undefined} />
-                    </ActionIcon>
-                  </Tooltip>
-                  <div className={S.bottomBarDivider} />
-                  <AgentContextPicker value={context} onChange={handleContextChange} />
-                  <AgentDatasourcePicker value={datasource} onChange={handleDatasourceChange} />
                   <AgentSaveLocationPicker value={saveLocation} onChange={setSaveLocation} />
-                  <AgentMcpServers />
                 </div>
               </div>
             </div>
