@@ -7252,6 +7252,21 @@
         },
         "required" : [ "type", "name", "display-name", "snippet-name", "snippet-id" ]
       },
+      "metabase.legacy-mbql.schema..TemplateTag.SourceFilter" : {
+        "description" : "Schema for a single source-filter applied to a table template tag.",
+        "type" : "object",
+        "properties" : {
+          "field-id" : {
+            "$ref" : "#/components/schemas/metabase.lib.schema.id.field"
+          },
+          "op" : {
+            "type" : "string",
+            "enum" : [ "<=", ">", ">=", "!=", "=", "<" ]
+          },
+          "value" : { }
+        },
+        "required" : [ "field-id", "op", "value" ]
+      },
       "metabase.legacy-mbql.schema..TemplateTag.SourceQuery" : {
         "description" : "Things required by all template tag types.",
         "type" : "object",
@@ -7281,11 +7296,20 @@
           "display-name" : {
             "$ref" : "#/components/schemas/metabase.lib.schema.common.non-blank-string"
           },
+          "emit-alias" : {
+            "type" : "boolean"
+          },
           "id" : {
             "$ref" : "#/components/schemas/metabase.lib.schema.template-tag.id"
           },
           "name" : {
             "$ref" : "#/components/schemas/metabase.lib.schema.common.non-blank-string"
+          },
+          "source-filters" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/metabase.legacy-mbql.schema..TemplateTag.SourceFilter"
+            }
           },
           "table-id" : {
             "$ref" : "#/components/schemas/metabase.lib.schema.id.table"
@@ -7369,13 +7393,6 @@
       "metabase.legacy-mbql.schema..legacy-column-metadata.qualified-keys" : {
         "type" : "object",
         "properties" : {
-          "qp.pivot/pivot-grouping?" : {
-            "oneOf" : [ {
-              "type" : "boolean"
-            }, {
-              "type" : "null"
-            } ]
-          },
           "lib/external-remap" : {
             "oneOf" : [ {
               "$ref" : "#/components/schemas/metabase.lib.schema.metadata..column.remapping.external"
@@ -8065,13 +8082,6 @@
           "default" : { },
           "type" : "object",
           "properties" : {
-            "qp.pivot/pivot-grouping?" : {
-              "oneOf" : [ {
-                "type" : "boolean"
-              }, {
-                "type" : "null"
-              } ]
-            },
             "binning" : {
               "$ref" : "#/components/schemas/metabase.lib.schema.binning.binning"
             },
@@ -8285,7 +8295,8 @@
               "$ref" : "#/components/schemas/metabase.legacy-mbql.schema.SourceQuery"
             },
             "limit" : {
-              "$ref" : "#/components/schemas/metabase.lib.schema.common.int-greater-than-or-equal-to-zero"
+              "type" : "integer",
+              "minimum" : 0
             },
             "filter" : {
               "$ref" : "#/components/schemas/metabase.legacy-mbql.schema.Filter"
@@ -9043,13 +9054,6 @@
         "allOf" : [ {
           "type" : "object",
           "properties" : {
-            "qp.pivot/pivot-grouping?" : {
-              "oneOf" : [ {
-                "type" : "boolean"
-              }, {
-                "type" : "null"
-              } ]
-            },
             "field_ref" : {
               "oneOf" : [ {
                 "$ref" : "#/components/schemas/metabase.legacy-mbql.schema.Reference"
@@ -9551,10 +9555,6 @@
         "description" : "schema for a valid MBQL 4 :value clause",
         "allOf" : [ ]
       },
-      "metabase.lib.metadata.column.column-unique-key" : {
-        "type" : "string",
-        "pattern" : "^column-unique-key-v\\d+\\$.+$"
-      },
       "metabase.lib.metadata.protocols.metadata-provider" : {
         "description" : "Schema for something that satisfies the [[metabase.lib.metadata.protocols/MetadataProvider]] protocol."
       },
@@ -9598,7 +9598,8 @@
               "$ref" : "#/components/schemas/metabase.lib.schema.filters"
             },
             "limit" : {
-              "$ref" : "#/components/schemas/metabase.lib.schema.common.int-greater-than-or-equal-to-zero"
+              "type" : "integer",
+              "minimum" : 0
             },
             "joins" : {
               "$ref" : "#/components/schemas/metabase.lib.schema.join.joins"
@@ -9781,11 +9782,6 @@
       "metabase.lib.schema.common.base-type" : {
         "type" : "string"
       },
-      "metabase.lib.schema.common.int-greater-than-or-equal-to-zero" : {
-        "description" : "Schema representing an integer than must also be greater than or equal to zero.",
-        "type" : "integer",
-        "minimum" : 0
-      },
       "metabase.lib.schema.common.kebab-cased-map" : { },
       "metabase.lib.schema.common.non-blank-string" : {
         "type" : "string",
@@ -9859,11 +9855,13 @@
         "properties" : {
           "max-results" : {
             "description" : "Maximum number of results to allow for a query with aggregations. If `max-results-bare-rows` is unset, this\n  applies to all queries",
-            "$ref" : "#/components/schemas/metabase.lib.schema.common.int-greater-than-or-equal-to-zero"
+            "type" : "integer",
+            "minimum" : 0
           },
           "max-results-bare-rows" : {
             "description" : "Maximum number of results to allow for a query with no aggregations. If set, this should be LOWER than\n  `:max-results`.",
-            "$ref" : "#/components/schemas/metabase.lib.schema.common.int-greater-than-or-equal-to-zero"
+            "type" : "integer",
+            "minimum" : 0
           }
         }
       },
@@ -10840,13 +10838,6 @@
                 "type" : "null"
               } ]
             },
-            "qp.pivot/pivot-grouping?" : {
-              "oneOf" : [ {
-                "type" : "boolean"
-              }, {
-                "type" : "null"
-              } ]
-            },
             "lib/external-remap" : {
               "oneOf" : [ {
                 "$ref" : "#/components/schemas/metabase.lib.schema.metadata..column.remapping.external"
@@ -11338,13 +11329,6 @@
               "fk-join-alias" : {
                 "oneOf" : [ {
                   "$ref" : "#/components/schemas/metabase.lib.schema.join.alias"
-                }, {
-                  "type" : "null"
-                } ]
-              },
-              "qp.pivot/pivot-grouping?" : {
-                "oneOf" : [ {
-                  "type" : "boolean"
                 }, {
                   "type" : "null"
                 } ]
@@ -12022,13 +12006,6 @@
         "default" : { },
         "type" : "object",
         "properties" : {
-          "qp.pivot/pivot-grouping?" : {
-            "oneOf" : [ {
-              "type" : "boolean"
-            }, {
-              "type" : "null"
-            } ]
-          },
           "binning" : {
             "$ref" : "#/components/schemas/metabase.lib.schema.binning.binning"
           },
@@ -12110,13 +12087,6 @@
         "default" : { },
         "type" : "object",
         "properties" : {
-          "qp.pivot/pivot-grouping?" : {
-            "oneOf" : [ {
-              "type" : "boolean"
-            }, {
-              "type" : "null"
-            } ]
-          },
           "binning" : {
             "$ref" : "#/components/schemas/metabase.lib.schema.binning.binning"
           },
@@ -12448,6 +12418,21 @@
           "$ref" : "#/components/schemas/metabase.lib.schema.template-tag.disallow-dimension"
         } ]
       },
+      "metabase.lib.schema.template-tag.source-filter" : {
+        "description" : "Schema for a single source-filter applied to a table template tag.",
+        "type" : "object",
+        "properties" : {
+          "field-id" : {
+            "$ref" : "#/components/schemas/metabase.lib.schema.id.field"
+          },
+          "op" : {
+            "type" : "string",
+            "enum" : [ "<=", ">", ">=", "!=", "=", "<" ]
+          },
+          "value" : { }
+        },
+        "required" : [ "field-id", "op", "value" ]
+      },
       "metabase.lib.schema.template-tag.source-query" : {
         "allOf" : [ {
           "type" : "object",
@@ -12480,11 +12465,20 @@
             "display-name" : {
               "$ref" : "#/components/schemas/metabase.lib.schema.common.non-blank-string"
             },
+            "emit-alias" : {
+              "type" : "boolean"
+            },
             "id" : {
               "$ref" : "#/components/schemas/metabase.lib.schema.template-tag.id"
             },
             "name" : {
               "$ref" : "#/components/schemas/metabase.lib.schema.template-tag.name"
+            },
+            "source-filters" : {
+              "type" : "array",
+              "items" : {
+                "$ref" : "#/components/schemas/metabase.lib.schema.template-tag.source-filter"
+              }
             },
             "table-id" : {
               "$ref" : "#/components/schemas/metabase.lib.schema.id.table"
@@ -14323,19 +14317,6 @@
         "description" : "A single result metadata column as returned by the Query Processor.",
         "$ref" : "#/components/schemas/metabase.legacy-mbql.schema.legacy-column-metadata"
       },
-      "metabase.query-processor.schema.any-query" : {
-        "description" : "Schema for a map that is in the general shape of either a legacy MBQL or MBQL 5 query. Query may not be normalized\n  yet!\n\n  This schema is not very strict because we need to handle different types of queries (legacy MBQL, pMBQL,\n  super-legacy MBQL, internal audit app queries, etc.) and it might not be normalized yet.",
-        "type" : "object",
-        "properties" : {
-          "database" : {
-            "anyOf" : [ {
-              "$ref" : "#/components/schemas/metabase.lib.schema.id.database"
-            }, {
-              "$ref" : "#/components/schemas/metabase.lib.schema.id.saved-questions-virtual-database"
-            } ]
-          }
-        }
-      },
       "metabase.query-processor.schema.export-format" : {
         "description" : "Schema for valid export formats for downloading query results.",
         "type" : "string",
@@ -14698,11 +14679,8 @@
       "metabase.transforms.schema.checkpoint-strategy" : {
         "type" : "object",
         "properties" : {
-          "checkpoint-filter" : {
-            "type" : "string"
-          },
-          "checkpoint-filter-unique-key" : {
-            "$ref" : "#/components/schemas/metabase.lib.metadata.column.column-unique-key"
+          "checkpoint-filter-field-id" : {
+            "$ref" : "#/components/schemas/metabase.lib.schema.id.field"
           },
           "type" : {
             "const" : "checkpoint"
@@ -15023,8 +15001,8 @@
       "ApiKeyAuth" : {
         "type" : "apiKey",
         "in" : "header",
-        "name" : "X-Metabase-Session",
-        "description" : "Session token obtained from /api/session endpoint"
+        "name" : "X-API-Key",
+        "description" : "API key for authentication"
       }
     }
   },
@@ -19938,9 +19916,6 @@
                   "content" : {
                     "type" : "object"
                   },
-                  "html" : {
-                    "type" : "string"
-                  },
                   "parent_comment_id" : {
                     "oneOf" : [ {
                       "description" : "value must be an integer greater than zero.",
@@ -19960,7 +19935,7 @@
                     "enum" : [ "document" ]
                   }
                 },
-                "required" : [ "target_type", "target_id", "content", "html" ]
+                "required" : [ "target_type", "target_id", "content" ]
               }
             }
           }
@@ -20022,9 +19997,6 @@
                 "properties" : {
                   "content" : {
                     "type" : "object"
-                  },
-                  "html" : {
-                    "type" : "string"
                   },
                   "is_resolved" : {
                     "type" : "boolean"
@@ -43279,6 +43251,13 @@
                                 "type" : "null"
                               } ]
                             },
+                            "checkpoint_hi_value" : {
+                              "oneOf" : [ {
+                                "type" : "string"
+                              }, {
+                                "type" : "null"
+                              } ]
+                            },
                             "is_active" : {
                               "oneOf" : [ {
                                 "type" : "boolean"
@@ -43297,6 +43276,13 @@
                             "run_method" : {
                               "type" : "string"
                             },
+                            "checkpoint_lo_value" : {
+                              "oneOf" : [ {
+                                "type" : "string"
+                              }, {
+                                "type" : "null"
+                              } ]
+                            },
                             "status" : {
                               "type" : "string",
                               "enum" : [ "started", "succeeded", "failed", "timeout", "canceled", "canceling" ]
@@ -43304,6 +43290,14 @@
                             "transform_entity_id" : {
                               "oneOf" : [ {
                                 "type" : "string"
+                              }, {
+                                "type" : "null"
+                              } ]
+                            },
+                            "checkpoint_filter_field_id" : {
+                              "oneOf" : [ {
+                                "type" : "integer",
+                                "minimum" : 1
                               }, {
                                 "type" : "null"
                               } ]
@@ -43448,6 +43442,13 @@
                         } ]
                       },
                       "source" : { },
+                      "last_checkpoint_value" : {
+                        "oneOf" : [ {
+                          "type" : "string"
+                        }, {
+                          "type" : "null"
+                        } ]
+                      },
                       "target" : { },
                       "created_at" : { },
                       "creator_id" : {
@@ -43574,6 +43575,13 @@
                               "type" : "null"
                             } ]
                           },
+                          "checkpoint_hi_value" : {
+                            "oneOf" : [ {
+                              "type" : "string"
+                            }, {
+                              "type" : "null"
+                            } ]
+                          },
                           "is_active" : {
                             "oneOf" : [ {
                               "type" : "boolean"
@@ -43592,6 +43600,13 @@
                           "run_method" : {
                             "type" : "string"
                           },
+                          "checkpoint_lo_value" : {
+                            "oneOf" : [ {
+                              "type" : "string"
+                            }, {
+                              "type" : "null"
+                            } ]
+                          },
                           "status" : {
                             "type" : "string",
                             "enum" : [ "started", "succeeded", "failed", "timeout", "canceled", "canceling" ]
@@ -43599,6 +43614,14 @@
                           "transform_entity_id" : {
                             "oneOf" : [ {
                               "type" : "string"
+                            }, {
+                              "type" : "null"
+                            } ]
+                          },
+                          "checkpoint_filter_field_id" : {
+                            "oneOf" : [ {
+                              "type" : "integer",
+                              "minimum" : 1
                             }, {
                               "type" : "null"
                             } ]
@@ -43743,6 +43766,13 @@
                       } ]
                     },
                     "source" : { },
+                    "last_checkpoint_value" : {
+                      "oneOf" : [ {
+                        "type" : "string"
+                      }, {
+                        "type" : "null"
+                      } ]
+                    },
                     "target" : { },
                     "created_at" : { },
                     "creator_id" : {
@@ -45049,112 +45079,6 @@
         "tags" : [ "/api/transform-tag" ]
       }
     },
-    "/api/transform/extract-columns" : {
-      "post" : {
-        "operationId" : "post-api-transform-extract-columns",
-        "summary" : "POST /api/transform/extract-columns",
-        "description" : "Extract column names suitable for incremental transform checkpoint filtering.\n\n  This endpoint is specifically for populating the checkpoint column dropdown in\n  incremental transforms. It only returns columns with types supported for checkpoint\n  filtering: temporal (timestamp/tz) and numeric (int/float) types.\n\n  Text, boolean, and other unsupported column types are filtered out.\n\n  The query is compiled to native SQL using [[qp.compile/compile-with-inline-parameters]],\n  which handles parameterized queries with template tags. Then extracts column names\n  and types using PreparedStatement metadata.\n\n  Returns a map with a :columns key containing a vector of column names (strings).\n  If extraction fails, returns nil for :columns.",
-        "parameters" : [ ],
-        "responses" : {
-          "2XX" : {
-            "description" : "Successful response",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "type" : "object",
-                  "properties" : {
-                    "columns" : {
-                      "oneOf" : [ {
-                        "type" : "array",
-                        "items" : {
-                          "type" : "string"
-                        }
-                      }, {
-                        "type" : "null"
-                      } ]
-                    }
-                  },
-                  "required" : [ "columns" ]
-                }
-              }
-            }
-          },
-          "4XX" : {
-            "description" : "Client error response"
-          },
-          "5XX" : {
-            "description" : "Server error response"
-          }
-        },
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "type" : "object",
-                "properties" : {
-                  "query" : {
-                    "$ref" : "#/components/schemas/metabase.query-processor.schema.any-query"
-                  }
-                },
-                "required" : [ "query" ]
-              }
-            }
-          }
-        },
-        "tags" : [ "/api/transform" ]
-      }
-    },
-    "/api/transform/is-simple-query" : {
-      "post" : {
-        "operationId" : "post-api-transform-is-simple-query",
-        "summary" : "POST /api/transform/is-simple-query",
-        "description" : "Checks if a native SQL query string is simple enough for automatic checkpoint insertion",
-        "parameters" : [ ],
-        "responses" : {
-          "2XX" : {
-            "description" : "Successful response",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "type" : "object",
-                  "properties" : {
-                    "is_simple" : {
-                      "type" : "boolean"
-                    },
-                    "reason" : {
-                      "type" : "string"
-                    }
-                  },
-                  "required" : [ "is_simple" ]
-                }
-              }
-            }
-          },
-          "4XX" : {
-            "description" : "Client error response"
-          },
-          "5XX" : {
-            "description" : "Server error response"
-          }
-        },
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "type" : "object",
-                "properties" : {
-                  "query" : {
-                    "type" : "string"
-                  }
-                },
-                "required" : [ "query" ]
-              }
-            }
-          }
-        },
-        "tags" : [ "/api/transform" ]
-      }
-    },
     "/api/transform/run" : {
       "get" : {
         "operationId" : "get-api-transform-run",
@@ -45291,6 +45215,13 @@
                               "type" : "null"
                             } ]
                           },
+                          "checkpoint_hi_value" : {
+                            "oneOf" : [ {
+                              "type" : "string"
+                            }, {
+                              "type" : "null"
+                            } ]
+                          },
                           "is_active" : {
                             "oneOf" : [ {
                               "type" : "boolean"
@@ -45356,6 +45287,13 @@
                           "run_method" : {
                             "type" : "string"
                           },
+                          "checkpoint_lo_value" : {
+                            "oneOf" : [ {
+                              "type" : "string"
+                            }, {
+                              "type" : "null"
+                            } ]
+                          },
                           "status" : {
                             "type" : "string",
                             "enum" : [ "started", "succeeded", "failed", "timeout", "canceled", "canceling" ]
@@ -45363,6 +45301,14 @@
                           "transform_entity_id" : {
                             "oneOf" : [ {
                               "type" : "string"
+                            }, {
+                              "type" : "null"
+                            } ]
+                          },
+                          "checkpoint_filter_field_id" : {
+                            "oneOf" : [ {
+                              "type" : "integer",
+                              "minimum" : 1
                             }, {
                               "type" : "null"
                             } ]
@@ -45450,6 +45396,13 @@
                         "type" : "null"
                       } ]
                     },
+                    "checkpoint_hi_value" : {
+                      "oneOf" : [ {
+                        "type" : "string"
+                      }, {
+                        "type" : "null"
+                      } ]
+                    },
                     "is_active" : {
                       "oneOf" : [ {
                         "type" : "boolean"
@@ -45515,6 +45468,13 @@
                     "run_method" : {
                       "type" : "string"
                     },
+                    "checkpoint_lo_value" : {
+                      "oneOf" : [ {
+                        "type" : "string"
+                      }, {
+                        "type" : "null"
+                      } ]
+                    },
                     "status" : {
                       "type" : "string",
                       "enum" : [ "started", "succeeded", "failed", "timeout", "canceled", "canceling" ]
@@ -45522,6 +45482,14 @@
                     "transform_entity_id" : {
                       "oneOf" : [ {
                         "type" : "string"
+                      }, {
+                        "type" : "null"
+                      } ]
+                    },
+                    "checkpoint_filter_field_id" : {
+                      "oneOf" : [ {
+                        "type" : "integer",
+                        "minimum" : 1
                       }, {
                         "type" : "null"
                       } ]
@@ -45655,6 +45623,13 @@
                               "type" : "null"
                             } ]
                           },
+                          "checkpoint_hi_value" : {
+                            "oneOf" : [ {
+                              "type" : "string"
+                            }, {
+                              "type" : "null"
+                            } ]
+                          },
                           "is_active" : {
                             "oneOf" : [ {
                               "type" : "boolean"
@@ -45673,6 +45648,13 @@
                           "run_method" : {
                             "type" : "string"
                           },
+                          "checkpoint_lo_value" : {
+                            "oneOf" : [ {
+                              "type" : "string"
+                            }, {
+                              "type" : "null"
+                            } ]
+                          },
                           "status" : {
                             "type" : "string",
                             "enum" : [ "started", "succeeded", "failed", "timeout", "canceled", "canceling" ]
@@ -45680,6 +45662,14 @@
                           "transform_entity_id" : {
                             "oneOf" : [ {
                               "type" : "string"
+                            }, {
+                              "type" : "null"
+                            } ]
+                          },
+                          "checkpoint_filter_field_id" : {
+                            "oneOf" : [ {
+                              "type" : "integer",
+                              "minimum" : 1
                             }, {
                               "type" : "null"
                             } ]
@@ -45824,6 +45814,13 @@
                       } ]
                     },
                     "source" : { },
+                    "last_checkpoint_value" : {
+                      "oneOf" : [ {
+                        "type" : "string"
+                      }, {
+                        "type" : "null"
+                      } ]
+                    },
                     "target" : { },
                     "created_at" : { },
                     "creator_id" : {
@@ -45958,6 +45955,13 @@
                               "type" : "null"
                             } ]
                           },
+                          "checkpoint_hi_value" : {
+                            "oneOf" : [ {
+                              "type" : "string"
+                            }, {
+                              "type" : "null"
+                            } ]
+                          },
                           "is_active" : {
                             "oneOf" : [ {
                               "type" : "boolean"
@@ -45976,6 +45980,13 @@
                           "run_method" : {
                             "type" : "string"
                           },
+                          "checkpoint_lo_value" : {
+                            "oneOf" : [ {
+                              "type" : "string"
+                            }, {
+                              "type" : "null"
+                            } ]
+                          },
                           "status" : {
                             "type" : "string",
                             "enum" : [ "started", "succeeded", "failed", "timeout", "canceled", "canceling" ]
@@ -45983,6 +45994,14 @@
                           "transform_entity_id" : {
                             "oneOf" : [ {
                               "type" : "string"
+                            }, {
+                              "type" : "null"
+                            } ]
+                          },
+                          "checkpoint_filter_field_id" : {
+                            "oneOf" : [ {
+                              "type" : "integer",
+                              "minimum" : 1
                             }, {
                               "type" : "null"
                             } ]
@@ -46127,6 +46146,13 @@
                       } ]
                     },
                     "source" : { },
+                    "last_checkpoint_value" : {
+                      "oneOf" : [ {
+                        "type" : "string"
+                      }, {
+                        "type" : "null"
+                      } ]
+                    },
                     "target" : { },
                     "created_at" : { },
                     "creator_id" : {
@@ -46398,6 +46424,13 @@
                                 "type" : "null"
                               } ]
                             },
+                            "checkpoint_hi_value" : {
+                              "oneOf" : [ {
+                                "type" : "string"
+                              }, {
+                                "type" : "null"
+                              } ]
+                            },
                             "is_active" : {
                               "oneOf" : [ {
                                 "type" : "boolean"
@@ -46416,6 +46449,13 @@
                             "run_method" : {
                               "type" : "string"
                             },
+                            "checkpoint_lo_value" : {
+                              "oneOf" : [ {
+                                "type" : "string"
+                              }, {
+                                "type" : "null"
+                              } ]
+                            },
                             "status" : {
                               "type" : "string",
                               "enum" : [ "started", "succeeded", "failed", "timeout", "canceled", "canceling" ]
@@ -46423,6 +46463,14 @@
                             "transform_entity_id" : {
                               "oneOf" : [ {
                                 "type" : "string"
+                              }, {
+                                "type" : "null"
+                              } ]
+                            },
+                            "checkpoint_filter_field_id" : {
+                              "oneOf" : [ {
+                                "type" : "integer",
+                                "minimum" : 1
                               }, {
                                 "type" : "null"
                               } ]
@@ -46567,6 +46615,13 @@
                         } ]
                       },
                       "source" : { },
+                      "last_checkpoint_value" : {
+                        "oneOf" : [ {
+                          "type" : "string"
+                        }, {
+                          "type" : "null"
+                        } ]
+                      },
                       "target" : { },
                       "created_at" : { },
                       "creator_id" : {
@@ -46664,6 +46719,42 @@
                     },
                     "required" : [ "id", "workspace_merge_id", "commit_message", "workspace_id", "workspace_name", "merging_user_id", "created_at" ]
                   }
+                }
+              }
+            }
+          },
+          "4XX" : {
+            "description" : "Client error response"
+          },
+          "5XX" : {
+            "description" : "Server error response"
+          }
+        },
+        "tags" : [ "/api/transform" ]
+      }
+    },
+    "/api/transform/{id}/reset-checkpoint" : {
+      "post" : {
+        "operationId" : "post-api-transform-id-reset-checkpoint",
+        "summary" : "POST /api/transform/{id}/reset-checkpoint",
+        "description" : "Reset the checkpoint for an incremental transform.",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "minimum" : 1
+          },
+          "description" : "value must be an integer greater than zero."
+        } ],
+        "responses" : {
+          "2XX" : {
+            "description" : "Successful response",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "null"
                 }
               }
             }
