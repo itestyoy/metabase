@@ -43,7 +43,7 @@
   "Open an SSE connection to `url` and block until we receive the 'endpoint' event.
    Returns the absolute message endpoint URL.
    Throws if no endpoint is received within timeout-ms (default 10s)."
-  [^String sse-url & {:keys [timeout-ms] :or {timeout-ms 10000}}]
+  [^String sse-url & {:keys [timeout-ms auth-header] :or {timeout-ms 10000}}]
   (let [url-obj    (URL. sse-url)
         ^HttpURLConnection conn (.openConnection url-obj)
         _          (doto conn
@@ -52,6 +52,8 @@
                      (.setRequestProperty "Cache-Control" "no-cache")
                      (.setConnectTimeout 5000)
                      (.setReadTimeout (int timeout-ms)))
+        _          (when auth-header
+                     (.setRequestProperty conn "Authorization" auth-header))
         error      (atom nil)
         result     (atom nil)
         latch      (CountDownLatch. 1)
@@ -123,7 +125,7 @@
    - If GET returns 200 with text/event-stream → :sse
    - If GET returns 405 (Method Not Allowed) → :streamable-http
    - Other errors → throws"
-  [^String url]
+  [^String url & {:keys [auth-header]}]
   (let [url-obj (URL. url)
         ^HttpURLConnection conn (.openConnection url-obj)]
     (try
@@ -133,6 +135,8 @@
         (.setConnectTimeout 5000)
         (.setReadTimeout 5000)
         (.setInstanceFollowRedirects false))
+      (when auth-header
+        (.setRequestProperty conn "Authorization" auth-header))
       (let [status (.getResponseCode conn)]
         (cond
           (= 200 status) :sse
@@ -216,26 +220,30 @@
    - SSE: GET /sse → endpoint event → POST JSON-RPC to endpoint
    - Streamable HTTP: POST JSON-RPC directly to the URL
    Returns an McpServer record.
-   `auth-type` is :oauth2 or nil (no auth)."
-  [server-name server-url & {:keys [auth-type]}]
+   `auth-type` is :oauth2 or nil (no auth).
+   `auth-header` is an optional Authorization header value (e.g. \"Bearer ...\")."
+  [server-name server-url & {:keys [auth-type auth-header]}]
   (log/info "MCP: connecting to server" server-name "at" server-url "auth:" (or auth-type "none"))
-  (let [transport (detect-transport server-url)
+  (let [transport (detect-transport server-url :auth-header auth-header)
         _         (log/info "MCP: detected transport for" server-name "→" (name transport))
         message-endpoint (case transport
-                           :sse             (read-sse-endpoint server-url)
-                           :streamable-http server-url)]
+                           :sse             (read-sse-endpoint server-url :auth-header auth-header)
+                           :streamable-http server-url)
+        extra-headers (when auth-header {"Authorization" auth-header})]
     (log/info "MCP: message endpoint for" server-name "→" message-endpoint)
     ;; Initialize the MCP session
     (json-rpc-request message-endpoint "initialize"
                       {:protocolVersion "2024-11-05"
                        :capabilities    {}
                        :clientInfo      {:name    "metabase-ai-agent"
-                                         :version "1.0.0"}})
+                                         :version "1.0.0"}}
+                      extra-headers)
     ;; Send initialized notification (no response expected, but we send via POST)
     (try
       (http/post message-endpoint
-        {:headers          {"Content-Type" "application/json"
-                            "Accept"       "application/json, text/event-stream"}
+        {:headers          (merge {"Content-Type" "application/json"
+                                   "Accept"       "application/json, text/event-stream"}
+                                  extra-headers)
          :body             (json/generate-string {:jsonrpc "2.0"
                                                   :method  "notifications/initialized"})
          :throw-exceptions false
@@ -261,6 +269,12 @@
                 (.getMessage e))
       (placeholder-server server-name server-url :oauth2))))
 
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;; Server registry (cached connections)
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+(defonce server-registry (atom {}))
+
 (defn- bearer-headers
   "Build Authorization header map if user has a valid OAuth token for this server."
   [^McpServer server user-id]
@@ -268,19 +282,43 @@
     (when-let [token (mcp-oauth/get-access-token user-id (:name server))]
       {"Authorization" (str "Bearer " token)})))
 
+(defn- try-upgrade-placeholder!
+  "If server is a placeholder and user has a valid OAuth token,
+   try to connect for real and update the registry.
+   Returns the upgraded server or the original placeholder."
+  [^McpServer server user-id]
+  (if (and (not (:connected? server))
+           (= :oauth2 (:auth-type server))
+           user-id)
+    (if-let [token (mcp-oauth/get-access-token user-id (:name server))]
+      (try
+        (log/info "MCP: upgrading placeholder" (:name server) "— user has OAuth token")
+        (let [auth-header (str "Bearer " token)
+              upgraded    (connect-server (:name server) (:sse-url server)
+                                          :auth-type :oauth2
+                                          :auth-header auth-header)]
+          (swap! server-registry assoc (:name server) upgraded)
+          upgraded)
+        (catch Exception e
+          (log/warn "MCP: failed to upgrade placeholder" (:name server) (.getMessage e))
+          server))
+      server)
+    server))
+
 (defn list-tools
   "List available tools from a connected MCP server.
    Returns a seq of tool maps with :name, :description, :inputSchema.
    Pass `user-id` for OAuth2 servers to include Bearer token.
-   Returns empty list for placeholder (unconnected) servers."
+   For placeholder servers, tries to upgrade if user has a valid token."
   ([^McpServer server]
    (list-tools server nil))
   ([^McpServer server user-id]
-   (if-not (:connected? server)
-     []  ;; Placeholder server — no tools until authorized & connected
-     (let [headers (bearer-headers server user-id)
-           result  (json-rpc-request (:message-endpoint server) "tools/list" {} headers)]
-       (:tools result)))))
+   (let [server (if (:connected? server) server (try-upgrade-placeholder! server user-id))]
+     (if-not (:connected? server)
+       []
+       (let [headers (bearer-headers server user-id)
+             result  (json-rpc-request (:message-endpoint server) "tools/list" {} headers)]
+         (:tools result))))))
 
 (defn call-tool
   "Call a tool on a connected MCP server.
@@ -289,26 +327,21 @@
   ([^McpServer server tool-name arguments]
    (call-tool server tool-name arguments nil))
   ([^McpServer server tool-name arguments user-id]
-   (if-not (:connected? server)
-     (str "MCP server " (:name server) " requires OAuth2 authorization. Please authorize first.")
-     (let [headers (bearer-headers server user-id)
-           result  (json-rpc-request (:message-endpoint server) "tools/call"
-                                      {:name      tool-name
-                                       :arguments (or arguments {})}
-                                      headers)]
-       ;; MCP tool results have a `content` array of {type, text} blocks
-       (if-let [content (:content result)]
-         (->> content
-              (filter #(= "text" (:type %)))
-              (map :text)
-              (str/join "\n"))
-         (json/generate-string result))))))
-
-;;; ─────────────────────────────────────────────────────────────────────────────
-;;; Server registry (cached connections)
-;;; ─────────────────────────────────────────────────────────────────────────────
-
-(defonce server-registry (atom {}))
+   (let [server (if (:connected? server) server (try-upgrade-placeholder! server user-id))]
+     (if-not (:connected? server)
+       (str "MCP server " (:name server) " requires OAuth2 authorization. Please authorize first.")
+       (let [headers (bearer-headers server user-id)
+             result  (json-rpc-request (:message-endpoint server) "tools/call"
+                                        {:name      tool-name
+                                         :arguments (or arguments {})}
+                                        headers)]
+         ;; MCP tool results have a `content` array of {type, text} blocks
+         (if-let [content (:content result)]
+           (->> content
+                (filter #(= "text" (:type %)))
+                (map :text)
+                (str/join "\n"))
+           (json/generate-string result)))))))
 
 (defn- env-get
   "Read an environment variable."
@@ -352,6 +385,14 @@
   []
   (reset! server-registry {})
   (ensure-connected))
+
+(defn reconnect-server!
+  "Force reconnect a single MCP server by name.
+   Removes it from the registry so ensure-connected will re-create it."
+  [server-name]
+  (swap! server-registry dissoc server-name)
+  (ensure-connected)
+  (get @server-registry server-name))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Public API for integration with AI agent

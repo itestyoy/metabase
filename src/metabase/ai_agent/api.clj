@@ -999,7 +999,8 @@
 (api.macros/defendpoint :get "/mcp-oauth/callback"
   "OAuth2 callback endpoint. Receives authorization code, exchanges for tokens.
    Renders a minimal HTML page that closes the popup and notifies the opener."
-  [{:keys [code state error]} :- [:map
+  [_route-params
+   {:keys [code state error]} :- [:map
                                    [:code  {:optional true} [:maybe ms/NonBlankString]]
                                    [:state ms/NonBlankString]
                                    [:error {:optional true} [:maybe ms/NonBlankString]]]]
@@ -1022,6 +1023,8 @@
                      "</script><p>Authorization failed. You can close this window.</p></body></html>")}
       (try
         (let [result (ai.mcp-oauth/handle-callback! code state)]
+          ;; Force reconnect the server so it upgrades from placeholder
+          (try (ai.mcp/reconnect-server! (:server-name result)) (catch Exception _))
           {:status  200
            :headers {"Content-Type" "text/html"}
            :body    (str "<html><body><script>"
