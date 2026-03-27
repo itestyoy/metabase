@@ -107,7 +107,7 @@ export function AgentSaveLocationPicker({ value, onChange }: AgentSaveLocationPi
         opened={isOpen}
         onClose={() => setIsOpen(false)}
         closeOnItemClick={false}
-        position="bottom-start"
+        position="top-start"
         shadow="md"
         width={260}
       >
