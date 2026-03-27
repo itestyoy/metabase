@@ -769,7 +769,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                               onChange={handleAddContext}
                               models={["card", "dataset", "metric", "table", "document"]}
                               position="top-start"
-                              dropdownMt={12}
+                              dropdownMt={-12}
                             />
                           </>
                         ) : templatesOpen ? (
