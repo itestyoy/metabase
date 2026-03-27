@@ -34,6 +34,8 @@ export type MiniPickerProps = {
   className?: string;
   /** Margin-top of the dropdown. Defaults to "xl" to match the original spacing. */
   dropdownMt?: string | number;
+  /** Menu position. Defaults to "bottom-start". */
+  position?: "bottom-start" | "top-start" | "top-end" | "bottom-end";
 };
 
 export function MiniPicker({
@@ -53,6 +55,7 @@ export function MiniPicker({
   menuDropdownRef,
   className,
   dropdownMt = "xl",
+  position = "bottom-start",
 }: MiniPickerProps) {
   const { data: libraryCollection } = PLUGIN_LIBRARY.useGetLibraryCollection();
 
@@ -105,7 +108,7 @@ export function MiniPicker({
         closeOnItemClick={false}
         clickOutsideEvents={["mousedown", "touchstart"]}
         closeOnClickOutside={closeOnClickOutside}
-        position="bottom-start"
+        position={position}
         // menuItemTabIndex={-1}
         trapFocus={false}
       >

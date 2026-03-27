@@ -124,6 +124,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const [contexts, setContexts] = useState<AgentContextValue[]>([]);
   const [contextPickerOpen, setContextPickerOpen] = useState(false);
   const [dbPickerOpen, setDbPickerOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [dbList, setDbList] = useState<{ id: number; name: string }[]>([]);
   const [dbListLoaded, setDbListLoaded] = useState(false);
   const [safeMode, setSafeMode] = useState(false);
@@ -736,7 +737,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                       {/* Attach: entity, database, file, or template */}
                       <Box className={S.contextAnchorInline}>
                         {dbPickerOpen ? (
-                          <Menu opened onClose={() => setDbPickerOpen(false)} position="bottom-start" shadow="md" width={220}>
+                          <Menu opened onClose={() => setDbPickerOpen(false)} position="top-start" shadow="md" width={220}>
                             <Menu.Target>
                               <Tooltip label={t`Attach`} position="top" withArrow>
                                 <ActionIcon variant="transparent" size="xs" onClick={() => setDbPickerOpen(false)} className={S.addContextBtn}>
@@ -767,11 +768,63 @@ export function AgentModal({ onClose }: AgentModalProps) {
                               onClose={() => setContextPickerOpen(false)}
                               onChange={handleAddContext}
                               models={["card", "dataset", "metric", "table", "document"]}
+                              position="top-start"
                               dropdownMt={4}
                             />
                           </>
+                        ) : templatesOpen ? (
+                          <Menu opened onClose={() => setTemplatesOpen(false)} position="top-start" shadow="md" width={260}>
+                            <Menu.Target>
+                              <Tooltip label={t`Attach`} position="top" withArrow>
+                                <ActionIcon variant="transparent" size="xs" onClick={() => setTemplatesOpen(false)} className={S.addContextBtn}>
+                                  <Icon name="add" size={12} color="var(--mb-color-text-tertiary)" />
+                                </ActionIcon>
+                              </Tooltip>
+                            </Menu.Target>
+                            <Menu.Dropdown>
+                              <Menu.Label>{t`Templates`}</Menu.Label>
+                              {(tipsData?.templates ?? []).map((tip) => {
+                                const tipLabel = tip.label[lang] ?? tip.label.en ?? "";
+                                const tipTemplate = tip.template[lang] ?? tip.template.en ?? "";
+                                return (
+                                  <Menu.Item
+                                    key={tipLabel}
+                                    leftSection={<Icon name={tip.icon as any} size={14} color="var(--mb-color-brand)" />}
+                                    onClick={() => {
+                                      setTemplatesOpen(false);
+                                      composerRef.current?.focus();
+                                      document.execCommand("insertText", false, tipTemplate);
+                                      setTimeout(() => {
+                                        const el = (composerRef.current as unknown as { getText?: () => string })?.getText?.() ?? "";
+                                        const match = el.match(/\{(\w+)\}/);
+                                        if (match) {
+                                          const sel = window.getSelection();
+                                          if (sel && sel.rangeCount > 0) {
+                                            const range = sel.getRangeAt(0);
+                                            const node = range.startContainer;
+                                            if (node.nodeType === Node.TEXT_NODE) {
+                                              const text = node.textContent ?? "";
+                                              const idx = text.indexOf(match[0]);
+                                              if (idx >= 0) {
+                                                range.setStart(node, idx);
+                                                range.setEnd(node, idx + match[0].length);
+                                                sel.removeAllRanges();
+                                                sel.addRange(range);
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }, 50);
+                                    }}
+                                  >
+                                    <Text size="xs">{tipLabel}</Text>
+                                  </Menu.Item>
+                                );
+                              })}
+                            </Menu.Dropdown>
+                          </Menu>
                         ) : (
-                          <Menu position="bottom-start" shadow="md" width={200}>
+                          <Menu position="top-start" shadow="md" width={200}>
                             <Menu.Target>
                               <Tooltip label={t`Attach`} position="top" withArrow>
                                 <ActionIcon variant="transparent" size="xs" className={S.addContextBtn}>
@@ -792,44 +845,9 @@ export function AgentModal({ onClose }: AgentModalProps) {
                               {(tipsData?.templates ?? []).length > 0 && (
                                 <>
                                   <Menu.Divider />
-                                  <Menu.Label>{t`Templates`}</Menu.Label>
-                                  {(tipsData?.templates ?? []).map((tip) => {
-                                    const tipLabel = tip.label[lang] ?? tip.label.en ?? "";
-                                    const tipTemplate = tip.template[lang] ?? tip.template.en ?? "";
-                                    return (
-                                      <Menu.Item
-                                        key={tipLabel}
-                                        leftSection={<Icon name={tip.icon as any} size={14} color="var(--mb-color-brand)" />}
-                                        onClick={() => {
-                                          composerRef.current?.focus();
-                                          document.execCommand("insertText", false, tipTemplate);
-                                          setTimeout(() => {
-                                            const el = (composerRef.current as unknown as { getText?: () => string })?.getText?.() ?? "";
-                                            const match = el.match(/\{(\w+)\}/);
-                                            if (match) {
-                                              const sel = window.getSelection();
-                                              if (sel && sel.rangeCount > 0) {
-                                                const range = sel.getRangeAt(0);
-                                                const node = range.startContainer;
-                                                if (node.nodeType === Node.TEXT_NODE) {
-                                                  const text = node.textContent ?? "";
-                                                  const idx = text.indexOf(match[0]);
-                                                  if (idx >= 0) {
-                                                    range.setStart(node, idx);
-                                                    range.setEnd(node, idx + match[0].length);
-                                                    sel.removeAllRanges();
-                                                    sel.addRange(range);
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          }, 50);
-                                        }}
-                                      >
-                                        <Text size="xs">{tipLabel}</Text>
-                                      </Menu.Item>
-                                    );
-                                  })}
+                                  <Menu.Item leftSection={<Icon name="list" size={14} />} onClick={() => setTemplatesOpen(true)}>
+                                    <Text size="xs">{t`Templates`}</Text>
+                                  </Menu.Item>
                                 </>
                               )}
                             </Menu.Dropdown>
