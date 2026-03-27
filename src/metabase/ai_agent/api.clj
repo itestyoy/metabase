@@ -315,13 +315,12 @@
   #{"create_question" "create_dashboard" "create_notebook_question" "create_document"})
 
 (defn- maybe-inject-collection-id
-  "If a tool creates an artifact and no explicit collection_id was given,
-   lazily ensure the chat sub-collection exists and inject its ID.
-   If the AI already specified a collection_id, respect that choice."
+  "If a tool creates an artifact, lazily ensure the chat sub-collection
+   exists and ALWAYS inject its ID — overriding whatever the AI chose.
+   This ensures all items land in the correct save location."
   [tool-name arguments ensure-chat-coll!]
   (if (and ensure-chat-coll!
-           (artifact-tool-names tool-name)
-           (nil? (get arguments "collection_id")))
+           (artifact-tool-names tool-name))
     (if-let [coll-id (ensure-chat-coll!)]
       (assoc arguments "collection_id" coll-id)
       arguments)

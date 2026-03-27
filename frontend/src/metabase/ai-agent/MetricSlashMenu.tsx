@@ -23,7 +23,8 @@ interface MetricSlashMenuProps {
   onLoaded: (metrics: MetricItem[]) => void;
   /** Called when user clicks a metric item */
   onSelect: (metric: MetricItem) => void;
-  datasourceId?: number | null;
+  databaseId?: number | null;
+  tableId?: number | null;
 }
 
 export function MetricSlashMenu({
@@ -32,21 +33,25 @@ export function MetricSlashMenu({
   anchorRef,
   onLoaded,
   onSelect,
-  datasourceId,
+  databaseId,
+  tableId,
 }: MetricSlashMenuProps) {
   const [metrics, setMetrics] = useState<MetricItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Fetch metrics when query changes
+  // Fetch metrics when query or context changes
   useEffect(() => {
     setIsLoading(true);
     const params = new URLSearchParams({ models: "metric", limit: "50" });
     if (query) {
       params.set("q", query);
     }
-    if (datasourceId) {
-      params.set("table_db_id", String(datasourceId));
+    if (databaseId) {
+      params.set("table_db_id", String(databaseId));
+    }
+    if (tableId) {
+      params.set("table_id", String(tableId));
     }
     fetch(`/api/search?${params}`, { headers: { "Content-Type": "application/json" } })
       .then(r => r.json())
@@ -68,7 +73,7 @@ export function MetricSlashMenu({
       })
       .finally(() => setIsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, datasourceId]);
+  }, [query, databaseId, tableId]);
 
   // Scroll selected item into view
   useEffect(() => {

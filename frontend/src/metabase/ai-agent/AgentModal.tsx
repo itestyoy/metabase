@@ -269,11 +269,39 @@ export function AgentModal({ onClose }: AgentModalProps) {
   }, [clearMessages]);
 
   // Auto-populate context from current page; re-runs on every SPA navigation.
+  // The auto-detected context is always the FIRST item. User-added contexts follow.
   const pageContext = usePageContext();
+  const prevPageContextRef = useRef<AgentContextValue | null>(null);
   useEffect(() => {
-    if (pageContext && contexts.length === 0) {
-      setContexts([pageContext]);
+    if (!pageContext) {
+      // Navigated to a page without context — remove previous auto-context if present
+      if (prevPageContextRef.current) {
+        const prev = prevPageContextRef.current;
+        setContexts(cs => cs.filter(c => !(c.model === prev.model && c.id === prev.id)));
+        prevPageContextRef.current = null;
+      }
+      return;
     }
+    // Same page context as before — no change
+    if (prevPageContextRef.current
+        && prevPageContextRef.current.model === pageContext.model
+        && prevPageContextRef.current.id === pageContext.id) {
+      return;
+    }
+    setContexts(cs => {
+      // Remove previous auto-detected context
+      const prev = prevPageContextRef.current;
+      const filtered = prev
+        ? cs.filter(c => !(c.model === prev.model && c.id === prev.id))
+        : cs;
+      // Don't add if user already added this exact context manually
+      if (filtered.some(c => c.model === pageContext.model && c.id === pageContext.id)) {
+        return filtered;
+      }
+      // Insert auto-context at the beginning
+      return [pageContext, ...filtered];
+    });
+    prevPageContextRef.current = pageContext;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageContext]);
 
@@ -825,7 +853,8 @@ export function AgentModal({ onClose }: AgentModalProps) {
                         anchorRef={composerDivRef}
                         onLoaded={handleSlashMetricsLoaded}
                         onSelect={handleMetricSelect}
-                        datasourceId={contexts.find(c => c.model === "database" || c.model === "table")?.id}
+                        databaseId={contexts.find(c => c.model === "database")?.id ?? contexts.find(c => c.model === "table")?.db_id}
+                        tableId={contexts.find(c => c.model === "table")?.id}
                       />
                     )}
                     <div className={S.composerFooter}>
