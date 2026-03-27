@@ -390,6 +390,7 @@
 (defmethod columns-for-model "card"
   [_]
   (conj default-columns :collection_id :archived_directly :collection_position :dataset_query :display :creator_id
+        :table_id
         [:collection.name :collection_name]
         [:collection.type :collection_type]
         [:collection.location :collection_location]

@@ -41,60 +41,41 @@ export function MetricSlashMenu({
   const [isLoading, setIsLoading] = useState(true);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Fetch metrics with pagination — when filtering by table client-side,
-  // keep fetching pages until we have 50 filtered results or no more pages.
+  // Fetch metrics via search API with search_engine=in-place to guarantee table_id in results.
   useEffect(() => {
     setIsLoading(true);
-    let canceled = false;
-    const PAGE_SIZE = 50;
-    const TARGET = 50;
+    const params = new URLSearchParams({
+      models: "metric",
+      limit: "50",
+      search_engine: "in-place",
+    });
+    if (query) params.set("q", query);
+    if (databaseId) params.set("table_db_id", String(databaseId));
 
-    const fetchPages = async () => {
-      const collected: MetricItem[] = [];
-      let offset = 0;
-      let hasMore = true;
-
-      const hasTableFilter = tableIds.length > 0;
-      while (hasMore && (hasTableFilter ? collected.length < TARGET : offset === 0)) {
-        const params = new URLSearchParams({ models: "metric", limit: String(PAGE_SIZE), offset: String(offset) });
-        if (query) params.set("q", query);
-        if (databaseId) params.set("table_db_id", String(databaseId));
-
-        try {
-          const resp = await fetch(`/api/search?${params}`, { headers: { "Content-Type": "application/json" } });
-          const data = await resp.json();
-          const page: MetricItem[] = (data.data ?? data ?? []).map(
-            (m: Record<string, unknown>) => ({
-              id: m.id as number,
-              name: m.name as string,
-              description: m.description as string | null,
-              collection_name: (m.collection as Record<string, unknown>)?.name as string | null,
-              table_id: m.table_id as number | null,
-            }),
-          );
-
-          if (canceled) return;
-
-          const tableIdSet = new Set(tableIds);
-          const filtered = hasTableFilter ? page.filter(m => m.table_id != null && tableIdSet.has(m.table_id)) : page;
-          collected.push(...filtered);
-          hasMore = page.length === PAGE_SIZE;
-          offset += PAGE_SIZE;
-        } catch {
-          break;
-        }
-      }
-
-      if (!canceled) {
-        const items = collected.slice(0, TARGET);
+    fetch(`/api/search?${params}`, { headers: { "Content-Type": "application/json" } })
+      .then(r => r.json())
+      .then(data => {
+        const all: MetricItem[] = (data.data ?? data ?? []).map(
+          (m: Record<string, unknown>) => ({
+            id: m.id as number,
+            name: m.name as string,
+            description: m.description as string | null,
+            collection_name: (m.collection as Record<string, unknown>)?.name as string | null,
+            table_id: (m.table_id as number | null) ?? null,
+          }),
+        );
+        const tableIdSet = new Set(tableIds);
+        const items = tableIds.length > 0
+          ? all.filter(m => m.table_id != null && tableIdSet.has(m.table_id))
+          : all;
         setMetrics(items);
         onLoaded(items);
-        setIsLoading(false);
-      }
-    };
-
-    fetchPages();
-    return () => { canceled = true; };
+      })
+      .catch(() => {
+        setMetrics([]);
+        onLoaded([]);
+      })
+      .finally(() => setIsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, databaseId, tableIds.join(",")]);
 
