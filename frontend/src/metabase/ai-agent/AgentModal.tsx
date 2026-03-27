@@ -322,8 +322,9 @@ export function AgentModal({ onClose }: AgentModalProps) {
 
   const handleAddDatabase = useCallback((db: { id: number; name: string }) => {
     setContexts(prev => {
-      if (prev.some(c => c.model === "database" && c.id === db.id)) return prev;
-      return [...prev, { id: db.id, name: db.name, model: "database" }];
+      // Only one database allowed — replace existing
+      const withoutDb = prev.filter(c => c.model !== "database");
+      return [...withoutDb, { id: db.id, name: db.name, model: "database" }];
     });
     setDbPickerOpen(false);
   }, []);
@@ -872,7 +873,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                         onLoaded={handleSlashMetricsLoaded}
                         onSelect={handleMetricSelect}
                         databaseId={contexts.find(c => c.model === "database")?.id ?? contexts.find(c => c.model === "table")?.db_id}
-                        tableId={contexts.find(c => c.model === "table")?.id}
+                        tableIds={contexts.filter(c => c.model === "table").map(c => c.id)}
                       />
                     )}
                     <div className={S.composerFooter}>

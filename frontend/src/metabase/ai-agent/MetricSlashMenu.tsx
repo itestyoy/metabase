@@ -10,6 +10,7 @@ export interface MetricItem {
   name: string;
   description?: string | null;
   collection_name?: string | null;
+  table_id?: number | null;
 }
 
 interface MetricSlashMenuProps {
@@ -24,7 +25,7 @@ interface MetricSlashMenuProps {
   /** Called when user clicks a metric item */
   onSelect: (metric: MetricItem) => void;
   databaseId?: number | null;
-  tableId?: number | null;
+  tableIds?: number[];
 }
 
 export function MetricSlashMenu({
@@ -34,46 +35,68 @@ export function MetricSlashMenu({
   onLoaded,
   onSelect,
   databaseId,
-  tableId,
+  tableIds = [],
 }: MetricSlashMenuProps) {
   const [metrics, setMetrics] = useState<MetricItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Fetch metrics when query or context changes
+  // Fetch metrics with pagination — when filtering by table client-side,
+  // keep fetching pages until we have 50 filtered results or no more pages.
   useEffect(() => {
     setIsLoading(true);
-    const params = new URLSearchParams({ models: "metric", limit: "50" });
-    if (query) {
-      params.set("q", query);
-    }
-    if (databaseId) {
-      params.set("table_db_id", String(databaseId));
-    }
-    if (tableId) {
-      params.set("table_id", String(tableId));
-    }
-    fetch(`/api/search?${params}`, { headers: { "Content-Type": "application/json" } })
-      .then(r => r.json())
-      .then(data => {
-        const items: MetricItem[] = (data.data ?? data ?? []).map(
-          (m: Record<string, unknown>) => ({
-            id: m.id as number,
-            name: m.name as string,
-            description: m.description as string | null,
-            collection_name: (m.collection as Record<string, unknown>)?.name as string | null,
-          }),
-        );
+    let canceled = false;
+    const PAGE_SIZE = 50;
+    const TARGET = 50;
+
+    const fetchPages = async () => {
+      const collected: MetricItem[] = [];
+      let offset = 0;
+      let hasMore = true;
+
+      const hasTableFilter = tableIds.length > 0;
+      while (hasMore && (hasTableFilter ? collected.length < TARGET : offset === 0)) {
+        const params = new URLSearchParams({ models: "metric", limit: String(PAGE_SIZE), offset: String(offset) });
+        if (query) params.set("q", query);
+        if (databaseId) params.set("table_db_id", String(databaseId));
+
+        try {
+          const resp = await fetch(`/api/search?${params}`, { headers: { "Content-Type": "application/json" } });
+          const data = await resp.json();
+          const page: MetricItem[] = (data.data ?? data ?? []).map(
+            (m: Record<string, unknown>) => ({
+              id: m.id as number,
+              name: m.name as string,
+              description: m.description as string | null,
+              collection_name: (m.collection as Record<string, unknown>)?.name as string | null,
+              table_id: m.table_id as number | null,
+            }),
+          );
+
+          if (canceled) return;
+
+          const tableIdSet = new Set(tableIds);
+          const filtered = hasTableFilter ? page.filter(m => m.table_id != null && tableIdSet.has(m.table_id)) : page;
+          collected.push(...filtered);
+          hasMore = page.length === PAGE_SIZE;
+          offset += PAGE_SIZE;
+        } catch {
+          break;
+        }
+      }
+
+      if (!canceled) {
+        const items = collected.slice(0, TARGET);
         setMetrics(items);
         onLoaded(items);
-      })
-      .catch(() => {
-        setMetrics([]);
-        onLoaded([]);
-      })
-      .finally(() => setIsLoading(false));
+        setIsLoading(false);
+      }
+    };
+
+    fetchPages();
+    return () => { canceled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, databaseId, tableId]);
+  }, [query, databaseId, tableIds.join(",")]);
 
   // Scroll selected item into view
   useEffect(() => {
