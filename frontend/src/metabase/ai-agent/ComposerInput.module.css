@@ -25,14 +25,11 @@
   pointer-events: none;
 }
 
-/* Inline metric chip */
-.metricChip {
+/* Shared base for template chips (placeholder + resolved) */
+.templateChip {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  background: color-mix(in srgb, var(--mb-color-brand) 15%, transparent);
-  color: var(--mb-color-brand);
-  border: 1px solid color-mix(in srgb, var(--mb-color-brand) 30%, transparent);
   border-radius: 6px;
   padding: 2px 8px;
   margin: 0 2px;
@@ -40,19 +37,113 @@
   font-weight: 600;
   line-height: 1.4;
   vertical-align: baseline;
-  cursor: default;
+  cursor: pointer;
   user-select: none;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+/* Unfilled placeholder */
+.templatePlaceholder {
+  composes: templateChip;
+  background: color-mix(in srgb, var(--mb-color-text-tertiary) 12%, transparent);
+  color: var(--mb-color-text-secondary);
+  border: 1px dashed color-mix(in srgb, var(--mb-color-text-tertiary) 40%, transparent);
+}
+
+.templatePlaceholder:hover {
+  background: color-mix(in srgb, var(--mb-color-brand) 12%, transparent);
+  border-color: color-mix(in srgb, var(--mb-color-brand) 40%, transparent);
+  color: var(--mb-color-brand);
+}
+
+.templatePlaceholderIcon {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Filled / resolved placeholder */
+.resolvedPlaceholder {
+  composes: templateChip;
+  background: color-mix(in srgb, var(--mb-color-brand) 15%, transparent);
+  color: var(--mb-color-brand);
+  border: 1px solid color-mix(in srgb, var(--mb-color-brand) 30%, transparent);
+}
+
+.resolvedPlaceholder:hover {
+  background: color-mix(in srgb, var(--mb-color-brand) 22%, transparent);
+  border-color: color-mix(in srgb, var(--mb-color-brand) 50%, transparent);
+}
+
+/* ── Inline markdown rendered elements ────────────────────────────── */
+
+.mdBold,
+.mdItalic,
+.mdStrike,
+.mdCode {
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 0.1s;
+}
+
+.mdBold:hover,
+.mdItalic:hover,
+.mdStrike:hover,
+.mdCode:hover {
+  background: color-mix(in srgb, var(--mb-color-brand) 10%, transparent);
+}
+
+.mdCode {
+  background: color-mix(in srgb, var(--mb-color-text-tertiary) 12%, transparent);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.mdCode:hover {
+  background: color-mix(in srgb, var(--mb-color-text-tertiary) 20%, transparent);
+}
+
+/* ── Floating format toolbar ──────────────────────────────────────── */
+
+.floatingToolbar {
+  position: absolute;
+  z-index: 100;
+  display: flex;
+  gap: 1px;
+  padding: 2px;
+  background: var(--mb-color-background-primary);
+  border: 1px solid var(--mb-color-border);
+  border-radius: 6px;
+  box-shadow: 0 2px 12px var(--mb-color-shadow);
+  transform: translateX(-50%);
   white-space: nowrap;
 }
 
-.metricChipClose {
-  cursor: pointer;
-  opacity: 0.5;
+.fmtBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mb-color-text-primary);
   font-size: 13px;
-  font-weight: 400;
-  margin-left: 2px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
 }
 
-.metricChipClose:hover {
-  opacity: 1;
+.fmtBtn:hover {
+  background: var(--mb-color-background-hover);
+  color: var(--mb-color-brand);
+}
+
+.fmtBtn code {
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 600;
 }

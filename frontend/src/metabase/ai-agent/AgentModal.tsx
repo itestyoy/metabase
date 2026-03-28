@@ -7,7 +7,7 @@ import { ActionIcon, Anchor, Box, Flex, Icon, Menu, Stack, Text, Tooltip } from 
 // Textarea removed — replaced by ComposerInput (contentEditable)
 
 import { AgentChatMessages } from "./AgentChatMessages";
-import type { ComposerInputHandle } from "./ComposerInput";
+import type { ComposerInputHandle, TemplatePlaceholderType } from "./ComposerInput";
 import { ComposerInput } from "./ComposerInput";
 import type { MetricItem } from "./MetricSlashMenu";
 import { MetricSlashMenu } from "./MetricSlashMenu";
@@ -125,9 +125,19 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const [contextPickerOpen, setContextPickerOpen] = useState(false);
   const [dbPickerOpen, setDbPickerOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  // Template placeholder picker state
+  const [activePlaceholder, setActivePlaceholder] = useState<{
+    type: TemplatePlaceholderType;
+    id: string;
+  } | null>(null);
+  const [dateRangeMode, setDateRangeMode] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [inputText2, setInputText2] = useState("");
   const [dbList, setDbList] = useState<{ id: number; name: string }[]>([]);
   const [dbListLoaded, setDbListLoaded] = useState(false);
   const [safeMode, setSafeMode] = useState(false);
+  const [markdownMode, setMarkdownMode] = useState(false);
   const [saveLocation, setSaveLocation] = useState<SaveLocation | null>(null);
   const [dockMode, setDockMode] = useState<DockMode>(() => readDockState().mode);
   const [dockedWidth, setDockedWidth] = useState(() => readDockState().width);
@@ -331,7 +341,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
 
   // Fetch databases for the add-context menu
   useEffect(() => {
-    if (dbPickerOpen && !dbListLoaded) {
+    if ((dbPickerOpen || activePlaceholder?.type === "database") && !dbListLoaded) {
       api
         .GET("/api/database")({})
         .then((data: unknown) => {
@@ -341,7 +351,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
         .catch(() => setDbList([]))
         .finally(() => setDbListLoaded(true));
     }
-  }, [dbPickerOpen, dbListLoaded]);
+  }, [dbPickerOpen, dbListLoaded, activePlaceholder]);
 
   // Auto-focus textarea on mount
   useEffect(() => {
@@ -389,6 +399,51 @@ export function AgentModal({ onClose }: AgentModalProps) {
       composerRef.current?.insertMetric(metric);
     },
     [],
+  );
+
+  // ── Template placeholder handling ─────────────────────────────────────
+  const handleTemplatePlaceholderClick = useCallback(
+    (type: TemplatePlaceholderType, id: string) => {
+      setActivePlaceholder({ type, id });
+    },
+    [],
+  );
+
+  /** Map placeholder types to MiniPicker model names */
+  const PLACEHOLDER_TO_PICKER_MODEL: Record<string, string> = {
+    metric: "metric",
+    question: "card",
+    model: "dataset",
+    table: "table",
+    dashboard: "dashboard",
+    document: "document",
+    collection: "collection",
+  };
+
+  const handlePlaceholderPicked = useCallback(
+    (item: MiniPickerPickableItem) => {
+      if (!activePlaceholder) return;
+      composerRef.current?.replaceTemplatePlaceholder(
+        activePlaceholder.id,
+        item.name,
+        item.id as number,
+      );
+      setActivePlaceholder(null);
+    },
+    [activePlaceholder],
+  );
+
+  const handlePlaceholderDbPicked = useCallback(
+    (db: { id: number; name: string }) => {
+      if (!activePlaceholder) return;
+      composerRef.current?.replaceTemplatePlaceholder(
+        activePlaceholder.id,
+        db.name,
+        db.id,
+      );
+      setActivePlaceholder(null);
+    },
+    [activePlaceholder],
   );
 
   // ── File attachment ────────────────────────────────────────────────────
@@ -735,6 +790,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                           </ActionIcon>
                         </div>
                       )}
+                      <AgentMcpServers variant="chip" chipClassName={S.contextChipInline} />
                       {/* Attach: entity, database, file, or template */}
                       <Box className={S.contextAnchorInline}>
                         {dbPickerOpen ? (
@@ -794,28 +850,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                                     onClick={() => {
                                       setTemplatesOpen(false);
                                       composerRef.current?.focus();
-                                      document.execCommand("insertText", false, tipTemplate);
-                                      setTimeout(() => {
-                                        const el = (composerRef.current as unknown as { getText?: () => string })?.getText?.() ?? "";
-                                        const match = el.match(/\{(\w+)\}/);
-                                        if (match) {
-                                          const sel = window.getSelection();
-                                          if (sel && sel.rangeCount > 0) {
-                                            const range = sel.getRangeAt(0);
-                                            const node = range.startContainer;
-                                            if (node.nodeType === Node.TEXT_NODE) {
-                                              const text = node.textContent ?? "";
-                                              const idx = text.indexOf(match[0]);
-                                              if (idx >= 0) {
-                                                range.setStart(node, idx);
-                                                range.setEnd(node, idx + match[0].length);
-                                                sel.removeAllRanges();
-                                                sel.addRange(range);
-                                              }
-                                            }
-                                          }
-                                        }
-                                      }, 50);
+                                      composerRef.current?.insertTemplate(tipTemplate);
                                     }}
                                   >
                                     <Text size="xs">{tipLabel}</Text>
@@ -861,6 +896,8 @@ export function AgentModal({ onClose }: AgentModalProps) {
                       onChange={handleComposerChange}
                       onKeyDown={handleKeyDown}
                       onSlashQueryChange={handleSlashQueryChange}
+                      onTemplatePlaceholderClick={handleTemplatePlaceholderClick}
+                      markdownEnabled={markdownMode}
                       placeholder={t`Ask me anything about your data…`}
                       disabled={isLoading}
                       className={S.composerTextarea}
@@ -876,6 +913,164 @@ export function AgentModal({ onClose }: AgentModalProps) {
                         tableIds={contexts.filter(c => c.model === "table").map(c => c.id)}
                       />
                     )}
+                    {/* Template placeholder picker — entity types */}
+                    {activePlaceholder && activePlaceholder.type !== "database" && activePlaceholder.type !== "datetime" && activePlaceholder.type !== "input" && (
+                      <MiniPicker
+                        opened
+                        onClose={() => setActivePlaceholder(null)}
+                        onChange={handlePlaceholderPicked}
+                        models={[PLACEHOLDER_TO_PICKER_MODEL[activePlaceholder.type] ?? "card"]}
+                        position="top-start"
+                        dropdownMt={-11}
+                      />
+                    )}
+                    {/* Template placeholder picker — database */}
+                    {activePlaceholder?.type === "database" && (
+                      <Menu opened onClose={() => setActivePlaceholder(null)} position="top-start" shadow="md" width={220}>
+                        <Menu.Target>
+                          <span style={{ position: "absolute", bottom: 0, left: 0 }} />
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                          <Menu.Label>{t`Select database`}</Menu.Label>
+                          {dbList.map(db => (
+                            <Menu.Item key={db.id} onClick={() => handlePlaceholderDbPicked(db)}>
+                              <Text size="xs">{db.name}</Text>
+                            </Menu.Item>
+                          ))}
+                        </Menu.Dropdown>
+                      </Menu>
+                    )}
+                    {/* Template placeholder picker — datetime */}
+                    {activePlaceholder?.type === "datetime" && (
+                      <Menu opened onClose={() => { setActivePlaceholder(null); setDateRangeMode(false); }} position="top-start" shadow="md" width={220}>
+                        <Menu.Target>
+                          <span style={{ position: "absolute", bottom: 0, left: 0 }} />
+                        </Menu.Target>
+                        <Menu.Dropdown style={{ maxHeight: 320, overflowY: "auto" }}>
+                          {!dateRangeMode ? (
+                            <>
+                              <Menu.Label>{t`Relative`}</Menu.Label>
+                              {[
+                                { label: t`Today`, value: "today" },
+                                { label: t`Yesterday`, value: "yesterday" },
+                                { label: t`Last 7 days`, value: "last 7 days" },
+                                { label: t`Last 14 days`, value: "last 14 days" },
+                                { label: t`Last 30 days`, value: "last 30 days" },
+                                { label: t`Last 90 days`, value: "last 90 days" },
+                                { label: t`This week`, value: "this week" },
+                                { label: t`Last week`, value: "last week" },
+                                { label: t`This month`, value: "this month" },
+                                { label: t`Last month`, value: "last month" },
+                                { label: t`This quarter`, value: "this quarter" },
+                                { label: t`Last quarter`, value: "last quarter" },
+                                { label: t`This year`, value: "this year" },
+                                { label: t`Last year`, value: "last year" },
+                              ].map(opt => (
+                                <Menu.Item
+                                  key={opt.value}
+                                  onClick={() => {
+                                    composerRef.current?.replaceTemplatePlaceholder(activePlaceholder.id, opt.label);
+                                    setActivePlaceholder(null);
+                                  }}
+                                >
+                                  <Text size="xs">{opt.label}</Text>
+                                </Menu.Item>
+                              ))}
+                              <Menu.Divider />
+                              <Menu.Label>{t`Custom`}</Menu.Label>
+                              <Menu.Item onClick={() => { setDateRangeMode(true); setDateFrom(""); setDateTo(""); }}>
+                                <Text size="xs">{t`Date range…`}</Text>
+                              </Menu.Item>
+                            </>
+                          ) : (
+                            <Box p="xs">
+                              <Text size="xs" fw={600} mb={6}>{t`Date range`}</Text>
+                              <Flex direction="column" gap={6}>
+                                <input
+                                  type="date"
+                                  value={dateFrom}
+                                  onChange={(e) => setDateFrom(e.target.value)}
+                                  style={{ fontSize: 12, padding: "4px 6px", border: "1px solid var(--mb-color-border)", borderRadius: 4, width: "100%" }}
+                                />
+                                <input
+                                  type="date"
+                                  value={dateTo}
+                                  onChange={(e) => setDateTo(e.target.value)}
+                                  style={{ fontSize: 12, padding: "4px 6px", border: "1px solid var(--mb-color-border)", borderRadius: 4, width: "100%" }}
+                                />
+                                <Flex gap={6}>
+                                  <ActionIcon
+                                    variant="subtle"
+                                    size="sm"
+                                    onClick={() => setDateRangeMode(false)}
+                                  >
+                                    <Icon name="chevronleft" size={14} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    variant="filled"
+                                    color="brand"
+                                    size="sm"
+                                    disabled={!dateFrom || !dateTo}
+                                    onClick={() => {
+                                      composerRef.current?.replaceTemplatePlaceholder(activePlaceholder.id, `${dateFrom} — ${dateTo}`);
+                                      setActivePlaceholder(null);
+                                      setDateRangeMode(false);
+                                    }}
+                                    style={{ flex: 1 }}
+                                  >
+                                    <Text size="xs" c="white">{t`Apply`}</Text>
+                                  </ActionIcon>
+                                </Flex>
+                              </Flex>
+                            </Box>
+                          )}
+                        </Menu.Dropdown>
+                      </Menu>
+                    )}
+                    {/* Template placeholder picker — text input */}
+                    {activePlaceholder?.type === "input" && (
+                      <Menu opened onClose={() => { setActivePlaceholder(null); setInputText2(""); }} position="top-start" shadow="md" width={220}>
+                        <Menu.Target>
+                          <span style={{ position: "absolute", bottom: 0, left: 0 }} />
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                          <Box p="xs">
+                            <Text size="xs" fw={600} mb={6}>{t`Enter value`}</Text>
+                            <input
+                              type="text"
+                              autoFocus
+                              value={inputText2}
+                              onChange={(e) => setInputText2(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && inputText2.trim()) {
+                                  composerRef.current?.replaceTemplatePlaceholder(activePlaceholder.id, inputText2.trim());
+                                  setActivePlaceholder(null);
+                                  setInputText2("");
+                                }
+                                e.stopPropagation();
+                              }}
+                              placeholder={t`Type text…`}
+                              style={{ fontSize: 12, padding: "6px 8px", border: "1px solid var(--mb-color-border)", borderRadius: 4, width: "100%", outline: "none" }}
+                            />
+                            <Flex mt={6} justify="flex-end">
+                              <ActionIcon
+                                variant="filled"
+                                color="brand"
+                                size="sm"
+                                disabled={!inputText2.trim()}
+                                onClick={() => {
+                                  composerRef.current?.replaceTemplatePlaceholder(activePlaceholder.id, inputText2.trim());
+                                  setActivePlaceholder(null);
+                                  setInputText2("");
+                                }}
+                              >
+                                <Icon name="check" size={12} />
+                              </ActionIcon>
+                            </Flex>
+                          </Box>
+                        </Menu.Dropdown>
+                      </Menu>
+                    )}
                     <div className={S.composerFooter}>
                       <input
                         ref={fileInputRef}
@@ -884,47 +1079,50 @@ export function AgentModal({ onClose }: AgentModalProps) {
                         style={{ display: "none" }}
                         onChange={handleFileChange}
                       />
-                      <Flex gap={4} align="center" style={{ flex: 1, minWidth: 0 }}>
-                        <AgentMcpServers />
-                        <Text size="xs" c="text-tertiary" className={S.inputHint}>
-                          {t`Enter to send · Shift+Enter new line · / metrics`}
-                        </Text>
-                      </Flex>
+                      <Text size="xs" c="text-tertiary" className={S.inputHint} style={{ flex: 1, minWidth: 0 }}>
+                        {t`Enter — send · Shift+Enter — new line · / — metrics · {{ }} — template`}
+                      </Text>
                       <Flex gap={2} align="center">
-                        <Menu position="top-end" shadow="md" width={140}>
+                        {/* ⋮ settings menu */}
+                        <Menu position="top-end" shadow="md" width={200} closeOnItemClick={false}>
                           <Menu.Target>
-                            <Tooltip label={lang === "ru" ? "Русский" : "English"}>
-                              <ActionIcon variant="transparent" size="sm" aria-label={t`Language`}>
-                                <Text size="xs" fw={700} c="text-tertiary" lh={1}>{lang === "ru" ? "RU" : "EN"}</Text>
+                            <Tooltip label={t`Settings`}>
+                              <ActionIcon variant="transparent" size="sm" aria-label={t`Settings`}>
+                                <Icon name="gear" size={14} color="var(--mb-color-text-tertiary)" />
                               </ActionIcon>
                             </Tooltip>
                           </Menu.Target>
                           <Menu.Dropdown>
+                            <Menu.Label>{t`Language`}</Menu.Label>
                             <Menu.Item
                               onClick={() => setLang("ru")}
-                              style={lang === "ru" ? { background: "var(--mb-color-background-hover)" } : undefined}
+                              rightSection={lang === "ru" ? <Icon name="check" size={12} color="var(--mb-color-brand)" /> : null}
                             >
                               <Text size="xs">Русский</Text>
                             </Menu.Item>
                             <Menu.Item
                               onClick={() => setLang("en")}
-                              style={lang === "en" ? { background: "var(--mb-color-background-hover)" } : undefined}
+                              rightSection={lang === "en" ? <Icon name="check" size={12} color="var(--mb-color-brand)" /> : null}
                             >
                               <Text size="xs">English</Text>
                             </Menu.Item>
+                            <Menu.Divider />
+                            <Menu.Item
+                              onClick={() => setMarkdownMode(v => !v)}
+                              rightSection={markdownMode ? <Icon name="check" size={12} color="var(--mb-color-brand)" /> : null}
+                              leftSection={<Text size="xs" fw={700} c={markdownMode ? "brand" : "text-tertiary"}>MD</Text>}
+                            >
+                              <Text size="xs">{t`Markdown formatting`}</Text>
+                            </Menu.Item>
+                            <Menu.Item
+                              onClick={() => setSafeMode((v: boolean) => !v)}
+                              rightSection={safeMode ? <Icon name="check" size={12} color="var(--mb-color-success)" /> : null}
+                              leftSection={<Icon name="lock" size={14} color={safeMode ? "var(--mb-color-success)" : undefined} />}
+                            >
+                              <Text size="xs">{t`Safe mode`}</Text>
+                            </Menu.Item>
                           </Menu.Dropdown>
                         </Menu>
-                        <Tooltip label={safeMode ? t`Safe mode ON — write tools disabled` : t`Safe mode OFF — all tools enabled`}>
-                          <ActionIcon
-                            variant={safeMode ? "light" : "subtle"}
-                            color={safeMode ? "green" : "gray"}
-                            size="sm"
-                            onClick={() => setSafeMode((v: boolean) => !v)}
-                            aria-label={t`Toggle safe mode`}
-                          >
-                            <Icon name="lock" size={14} color={safeMode ? "var(--mb-color-success)" : undefined} />
-                          </ActionIcon>
-                        </Tooltip>
                         {isLoading ? (
                           <Tooltip label={t`Stop generating`}>
                             <ActionIcon

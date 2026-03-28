@@ -512,6 +512,7 @@
 
 /* Composer: unified container wrapping textarea + footer row */
 .composer {
+  position: relative;
   border: 1.5px solid var(--mb-color-border);
   border-radius: 10px;
   background: var(--mb-color-background-primary);

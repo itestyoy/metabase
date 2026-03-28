@@ -16,7 +16,13 @@ interface McpServer {
   authorized?: boolean;
 }
 
-export function AgentMcpServers() {
+interface AgentMcpServersProps {
+  /** "chip" renders as a context chip inline style */
+  variant?: "icon" | "chip";
+  chipClassName?: string;
+}
+
+export function AgentMcpServers({ variant = "icon", chipClassName }: AgentMcpServersProps = {}) {
   const [servers, setServers] = useState<McpServer[]>([]);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -76,17 +82,29 @@ export function AgentMcpServers() {
   return (
     <Menu opened={isOpen} onChange={setIsOpen} position="top-start" shadow="md" width={260}>
       <Menu.Target>
-        <Tooltip label={t`MCP`} position="top" withArrow>
-          <ActionIcon
-            variant="transparent"
-            size="sm"
-            onClick={() => setIsOpen(o => !o)}
-            aria-label={t`MCP`}
-            className={needsAttention ? S.mcpIconAttention : undefined}
-          >
-            <Icon name="bolt" size={14} color={needsAttention ? "var(--mb-color-success)" : "var(--mb-color-success)"} />
-          </ActionIcon>
-        </Tooltip>
+        {variant === "chip" ? (
+          <Tooltip label={t`MCP Servers`} position="top" withArrow openDelay={400}>
+            <div
+              className={chipClassName}
+              style={{ cursor: "pointer" }}
+              onClick={() => setIsOpen(o => !o)}
+            >
+              <Icon name="bolt" size={11} color={needsAttention ? "var(--mb-color-warning)" : undefined} />
+            </div>
+          </Tooltip>
+        ) : (
+          <Tooltip label={t`MCP`} position="top" withArrow>
+            <ActionIcon
+              variant="transparent"
+              size="sm"
+              onClick={() => setIsOpen(o => !o)}
+              aria-label={t`MCP`}
+              className={needsAttention ? S.mcpIconAttention : undefined}
+            >
+              <Icon name="bolt" size={14} color={needsAttention ? "var(--mb-color-success)" : "var(--mb-color-success)"} />
+            </ActionIcon>
+          </Tooltip>
+        )}
       </Menu.Target>
 
       <Menu.Dropdown>
