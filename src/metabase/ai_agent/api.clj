@@ -23,6 +23,15 @@
 (set! *warn-on-reflection* true)
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
+;;; MCP approval state
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+;; Pending MCP tool approvals. Keys are response-ids, values are promises.
+;; When an MCP approval request arrives, we emit an SSE event and park on a promise.
+;; The /mcp-approve endpoint delivers the promise, unblocking the tool loop.
+(defonce ^:private pending-approvals (atom {}))
+
+;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Access control
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
@@ -365,8 +374,42 @@
                           (throw (ex-info (str "OpenAI returned status: " (get response :status))
                                           {:status (get response :status)
                                            :error  (get response :error)})))]
-        (if (ai.openai/has-tool-calls? response)
+        (cond
+          ;; ── MCP approval request: pause and wait for user decision ────────
+          (ai.openai/has-mcp-approval-requests? response)
+          (let [approvals (ai.openai/extract-mcp-approval-requests response)
+                _         (log/info "MCP approval requested for" (map :name approvals))
+                p         (promise)]
+            ;; Store promise keyed by response-id so /mcp-approve can deliver it
+            (swap! pending-approvals assoc response-id p)
+            ;; Emit SSE event to frontend
+            (when emit!
+              (emit! "mcp_approval_request"
+                     {:response_id response-id
+                      :tools       (mapv (fn [{:keys [id name arguments server-label]}]
+                                          {:id           id
+                                           :name         name
+                                           :arguments    arguments
+                                           :server_label server-label})
+                                        approvals)}))
+            ;; Block until frontend responds (timeout 120s)
+            (let [decisions (deref p 120000 nil)]
+              (swap! pending-approvals dissoc response-id)
+              (if decisions
+                ;; Got decisions — send approvals back to OpenAI and continue loop
+                (recur {:previous-response-id response-id
+                        :input                (ai.openai/build-mcp-approval-input decisions)}
+                       (inc iterations)
+                       all-calls)
+                ;; Timeout — deny all and continue
+                (let [deny-all (mapv (fn [a] {:id (:id a) :approve false :reason "Timeout"}) approvals)]
+                  (recur {:previous-response-id response-id
+                          :input                (ai.openai/build-mcp-approval-input deny-all)}
+                         (inc iterations)
+                         all-calls)))))
+
           ;; ── Tool calls: execute each and loop back ─────────────────────────
+          (ai.openai/has-tool-calls? response)
           (let [tool-calls (ai.openai/extract-tool-calls response)
                 _          (log/debug "AI Agent executing tools" {:tools (map :name tool-calls)})
                 results    (mapv (fn [{:keys [call-id name arguments]}]
@@ -389,7 +432,9 @@
                     :tool-results         tool-results}
                    (inc iterations)
                    (into all-calls results)))
+
           ;; ── Text response: done ────────────────────────────────────────────
+          :else
           {:response-id response-id
            :content     (ai.openai/extract-text response)
            :tool-calls  all-calls})))))
@@ -1044,6 +1089,26 @@
   (api/check-403 (current-user-in-ai-group?))
   (ai.mcp-oauth/revoke-token! api/*current-user-id* server-name)
   {:success true :server_name server-name})
+
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;; MCP tool approval
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :post "/mcp-approve"
+  "Approve or deny pending MCP tool calls. Called by the frontend when the user
+   makes a decision on an `mcp_approval_request` SSE event.
+   Body: {:response_id \"…\" :decisions [{:id \"…\" :approve true/false}]}"
+  [:as {body :body}]
+  (api/check-403 (ai.settings/ai-agent-enabled))
+  (api/check-403 (current-user-in-ai-group?))
+  (let [response-id (get body :response_id)
+        decisions   (get body :decisions)
+        p           (get @pending-approvals response-id)]
+    (if p
+      (do (deliver p decisions)
+          {:success true})
+      {:success false :error "No pending approval for this response_id"})))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Admin Toolbar — query history

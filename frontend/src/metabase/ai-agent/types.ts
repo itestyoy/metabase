@@ -27,4 +27,9 @@ export interface ChatMessage {
   toolResult?: string;
   /** Attached file metadata (user messages only). */
   attachedFile?: { name: string; mimeType: string };
+  /** MCP tool approval request (tool messages only). */
+  mcpApproval?: {
+    responseId: string;
+    tools: { id: string; name: string; arguments: string; server_label: string }[];
+  };
 }

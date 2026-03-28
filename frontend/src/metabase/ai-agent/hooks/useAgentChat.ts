@@ -414,6 +414,28 @@ export function useAgentChat() {
                   ),
                 );
               }
+            } else if (evt.event === "mcp_approval_request") {
+              // MCP tool wants approval before executing
+              if (!loadingRemoved) {
+                setMessages(prev => prev.filter(m => m.id !== loadingId));
+                loadingRemoved = true;
+              }
+              const approvalData = parsed as { response_id: string; tools: { id: string; name: string; arguments: string; server_label: string }[] };
+              const msgId = makeId();
+              setMessages(prev => [
+                ...prev,
+                {
+                  id: msgId,
+                  role: "tool" as const,
+                  content: null,
+                  toolStatus: "running" as const,
+                  toolName: "mcp_approval",
+                  mcpApproval: {
+                    responseId: approvalData.response_id,
+                    tools: approvalData.tools,
+                  },
+                },
+              ]);
             } else if (evt.event === "done") {
               // Remove loading bubble if no tools ran
               if (!loadingRemoved) {

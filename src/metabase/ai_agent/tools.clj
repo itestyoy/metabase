@@ -1447,11 +1447,12 @@ use-case patterns (LTV, Retention, UA Performance, A/B Tests, Monetization)."
 
 (def ^:private subagent-system-prompt
   "You are a research sub-agent. Find information and return a CONCISE summary.
-You have access to Metabase tools (search, list, get details, guides).
+You have access to Metabase tools (search, list, get details, guides) and external MCP tools (e.g. Atlassian Confluence/Jira for business context).
 Rules:
 - Be concise — return just the key findings (IDs, names, values).
 - Do NOT call delegate_task (no recursive sub-agents).
 - Do NOT create/modify anything (read-only).
+- Use MCP tools proactively when the task involves business context, metric definitions, project details, or anything beyond raw Metabase data.
 - Max 15 tool calls then return what you have.
 - Follow the RESPONSE FORMAT instructions from the task.")
 
@@ -1466,9 +1467,19 @@ Rules:
     "run_mbql_query"})
 
 (defn- subagent-tool-definitions
-  "Tool definitions for sub-agent — read-only, no recursion, no validators."
-  []
-  (vec (remove #(subagent-excluded-tools (:name %)) tool-definitions)))
+  "Tool definitions for sub-agent — read-only built-in tools + MCP tools.
+   MCP tools are always included with require_approval=never (sub-agent has no UI
+   for approval, and allowed_tools whitelist already restricts to read-only)."
+  [user-id]
+  (let [built-in  (vec (remove #(subagent-excluded-tools (:name %)) tool-definitions))
+        mcp-tools (try
+                    (let [mcp-defs (mcp/mcp-tool-definitions user-id)]
+                      ;; Force require_approval to "never" for sub-agent (no SSE/UI)
+                      (mapv #(assoc % :require_approval "never") mcp-defs))
+                    (catch Exception _ nil))]
+    (if (seq mcp-tools)
+      (into built-in mcp-tools)
+      built-in)))
 
 (def ^:private subagent-response-schema
   "Structured output schema for sub-agent — plain text result."
@@ -1486,7 +1497,8 @@ Rules:
         openai-text    (requiring-resolve 'metabase.ai-agent.openai/extract-text)
         api-key        ((requiring-resolve 'metabase.ai-agent.settings/ai-agent-openai-api-key))
         model          (or ((requiring-resolve 'metabase.ai-agent.settings/ai-agent-openai-model)) "gpt-5.4")
-        tools          (subagent-tool-definitions)]
+        user-id        @(requiring-resolve 'metabase.api.common/*current-user-id*)
+        tools          (subagent-tool-definitions user-id)]
     (loop [opts       {:message      (str task "\n\nRESPONSE FORMAT: " response-format)
                        :text-format  {:type   "json_schema"
                                       :name   "subagent_response"

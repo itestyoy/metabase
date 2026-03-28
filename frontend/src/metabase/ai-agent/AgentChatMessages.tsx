@@ -13,6 +13,7 @@ import { getMetadata } from "metabase/selectors/metadata";
 import {
   ActionIcon,
   Box,
+  Button,
   Code,
   Flex,
   Group,
@@ -454,6 +455,52 @@ function formatToolName(toolName?: string): string {
 
 /* ── Single tool call row (used inside the group) ─────────────────────── */
 
+function McpApprovalRow({ message, onDecision }: { message: ChatMessage; onDecision?: (responseId: string, decisions: { id: string; approve: boolean }[]) => void }) {
+  const approval = message.mcpApproval;
+  const [decided, setDecided] = useState(false);
+  if (!approval) return null;
+
+  const handleApprove = () => {
+    setDecided(true);
+    onDecision?.(approval.responseId, approval.tools.map(t => ({ id: t.id, approve: true })));
+  };
+  const handleDeny = () => {
+    setDecided(true);
+    onDecision?.(approval.responseId, approval.tools.map(t => ({ id: t.id, approve: false })));
+  };
+
+  return (
+    <Box className={S.toolRow} p="xs">
+      <Flex align="center" gap={6} mb={6}>
+        <Icon name="lock" size={12} color="var(--mb-color-warning)" />
+        <Text size="xs" fw={600} c="text-secondary">{t`MCP tool requires approval`}</Text>
+      </Flex>
+      {approval.tools.map(tool => (
+        <Box key={tool.id} mb={4}>
+          <Text size="xs" fw={500} c="text-primary">{tool.server_label}: {tool.name}</Text>
+          {tool.arguments && (
+            <Code block style={{ fontSize: 11, maxHeight: 80, overflow: "auto", marginTop: 2 }}>
+              {tool.arguments}
+            </Code>
+          )}
+        </Box>
+      ))}
+      {!decided ? (
+        <Flex gap={6} mt={6}>
+          <Button size="xs" color="green" onClick={handleApprove} leftSection={<Icon name="check" size={12} />}>
+            {t`Approve`}
+          </Button>
+          <Button size="xs" color="red" variant="outline" onClick={handleDeny} leftSection={<Icon name="close" size={12} />}>
+            {t`Deny`}
+          </Button>
+        </Flex>
+      ) : (
+        <Text size="xs" c="text-tertiary" mt={4}>{t`Decision sent`}</Text>
+      )}
+    </Box>
+  );
+}
+
 function ToolCallRow({ message }: { message: ChatMessage }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const isRunning = message.toolStatus === "running";
@@ -503,7 +550,7 @@ function ToolCallRow({ message }: { message: ChatMessage }) {
 
 /* ── Grouped tool calls block ─────────────────────────────────────────── */
 
-function ToolCallGroup({ messages }: { messages: ChatMessage[] }) {
+function ToolCallGroup({ messages, onMcpApproval }: { messages: ChatMessage[]; onMcpApproval?: (responseId: string, decisions: { id: string; approve: boolean }[]) => void }) {
   const runningCount = messages.filter(m => m.toolStatus === "running").length;
   const errorCount = messages.filter(m => m.toolStatus === "error").length;
   const doneCount = messages.length - runningCount;
@@ -556,9 +603,11 @@ function ToolCallGroup({ messages }: { messages: ChatMessage[] }) {
       </Group>
       {showTools && (
         <Stack gap={0} className={S.toolGroupBody}>
-          {messages.map(msg => (
-            <ToolCallRow key={msg.id} message={msg} />
-          ))}
+          {messages.map(msg =>
+            msg.mcpApproval
+              ? <McpApprovalRow key={msg.id} message={msg} onDecision={onMcpApproval} />
+              : <ToolCallRow key={msg.id} message={msg} />,
+          )}
         </Stack>
       )}
     </Paper>
@@ -722,7 +771,7 @@ function MessageBubble({
         <Paper className={S.userBubble} radius="xl">
           {message.attachedFile && (
             <Flex align="center" gap={4} mb={message.content ? 6 : 0}
-              style={{ padding: "2px 4px", background: "var(--mb-color-background)", borderRadius: 6, border: "1px solid var(--mb-color-border)" }}>
+              style={{ padding: "2px 4px", background: "var(--mb-color-background-primary)", borderRadius: 6, border: "1px solid var(--mb-color-border)" }}>
               <Icon name="attachment" size={11} color="var(--mb-color-brand)" />
               <Text size="xs" c="brand" fw={500} style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {message.attachedFile.name}
@@ -775,6 +824,7 @@ interface AgentChatMessagesProps {
   onSelectPrompt?: (prompt: string) => void;
   onSaveAsQuestion?: (sql: string) => void;
   onRetry?: () => void;
+  onMcpApproval?: (responseId: string, decisions: { id: string; approve: boolean }[]) => void;
   examplePrompts?: string[];
 }
 
@@ -786,6 +836,7 @@ export function AgentChatMessages({
   onSelectPrompt,
   onSaveAsQuestion,
   onRetry,
+  onMcpApproval,
 }: AgentChatMessagesProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
@@ -860,7 +911,7 @@ export function AgentChatMessages({
                 i++;
               }
               elements.push(
-                <ToolCallGroup key={`tools-${toolGroup[0].id}`} messages={toolGroup} />,
+                <ToolCallGroup key={`tools-${toolGroup[0].id}`} messages={toolGroup} onMcpApproval={onMcpApproval} />,
               );
             } else {
               elements.push(

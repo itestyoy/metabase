@@ -406,6 +406,18 @@ export function AgentModal({ onClose }: AgentModalProps) {
     [],
   );
 
+  // ── MCP approval ─────────────────────────────────────────────────────
+  const handleMcpApproval = useCallback(
+    (responseId: string, decisions: { id: string; approve: boolean }[]) => {
+      fetch("/api/ai-agent/mcp-approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response_id: responseId, decisions }),
+      }).catch(() => {});
+    },
+    [],
+  );
+
   // ── Template placeholder handling ─────────────────────────────────────
   const handleTemplatePlaceholderClick = useCallback(
     (type: TemplatePlaceholderType, id: string, rect?: DOMRect) => {
@@ -754,6 +766,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                 onSelectPrompt={handleSelectPrompt}
                 onSaveAsQuestion={handleSaveAsQuestion}
                 onRetry={retryLastMessage}
+                onMcpApproval={handleMcpApproval}
                 examplePrompts={tipsData?.examples?.map(e => e[lang] ?? e.en ?? "") ?? undefined}
               />
 
@@ -924,8 +937,8 @@ export function AgentModal({ onClose }: AgentModalProps) {
                         opened
                         onClose={() => setActivePlaceholder(null)}
                         onChange={handlePlaceholderPicked}
-                        models={[PLACEHOLDER_TO_PICKER_MODEL[activePlaceholder.type] ?? "card"]}
-                        position="top"
+                        models={[PLACEHOLDER_TO_PICKER_MODEL[activePlaceholder.type] ?? "card"] as any}
+                        position="top-start"
                         dropdownMt={-4}
                       >
                         <span style={{ position: "fixed", top: activePlaceholder?.rect?.top ?? 0, left: (activePlaceholder?.rect?.left ?? 0) + ((activePlaceholder?.rect?.width ?? 0) / 2), width: 0, height: 0 }} />
@@ -955,7 +968,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                           bottom: `calc(100vh - ${activePlaceholder?.rect?.top ?? 0}px + 4px)`,
                           left: activePlaceholder?.rect?.left ?? 0,
                           zIndex: 300,
-                          background: "var(--mb-color-background)",
+                          background: "var(--mb-color-background-primary)",
                           border: "1px solid var(--mb-color-border)",
                           borderRadius: "var(--mantine-radius-md)",
                           boxShadow: "0 4px 20px rgba(0,0,0,0.15)",

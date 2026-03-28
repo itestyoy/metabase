@@ -11,7 +11,21 @@
   - MB_AI_MCP_SERVER_NAMES:  comma-separated, e.g. \"atlassian,stats\"
   - MB_AI_MCP_SERVER_<NAME>_URL: endpoint URL
   - MB_AI_MCP_SERVER_<NAME>_AUTH: \"oauth2\" for OAuth2 servers
-  - MB_AI_MCP_SERVER_<NAME>_MODE: \"native\" or \"proxy\" (default: native for oauth2, proxy otherwise)"
+  - MB_AI_MCP_SERVER_<NAME>_MODE: \"native\" or \"proxy\" (default: native for oauth2, proxy otherwise)
+  - MB_AI_MCP_SERVER_<NAME>_ALLOWED_TOOLS: comma-separated whitelist of tool names.
+    Only these tools will be visible to the model. If not set, all tools are available.
+  - MB_AI_MCP_SERVER_<NAME>_REQUIRE_APPROVAL: \"always\", \"never\", or \"auto\".
+    Default: \"never\".
+  - MB_AI_MCP_SERVER_<NAME>_APPROVAL_NEVER_TOOLS: comma-separated tool names that
+    execute WITHOUT approval (auto-approved). Used with REQUIRE_APPROVAL=auto or always.
+  - MB_AI_MCP_SERVER_<NAME>_APPROVAL_ALWAYS_TOOLS: comma-separated tool names that
+    ALWAYS require approval. Used with REQUIRE_APPROVAL=auto or never.
+
+    Examples:
+      _REQUIRE_APPROVAL=always                          → all tools need approval
+      _REQUIRE_APPROVAL=always + _APPROVAL_NEVER_TOOLS=search,get_page  → all except search,get_page
+      _REQUIRE_APPROVAL=never + _APPROVAL_ALWAYS_TOOLS=delete,create    → only delete,create need approval
+      _REQUIRE_APPROVAL=auto + both lists               → full control over each tool"
   (:require
    [cheshire.core :as json]
    [clj-http.client :as http]
@@ -35,18 +49,51 @@
   (when-let [names-str (env-get "MB_AI_MCP_SERVER_NAMES")]
     (let [names (map str/trim (str/split names-str #","))]
       (for [n names
-            :let [env-prefix (str "MB_AI_MCP_SERVER_" (str/upper-case (str/replace n #"-" "_")))
-                  url        (env-get (str env-prefix "_URL"))
-                  auth-str   (env-get (str env-prefix "_AUTH"))
-                  auth-type  (when (= "oauth2" auth-str) :oauth2)
-                  mode-str   (env-get (str env-prefix "_MODE"))
-                  mode       (cond
-                               (= "native" mode-str) :native
-                               (= "proxy" mode-str)  :proxy
-                               (= :oauth2 auth-type) :native  ;; default: oauth → native
-                               :else                  :proxy)] ;; default: no auth → proxy
+            :let [env-prefix    (str "MB_AI_MCP_SERVER_" (str/upper-case (str/replace n #"-" "_")))
+                  url           (env-get (str env-prefix "_URL"))
+                  auth-str      (env-get (str env-prefix "_AUTH"))
+                  auth-type     (when (= "oauth2" auth-str) :oauth2)
+                  mode-str      (env-get (str env-prefix "_MODE"))
+                  mode          (cond
+                                  (= "native" mode-str) :native
+                                  (= "proxy" mode-str)  :proxy
+                                  (= :oauth2 auth-type) :native
+                                  :else                  :proxy)
+                  allowed-str   (env-get (str env-prefix "_ALLOWED_TOOLS"))
+                  allowed-tools (when (some? allowed-str)
+                                  (mapv str/trim (str/split allowed-str #",")))
+                  approval-str       (env-get (str env-prefix "_REQUIRE_APPROVAL"))
+                  never-tools-str    (env-get (str env-prefix "_APPROVAL_NEVER_TOOLS"))
+                  always-tools-str   (env-get (str env-prefix "_APPROVAL_ALWAYS_TOOLS"))
+                  never-tools        (when (seq never-tools-str)
+                                       (mapv str/trim (str/split never-tools-str #",")))
+                  always-tools       (when (seq always-tools-str)
+                                       (mapv str/trim (str/split always-tools-str #",")))
+                  require-approval   (cond
+                                       ;; "never" — no approval needed (default)
+                                       ;; But if _APPROVAL_ALWAYS_TOOLS is set, those specific tools need approval
+                                       (or (nil? approval-str) (= "never" approval-str))
+                                       (if (seq always-tools)
+                                         {:always {:tool_names always-tools}}
+                                         "never")
+
+                                       ;; "always" — all tools need approval
+                                       ;; But if _APPROVAL_NEVER_TOOLS is set, those are auto-approved
+                                       (= "always" approval-str)
+                                       (if (seq never-tools)
+                                         {:never {:tool_names never-tools}}
+                                         "always")
+
+                                       ;; "auto" — build structure from both lists
+                                       (= "auto" approval-str)
+                                       (cond-> {}
+                                         (seq never-tools)  (assoc :never  {:tool_names never-tools})
+                                         (seq always-tools) (assoc :always {:tool_names always-tools})
+                                         (and (empty? never-tools) (empty? always-tools)) (constantly "never"))
+
+                                       :else "never")]
             :when (some? url)]
-        {:name n :url url :auth-type auth-type :mode mode}))))
+        {:name n :url url :auth-type auth-type :mode mode :allowed-tools allowed-tools :require-approval require-approval}))))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Native mode — OpenAI connects to MCP servers directly
@@ -61,24 +108,25 @@
   (let [configs (filter #(= :native (:mode %)) (parse-server-config))]
     (when (seq configs)
       (->> configs
-           (keep (fn [{:keys [name url auth-type]}]
-                   (if (= :oauth2 auth-type)
-                     ;; OAuth server — only include if user has a valid token
-                     (when-let [token (when user-id
-                                        (try (mcp-oauth/get-access-token user-id name)
-                                             (catch Exception _ nil)))]
-                       (log/info "MCP native:" name "— including with OAuth token")
-                       {:type             "mcp"
-                        :server_label     name
-                        :server_url       url
-                        :require_approval "never"
-                        :authorization    token})
-                     ;; No auth — always include
-                     (do (log/info "MCP native:" name "— including (no auth)")
-                         {:type             "mcp"
-                          :server_label     name
-                          :server_url       url
-                          :require_approval "never"}))))
+           (keep (fn [{:keys [name url auth-type allowed-tools require-approval]}]
+                   (let [base (cond-> {:type             "mcp"
+                                       :server_label     name
+                                       :server_url       url
+                                       :require_approval (or require-approval "never")}
+                                ;; Whitelist specific tools if configured
+                                (seq allowed-tools) (assoc :allowed_tools allowed-tools))]
+                     (if (= :oauth2 auth-type)
+                       ;; OAuth server — only include if user has a valid token
+                       (when-let [token (when user-id
+                                          (try (mcp-oauth/get-access-token user-id name)
+                                               (catch Exception _ nil)))]
+                         (log/info "MCP native:" name "— including with OAuth token"
+                                   (when (seq allowed-tools) (str ", allowed_tools: " allowed-tools)))
+                         (assoc base :authorization token))
+                       ;; No auth — always include
+                       (do (log/info "MCP native:" name "— including (no auth)"
+                                     (when (seq allowed-tools) (str ", allowed_tools: " allowed-tools)))
+                           base)))))
            vec))))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
@@ -208,29 +256,38 @@
 
 (defn- proxy-tool-definitions
   "Return `{:type \"function\"}` tool entries from all proxy servers.
-   Each tool name is prefixed: server__tool."
+   Each tool name is prefixed: server__tool.
+   Tools are filtered by allowed-tools whitelist from server config."
   []
   (ensure-proxy-connected)
-  (when (seq @proxy-registry)
-    (->> @proxy-registry
-         vals
-         (mapcat (fn [server]
-                   (try
-                     (let [tools (proxy-list-tools server)]
-                       (log/info "MCP proxy:" (:name server) "→" (count tools) "tools")
-                       (map (fn [tool]
-                              {:type        "function"
-                               :name        (str (:name server) "__" (:name tool))
-                               :description (str "[" (:name server) "] "
-                                                 (or (:description tool) ""))
-                               :parameters  (or (:inputSchema tool)
-                                                {:type "object" :properties {} :required []})})
-                            tools))
-                     (catch Exception e
-                       (log/warn "MCP proxy: list-tools failed for" (:name server) (.getMessage e))
-                       nil))))
-         (remove nil?)
-         vec)))
+  (let [configs     (parse-server-config)
+        allowed-map (into {} (for [c configs :when (seq (:allowed-tools c))]
+                               [(:name c) (set (:allowed-tools c))]))]
+    (when (seq @proxy-registry)
+      (->> @proxy-registry
+           vals
+           (mapcat (fn [server]
+                     (try
+                       (let [tools         (proxy-list-tools server)
+                             allowed-set   (get allowed-map (:name server))
+                             filtered      (if allowed-set
+                                             (filter #(contains? allowed-set (:name %)) tools)
+                                             tools)]
+                         (log/info "MCP proxy:" (:name server) "→" (count filtered) "/" (count tools) "tools"
+                                   (when allowed-set (str "(whitelist: " allowed-set ")")))
+                         (map (fn [tool]
+                                {:type        "function"
+                                 :name        (str (:name server) "__" (:name tool))
+                                 :description (str "[" (:name server) "] "
+                                                   (or (:description tool) ""))
+                                 :parameters  (or (:inputSchema tool)
+                                                  {:type "object" :properties {} :required []})})
+                              filtered))
+                       (catch Exception e
+                         (log/warn "MCP proxy: list-tools failed for" (:name server) (.getMessage e))
+                         nil))))
+           (remove nil?)
+           vec))))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
 ;;; Public API

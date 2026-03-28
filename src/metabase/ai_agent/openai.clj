@@ -49,15 +49,19 @@
 
   - Tool result turn: array of function_call_output items (one per tool result).
   - User message turn: array with a single user message item (optionally with a file attachment)."
-  [{:keys [message tool-results file]}]
-  (if (seq tool-results)
+  [{:keys [message tool-results file input]}]
+  (cond
+    ;; Raw input items (e.g. mcp_approval) — pass through as-is
+    (seq input) input
     ;; Submitting tool outputs — field is `call_id` (not `tool_call_id`)
+    (seq tool-results)
     (mapv (fn [{:keys [call-id output]}]
             {:type    "function_call_output"
              :call_id call-id
              :output  (str output)})
           tool-results)
     ;; Regular user turn — string content when no file, array when file attached
+    :else
     [{:role    "user"
       :content (if file
                  ;; input_file first (per OpenAI docs), then input_text.
@@ -281,7 +285,38 @@
   [response]
   (boolean (seq (extract-tool-calls response))))
 
-(defn failed?
-  "True when the response status indicates an error."
+(defn extract-mcp-approval-requests
+  "Return MCP tool approval requests from a response.
+   When `require_approval` is set, OpenAI returns `mcp_approval_request` items
+   instead of executing the tool. We must approve/deny each before continuing.
+   Returns seq of {:id \"…\" :name \"…\" :arguments \"…\" :server-label \"…\"}"
   [response]
-  (contains? #{"failed" "cancelled" "incomplete"} (get response :status)))
+  (->> (get response :output [])
+       (filter #(= "mcp_approval_request" (get % :type)))
+       (map (fn [item]
+              {:id           (get item :id)
+               :name         (get item :name)
+               :arguments    (get item :arguments)
+               :server-label (get item :server_label)}))))
+
+(defn has-mcp-approval-requests?
+  "True when the response has pending MCP approval requests."
+  [response]
+  (boolean (seq (extract-mcp-approval-requests response))))
+
+(defn build-mcp-approval-input
+  "Build input items to approve or deny MCP tool calls.
+   `decisions` is a seq of {:id \"…\" :approve boolean :reason \"…\" (optional)}"
+  [decisions]
+  (mapv (fn [{:keys [id approve reason]}]
+          (cond-> {:type    "mcp_approval"
+                   :id      id
+                   :approve (boolean approve)}
+            reason (assoc :reason reason)))
+        decisions))
+
+(defn failed?
+  "True when the response status indicates an error (but not an approval request)."
+  [response]
+  (and (contains? #{"failed" "cancelled"} (get response :status))
+       (not (has-mcp-approval-requests? response))))

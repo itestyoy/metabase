@@ -475,7 +475,7 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
             editor={editor}
             disallowedNodes={["templatePlaceholder", "resolvedPlaceholder"]}
             allowedFormatting={ALLOWED_FORMATTING}
-            options={{ placement: "top" }}
+            options={{ placement: "top-start" }}
           />
         )}
       </div>
