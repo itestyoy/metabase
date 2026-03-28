@@ -17,12 +17,11 @@ interface McpServer {
 }
 
 interface AgentMcpServersProps {
-  /** "chip" renders as a context chip inline style */
-  variant?: "icon" | "chip";
-  chipClassName?: string;
+  /** "items" renders only Menu.Label + Menu.Items for embedding in a parent Menu */
+  variant?: "icon" | "items";
 }
 
-export function AgentMcpServers({ variant = "icon", chipClassName }: AgentMcpServersProps = {}) {
+export function AgentMcpServers({ variant = "icon" }: AgentMcpServersProps = {}) {
   const [servers, setServers] = useState<McpServer[]>([]);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -76,43 +75,16 @@ export function AgentMcpServers({ variant = "icon", chipClassName }: AgentMcpSer
     return null;
   }
 
-  const authorizedCount = servers.filter(s => !s.auth_type || s.authorized).length;
   const needsAttention = servers.some(s => s.auth_type === "oauth2" && !s.authorized);
 
-  return (
-    <Menu opened={isOpen} onChange={setIsOpen} position="top-start" shadow="md" width={260}>
-      <Menu.Target>
-        {variant === "chip" ? (
-          <Tooltip label={t`MCP Servers`} position="top" withArrow openDelay={400}>
-            <div
-              className={chipClassName}
-              style={{ cursor: "pointer" }}
-              onClick={() => setIsOpen(o => !o)}
-            >
-              <Icon name="bolt" size={11} color={needsAttention ? "var(--mb-color-warning)" : undefined} />
-            </div>
-          </Tooltip>
-        ) : (
-          <Tooltip label={t`MCP`} position="top" withArrow>
-            <ActionIcon
-              variant="transparent"
-              size="sm"
-              onClick={() => setIsOpen(o => !o)}
-              aria-label={t`MCP`}
-              className={needsAttention ? S.mcpIconAttention : undefined}
-            >
-              <Icon name="bolt" size={14} color={needsAttention ? "var(--mb-color-success)" : "var(--mb-color-success)"} />
-            </ActionIcon>
-          </Tooltip>
-        )}
-      </Menu.Target>
-
-      <Menu.Dropdown>
+  // ── "items" variant: just Menu.Label + Menu.Items for parent Menu ──
+  if (variant === "items") {
+    return (
+      <>
         <Menu.Label>{t`MCP Servers`}</Menu.Label>
         {servers.map(server => {
           const isOAuth = server.auth_type === "oauth2";
           const authorized = !isOAuth || server.authorized;
-
           return (
             <Menu.Item
               key={server.name}
@@ -139,9 +111,65 @@ export function AgentMcpServers({ variant = "icon", chipClassName }: AgentMcpSer
               <div>
                 <Text size="xs" fw={500}>{capitalize(server.name)}</Text>
                 <Text size="xs" c={authorized ? "text-tertiary" : "warning"}>
-                  {authorized
-                    ? t`Connected`
-                    : t`Click to authorize`}
+                  {authorized ? t`Connected` : t`Click to authorize`}
+                </Text>
+              </div>
+            </Menu.Item>
+          );
+        })}
+      </>
+    );
+  }
+
+  // ── "icon" variant: standalone Menu with icon trigger ──
+  return (
+    <Menu opened={isOpen} onChange={setIsOpen} position="top-start" shadow="md" width={260}>
+      <Menu.Target>
+        <Tooltip label={t`MCP`} position="top" withArrow>
+          <ActionIcon
+            variant="transparent"
+            size="sm"
+            onClick={() => setIsOpen(o => !o)}
+            aria-label={t`MCP`}
+            className={needsAttention ? S.mcpIconAttention : undefined}
+          >
+            <Icon name="bolt" size={14} color="var(--mb-color-success)" />
+          </ActionIcon>
+        </Tooltip>
+      </Menu.Target>
+
+      <Menu.Dropdown>
+        <Menu.Label>{t`MCP Servers`}</Menu.Label>
+        {servers.map(server => {
+          const isOAuth = server.auth_type === "oauth2";
+          const authorized = !isOAuth || server.authorized;
+          return (
+            <Menu.Item
+              key={server.name}
+              leftSection={
+                <Icon
+                  name={authorized ? "bolt" : "lock"}
+                  size={14}
+                  color={authorized ? "var(--mb-color-success)" : "var(--mb-color-warning)"}
+                />
+              }
+              rightSection={
+                isOAuth && authorized ? (
+                  <ActionIcon
+                    variant="transparent"
+                    size={18}
+                    onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleRevoke(server.name); }}
+                  >
+                    <Icon name="close" size={10} color="var(--mb-color-text-tertiary)" />
+                  </ActionIcon>
+                ) : undefined
+              }
+              onClick={!authorized ? () => handleAuthorize(server.name) : undefined}
+            >
+              <div>
+                <Text size="xs" fw={500}>{capitalize(server.name)}</Text>
+                <Text size="xs" c={authorized ? "text-tertiary" : "warning"}>
+                  {authorized ? t`Connected` : t`Click to authorize`}
                 </Text>
               </div>
             </Menu.Item>

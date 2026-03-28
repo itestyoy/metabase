@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { t } from "ttag";
 
 import api from "metabase/lib/api";
-import { ActionIcon, Anchor, Box, Flex, Icon, Menu, Stack, Text, Tooltip } from "metabase/ui";
+import { ActionIcon, Anchor, Box, Button, DateInput, Flex, Icon, Menu, Stack, Text, TextInput, Tooltip } from "metabase/ui";
 // Textarea removed — replaced by ComposerInput (contentEditable)
 
 import { AgentChatMessages } from "./AgentChatMessages";
@@ -107,8 +107,10 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState("");
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
-  const [lang, setLang] = useState<"ru" | "en">("ru");
+  const [lang, setLang] = useState("en");
   const [tipsData, setTipsData] = useState<{
+    languages?: { code: string; label: string }[];
+    defaultLanguage?: string;
     templates: { icon: string; label: Record<string, string>; template: Record<string, string> }[];
     examples: Record<string, string>[];
     hint: Record<string, string>;
@@ -117,7 +119,12 @@ export function AgentModal({ onClose }: AgentModalProps) {
   useEffect(() => {
     fetch("/api/ai-agent/tips", { headers: { "Content-Type": "application/json" } })
       .then(r => r.json())
-      .then(setTipsData)
+      .then((data) => {
+        setTipsData(data);
+        if (data?.defaultLanguage) {
+          setLang(data.defaultLanguage);
+        }
+      })
       .catch(() => {});
   }, []);
   const slashMetricsRef = useRef<MetricItem[]>([]);
@@ -129,6 +136,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const [activePlaceholder, setActivePlaceholder] = useState<{
     type: TemplatePlaceholderType;
     id: string;
+    rect?: DOMRect;
   } | null>(null);
   const [dateRangeMode, setDateRangeMode] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
@@ -137,7 +145,6 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const [dbList, setDbList] = useState<{ id: number; name: string }[]>([]);
   const [dbListLoaded, setDbListLoaded] = useState(false);
   const [safeMode, setSafeMode] = useState(false);
-  const [markdownMode, setMarkdownMode] = useState(false);
   const [saveLocation, setSaveLocation] = useState<SaveLocation | null>(null);
   const [dockMode, setDockMode] = useState<DockMode>(() => readDockState().mode);
   const [dockedWidth, setDockedWidth] = useState(() => readDockState().width);
@@ -403,8 +410,8 @@ export function AgentModal({ onClose }: AgentModalProps) {
 
   // ── Template placeholder handling ─────────────────────────────────────
   const handleTemplatePlaceholderClick = useCallback(
-    (type: TemplatePlaceholderType, id: string) => {
-      setActivePlaceholder({ type, id });
+    (type: TemplatePlaceholderType, id: string, rect?: DOMRect) => {
+      setActivePlaceholder({ type, id, rect });
     },
     [],
   );
@@ -509,7 +516,8 @@ export function AgentModal({ onClose }: AgentModalProps) {
     const text = composerRef.current?.serialize()?.trim() ?? inputText.trim();
     if ((!text && !attachedFile) || isLoading) return;
 
-    const langHint = lang === "ru" ? "\n[Respond in Russian]" : "\n[Respond in English]";
+    const langLabel = (tipsData?.languages ?? []).find(l => l.code === lang)?.label ?? lang;
+    const langHint = `\n[Respond in ${langLabel}]`;
 
     // Extract context and datasource from unified contexts
     const entityContext = contexts.find(c => c.model !== "database") ?? null;
@@ -558,7 +566,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
           return;
         }
       }
-      if (e.key === "Enter" && !e.shiftKey) {
+      if (e.key === "Enter" && e.shiftKey) {
         e.preventDefault();
         handleSend();
       }
@@ -790,7 +798,6 @@ export function AgentModal({ onClose }: AgentModalProps) {
                           </ActionIcon>
                         </div>
                       )}
-                      <AgentMcpServers variant="chip" chipClassName={S.contextChipInline} />
                       {/* Attach: entity, database, file, or template */}
                       <Box className={S.contextAnchorInline}>
                         {dbPickerOpen ? (
@@ -897,7 +904,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                       onKeyDown={handleKeyDown}
                       onSlashQueryChange={handleSlashQueryChange}
                       onTemplatePlaceholderClick={handleTemplatePlaceholderClick}
-                      markdownEnabled={markdownMode}
+                      markdownEnabled
                       placeholder={t`Ask me anything about your data…`}
                       disabled={isLoading}
                       className={S.composerTextarea}
@@ -920,15 +927,17 @@ export function AgentModal({ onClose }: AgentModalProps) {
                         onClose={() => setActivePlaceholder(null)}
                         onChange={handlePlaceholderPicked}
                         models={[PLACEHOLDER_TO_PICKER_MODEL[activePlaceholder.type] ?? "card"]}
-                        position="top-start"
-                        dropdownMt={-11}
-                      />
+                        position="top"
+                        dropdownMt={-4}
+                      >
+                        <span style={{ position: "fixed", top: activePlaceholder?.rect?.top ?? 0, left: (activePlaceholder?.rect?.left ?? 0) + ((activePlaceholder?.rect?.width ?? 0) / 2), width: 0, height: 0 }} />
+                      </MiniPicker>
                     )}
                     {/* Template placeholder picker — database */}
                     {activePlaceholder?.type === "database" && (
-                      <Menu opened onClose={() => setActivePlaceholder(null)} position="top-start" shadow="md" width={220}>
+                      <Menu opened onClose={() => setActivePlaceholder(null)} position="top" shadow="md" width={220}>
                         <Menu.Target>
-                          <span style={{ position: "absolute", bottom: 0, left: 0 }} />
+                          <span style={{ position: "fixed", top: activePlaceholder?.rect?.top ?? 0, left: (activePlaceholder?.rect?.left ?? 0) + ((activePlaceholder?.rect?.width ?? 0) / 2), width: 0, height: 0 }} />
                         </Menu.Target>
                         <Menu.Dropdown>
                           <Menu.Label>{t`Select database`}</Menu.Label>
@@ -942,9 +951,9 @@ export function AgentModal({ onClose }: AgentModalProps) {
                     )}
                     {/* Template placeholder picker — datetime */}
                     {activePlaceholder?.type === "datetime" && (
-                      <Menu opened onClose={() => { setActivePlaceholder(null); setDateRangeMode(false); }} position="top-start" shadow="md" width={220}>
+                      <Menu opened onClose={() => { if (!dateRangeMode) { setActivePlaceholder(null); setDateRangeMode(false); } }} position="top" shadow="md" width={220} closeOnItemClick={false} closeOnClickOutside={!dateRangeMode}>
                         <Menu.Target>
-                          <span style={{ position: "absolute", bottom: 0, left: 0 }} />
+                          <span style={{ position: "fixed", top: activePlaceholder?.rect?.top ?? 0, left: (activePlaceholder?.rect?.left ?? 0) + ((activePlaceholder?.rect?.width ?? 0) / 2), width: 0, height: 0 }} />
                         </Menu.Target>
                         <Menu.Dropdown style={{ maxHeight: 320, overflowY: "auto" }}>
                           {!dateRangeMode ? (
@@ -983,44 +992,42 @@ export function AgentModal({ onClose }: AgentModalProps) {
                               </Menu.Item>
                             </>
                           ) : (
-                            <Box p="xs">
-                              <Text size="xs" fw={600} mb={6}>{t`Date range`}</Text>
-                              <Flex direction="column" gap={6}>
-                                <input
-                                  type="date"
-                                  value={dateFrom}
-                                  onChange={(e) => setDateFrom(e.target.value)}
-                                  style={{ fontSize: 12, padding: "4px 6px", border: "1px solid var(--mb-color-border)", borderRadius: 4, width: "100%" }}
+                            <Box p="sm">
+                              <Flex align="center" gap={4} mb="sm">
+                                <ActionIcon variant="subtle" size="xs" onClick={() => setDateRangeMode(false)}>
+                                  <Icon name="chevronleft" size={14} />
+                                </ActionIcon>
+                                <Text size="xs" fw={600}>{t`Date range`}</Text>
+                              </Flex>
+                              <Flex direction="column" gap="xs">
+                                <DateInput
+                                  size="xs"
+                                  label={t`From`}
+                                  placeholder={t`Start date`}
+                                  value={dateFrom ? new Date(dateFrom) : null}
+                                  onChange={(d: Date | null) => setDateFrom(d ? d.toISOString().slice(0, 10) : "")}
+                                  clearable
                                 />
-                                <input
-                                  type="date"
-                                  value={dateTo}
-                                  onChange={(e) => setDateTo(e.target.value)}
-                                  style={{ fontSize: 12, padding: "4px 6px", border: "1px solid var(--mb-color-border)", borderRadius: 4, width: "100%" }}
+                                <DateInput
+                                  size="xs"
+                                  label={t`To`}
+                                  placeholder={t`End date`}
+                                  value={dateTo ? new Date(dateTo) : null}
+                                  onChange={(d: Date | null) => setDateTo(d ? d.toISOString().slice(0, 10) : "")}
+                                  clearable
                                 />
-                                <Flex gap={6}>
-                                  <ActionIcon
-                                    variant="subtle"
-                                    size="sm"
-                                    onClick={() => setDateRangeMode(false)}
-                                  >
-                                    <Icon name="chevronleft" size={14} />
-                                  </ActionIcon>
-                                  <ActionIcon
-                                    variant="filled"
-                                    color="brand"
-                                    size="sm"
-                                    disabled={!dateFrom || !dateTo}
-                                    onClick={() => {
-                                      composerRef.current?.replaceTemplatePlaceholder(activePlaceholder.id, `${dateFrom} — ${dateTo}`);
-                                      setActivePlaceholder(null);
-                                      setDateRangeMode(false);
-                                    }}
-                                    style={{ flex: 1 }}
-                                  >
-                                    <Text size="xs" c="white">{t`Apply`}</Text>
-                                  </ActionIcon>
-                                </Flex>
+                                <Button
+                                  size="xs"
+                                  fullWidth
+                                  disabled={!dateFrom || !dateTo}
+                                  onClick={() => {
+                                    composerRef.current?.replaceTemplatePlaceholder(activePlaceholder.id, `${dateFrom} — ${dateTo}`);
+                                    setActivePlaceholder(null);
+                                    setDateRangeMode(false);
+                                  }}
+                                >
+                                  {t`Apply`}
+                                </Button>
                               </Flex>
                             </Box>
                           )}
@@ -1029,18 +1036,19 @@ export function AgentModal({ onClose }: AgentModalProps) {
                     )}
                     {/* Template placeholder picker — text input */}
                     {activePlaceholder?.type === "input" && (
-                      <Menu opened onClose={() => { setActivePlaceholder(null); setInputText2(""); }} position="top-start" shadow="md" width={220}>
+                      <Menu opened onClose={() => { setActivePlaceholder(null); setInputText2(""); }} position="top" shadow="md" width={240}>
                         <Menu.Target>
-                          <span style={{ position: "absolute", bottom: 0, left: 0 }} />
+                          <span style={{ position: "fixed", top: activePlaceholder?.rect?.top ?? 0, left: (activePlaceholder?.rect?.left ?? 0) + ((activePlaceholder?.rect?.width ?? 0) / 2), width: 0, height: 0 }} />
                         </Menu.Target>
                         <Menu.Dropdown>
-                          <Box p="xs">
-                            <Text size="xs" fw={600} mb={6}>{t`Enter value`}</Text>
-                            <input
-                              type="text"
+                          <Box p="sm">
+                            <Text size="xs" fw={600} mb="xs">{t`Enter value`}</Text>
+                            <TextInput
+                              size="xs"
                               autoFocus
+                              placeholder={t`Type text…`}
                               value={inputText2}
-                              onChange={(e) => setInputText2(e.target.value)}
+                              onChange={(e) => setInputText2(e.currentTarget.value)}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter" && inputText2.trim()) {
                                   composerRef.current?.replaceTemplatePlaceholder(activePlaceholder.id, inputText2.trim());
@@ -1049,24 +1057,20 @@ export function AgentModal({ onClose }: AgentModalProps) {
                                 }
                                 e.stopPropagation();
                               }}
-                              placeholder={t`Type text…`}
-                              style={{ fontSize: 12, padding: "6px 8px", border: "1px solid var(--mb-color-border)", borderRadius: 4, width: "100%", outline: "none" }}
                             />
-                            <Flex mt={6} justify="flex-end">
-                              <ActionIcon
-                                variant="filled"
-                                color="brand"
-                                size="sm"
-                                disabled={!inputText2.trim()}
-                                onClick={() => {
-                                  composerRef.current?.replaceTemplatePlaceholder(activePlaceholder.id, inputText2.trim());
-                                  setActivePlaceholder(null);
-                                  setInputText2("");
-                                }}
-                              >
-                                <Icon name="check" size={12} />
-                              </ActionIcon>
-                            </Flex>
+                            <Button
+                              size="xs"
+                              fullWidth
+                              mt="xs"
+                              disabled={!inputText2.trim()}
+                              onClick={() => {
+                                composerRef.current?.replaceTemplatePlaceholder(activePlaceholder.id, inputText2.trim());
+                                setActivePlaceholder(null);
+                                setInputText2("");
+                              }}
+                            >
+                              {t`Apply`}
+                            </Button>
                           </Box>
                         </Menu.Dropdown>
                       </Menu>
@@ -1080,7 +1084,7 @@ export function AgentModal({ onClose }: AgentModalProps) {
                         onChange={handleFileChange}
                       />
                       <Text size="xs" c="text-tertiary" className={S.inputHint} style={{ flex: 1, minWidth: 0 }}>
-                        {t`Enter — send · Shift+Enter — new line · / — metrics · {{ }} — template`}
+                        {t`Shift+Enter — send · Enter — new line · / — metrics · {{ }} — template`}
                       </Text>
                       <Flex gap={2} align="center">
                         {/* ⋮ settings menu */}
@@ -1094,26 +1098,16 @@ export function AgentModal({ onClose }: AgentModalProps) {
                           </Menu.Target>
                           <Menu.Dropdown>
                             <Menu.Label>{t`Language`}</Menu.Label>
-                            <Menu.Item
-                              onClick={() => setLang("ru")}
-                              rightSection={lang === "ru" ? <Icon name="check" size={12} color="var(--mb-color-brand)" /> : null}
-                            >
-                              <Text size="xs">Русский</Text>
-                            </Menu.Item>
-                            <Menu.Item
-                              onClick={() => setLang("en")}
-                              rightSection={lang === "en" ? <Icon name="check" size={12} color="var(--mb-color-brand)" /> : null}
-                            >
-                              <Text size="xs">English</Text>
-                            </Menu.Item>
+                            {(tipsData?.languages ?? [{ code: "en", label: "English" }]).map(l => (
+                              <Menu.Item
+                                key={l.code}
+                                onClick={() => setLang(l.code)}
+                                rightSection={lang === l.code ? <Icon name="check" size={12} color="var(--mb-color-brand)" /> : null}
+                              >
+                                <Text size="xs">{l.label}</Text>
+                              </Menu.Item>
+                            ))}
                             <Menu.Divider />
-                            <Menu.Item
-                              onClick={() => setMarkdownMode(v => !v)}
-                              rightSection={markdownMode ? <Icon name="check" size={12} color="var(--mb-color-brand)" /> : null}
-                              leftSection={<Text size="xs" fw={700} c={markdownMode ? "brand" : "text-tertiary"}>MD</Text>}
-                            >
-                              <Text size="xs">{t`Markdown formatting`}</Text>
-                            </Menu.Item>
                             <Menu.Item
                               onClick={() => setSafeMode((v: boolean) => !v)}
                               rightSection={safeMode ? <Icon name="check" size={12} color="var(--mb-color-success)" /> : null}
@@ -1121,6 +1115,8 @@ export function AgentModal({ onClose }: AgentModalProps) {
                             >
                               <Text size="xs">{t`Safe mode`}</Text>
                             </Menu.Item>
+                            <Menu.Divider />
+                            <AgentMcpServers variant="items" />
                           </Menu.Dropdown>
                         </Menu>
                         {isLoading ? (

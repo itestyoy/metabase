@@ -1,12 +1,19 @@
 .wrapper {
-  padding: 8px 12px 4px;
+  padding: 4px 0;
 }
 
-.editor {
+/* ── Tiptap ProseMirror editor ─────────────────────────────────────── */
+
+.editorContent {
+  position: relative;
+}
+
+.editorContent :global(.ProseMirror) {
+  outline: none;
   min-height: 20px;
   max-height: 120px;
   overflow-y: auto;
-  outline: none;
+  padding: 4px 12px;
   font-size: 13px;
   line-height: 1.5;
   color: var(--mb-color-text-primary);
@@ -14,18 +21,79 @@
   word-break: break-word;
 }
 
-.editor:empty::before {
-  content: attr(data-placeholder);
+.editorContent :global(.ProseMirror):focus-visible {
+  outline: none;
+}
+
+.editorContent :global(.ProseMirror p) {
+  margin: 0;
+}
+
+/* Placeholder — only when editor has single empty paragraph */
+.editorContent :global(.ProseMirror > .is-empty:first-child:last-child:before) {
   color: var(--mb-color-text-tertiary);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
   pointer-events: none;
 }
 
-.disabled {
-  opacity: 0.5;
-  pointer-events: none;
+/* Inline code */
+.editorContent :global(.ProseMirror code) {
+  background: color-mix(in srgb, var(--mb-color-text-tertiary) 12%, transparent);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 12px;
 }
 
-/* Shared base for template chips (placeholder + resolved) */
+/* Code block */
+.editorContent :global(.ProseMirror pre) {
+  background: var(--mb-color-background-secondary);
+  padding: 6px 8px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 4px 0;
+  font-size: 12px;
+  border: 1px solid var(--mb-color-border);
+}
+
+.editorContent :global(.ProseMirror pre code) {
+  background: none;
+  padding: 0;
+  border: none;
+}
+
+/* Lists */
+.editorContent :global(.ProseMirror ul),
+.editorContent :global(.ProseMirror ol) {
+  margin: 2px 0;
+  padding-left: 18px;
+}
+
+.editorContent :global(.ProseMirror ul) {
+  list-style-type: disc;
+}
+
+.editorContent :global(.ProseMirror ol) {
+  list-style-type: decimal;
+}
+
+.editorContent :global(.ProseMirror li) {
+  margin: 0;
+  display: list-item;
+}
+
+/* Blockquote */
+.editorContent :global(.ProseMirror blockquote) {
+  border-left: 3px solid var(--mb-color-brand);
+  margin: 2px 0;
+  padding-left: 8px;
+  color: var(--mb-color-text-secondary);
+}
+
+/* ── Shared base for template chips ────────────────────────────────── */
+
 .templateChip {
   display: inline-flex;
   align-items: center;
@@ -76,74 +144,9 @@
   border-color: color-mix(in srgb, var(--mb-color-brand) 50%, transparent);
 }
 
-/* ── Inline markdown rendered elements ────────────────────────────── */
+/* ── Bubble menu ───────────────────────────────────────────────────── */
 
-.mdBold,
-.mdItalic,
-.mdStrike,
-.mdCode {
-  cursor: pointer;
-  border-radius: 2px;
-  transition: background 0.1s;
-}
-
-.mdBold:hover,
-.mdItalic:hover,
-.mdStrike:hover,
-.mdCode:hover {
-  background: color-mix(in srgb, var(--mb-color-brand) 10%, transparent);
-}
-
-.mdCode {
-  background: color-mix(in srgb, var(--mb-color-text-tertiary) 12%, transparent);
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-family: monospace;
-  font-size: 12px;
-}
-
-.mdCode:hover {
-  background: color-mix(in srgb, var(--mb-color-text-tertiary) 20%, transparent);
-}
-
-/* ── Floating format toolbar ──────────────────────────────────────── */
-
-.floatingToolbar {
-  position: absolute;
+.bubbleMenu {
+  position: fixed;
   z-index: 100;
-  display: flex;
-  gap: 1px;
-  padding: 2px;
-  background: var(--mb-color-background-primary);
-  border: 1px solid var(--mb-color-border);
-  border-radius: 6px;
-  box-shadow: 0 2px 12px var(--mb-color-shadow);
-  transform: translateX(-50%);
-  white-space: nowrap;
-}
-
-.fmtBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--mb-color-text-primary);
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.1s, color 0.1s;
-}
-
-.fmtBtn:hover {
-  background: var(--mb-color-background-hover);
-  color: var(--mb-color-brand);
-}
-
-.fmtBtn code {
-  font-family: monospace;
-  font-size: 11px;
-  font-weight: 600;
 }
