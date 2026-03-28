@@ -29,6 +29,28 @@
   margin: 0;
 }
 
+/* Headings */
+.editorContent :global(.ProseMirror h1) {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 4px 0 2px;
+  line-height: 1.3;
+}
+
+.editorContent :global(.ProseMirror h2) {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 4px 0 2px;
+  line-height: 1.3;
+}
+
+.editorContent :global(.ProseMirror h3) {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 2px 0 1px;
+  line-height: 1.4;
+}
+
 /* Placeholder — only when editor has single empty paragraph */
 .editorContent :global(.ProseMirror > .is-empty:first-child:last-child:before) {
   color: var(--mb-color-text-tertiary);

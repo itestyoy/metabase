@@ -60,6 +60,9 @@ const ALLOWED_FORMATTING: FormattingOptions = {
   bold: true,
   italic: true,
   strikethrough: true,
+  h1: true,
+  h2: true,
+  h3: true,
   inline_code: true,
   code_block: true,
   list: true,
@@ -162,7 +165,8 @@ const ResolvedPlaceholderNode = Node.create({
       dom.addEventListener("mousedown", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        // Replace with placeholder chip and trigger picker
+        // Save rect BEFORE replacing (dom will be detached after)
+        const rect = dom.getBoundingClientRect();
         const pos = getPos();
         if (pos == null) return;
         const newId = genId();
@@ -172,7 +176,7 @@ const ResolvedPlaceholderNode = Node.create({
           .insertContentAt(pos, { type: "templatePlaceholder", attrs: { varType, placeholderId: newId } })
           .run();
         const ref = editor.storage.composerCallbacks?.ref;
-        ref?.current?.onTemplatePlaceholderClick?.(varType, newId, dom.getBoundingClientRect());
+        ref?.current?.onTemplatePlaceholderClick?.(varType, newId, rect);
       });
 
       return { dom };
@@ -322,7 +326,7 @@ export const ComposerInput = forwardRef<ComposerInputHandle, ComposerInputProps>
         CustomStarterKit.configure({
           link: false,
           trailingNode: false,
-          heading: false,
+          heading: { levels: [1, 2, 3] },
           horizontalRule: false,
         }),
         Placeholder.configure({ placeholder: placeholder ?? "" }),

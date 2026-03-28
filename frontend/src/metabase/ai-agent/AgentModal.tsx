@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import { t } from "ttag";
 
 import api from "metabase/lib/api";
-import { ActionIcon, Anchor, Box, Button, DateInput, Flex, Icon, Menu, Stack, Text, TextInput, Tooltip } from "metabase/ui";
+import { DateAllOptionsWidget } from "metabase/querying/parameters/components/DateAllOptionsWidget";
+import { ActionIcon, Anchor, Box, Button, Flex, Icon, Menu, Stack, Text, TextInput, Tooltip } from "metabase/ui";
 // Textarea removed — replaced by ComposerInput (contentEditable)
 
 import { AgentChatMessages } from "./AgentChatMessages";
@@ -138,9 +139,6 @@ export function AgentModal({ onClose }: AgentModalProps) {
     id: string;
     rect?: DOMRect;
   } | null>(null);
-  const [dateRangeMode, setDateRangeMode] = useState(false);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
   const [inputText2, setInputText2] = useState("");
   const [dbList, setDbList] = useState<{ id: number; name: string }[]>([]);
   const [dbListLoaded, setDbListLoaded] = useState(false);
@@ -949,90 +947,30 @@ export function AgentModal({ onClose }: AgentModalProps) {
                         </Menu.Dropdown>
                       </Menu>
                     )}
-                    {/* Template placeholder picker — datetime */}
+                    {/* Template placeholder picker — datetime (dashboard-style widget) */}
                     {activePlaceholder?.type === "datetime" && (
-                      <Menu opened onClose={() => { if (!dateRangeMode) { setActivePlaceholder(null); setDateRangeMode(false); } }} position="top" shadow="md" width={220} closeOnItemClick={false} closeOnClickOutside={!dateRangeMode}>
-                        <Menu.Target>
-                          <span style={{ position: "fixed", top: activePlaceholder?.rect?.top ?? 0, left: (activePlaceholder?.rect?.left ?? 0) + ((activePlaceholder?.rect?.width ?? 0) / 2), width: 0, height: 0 }} />
-                        </Menu.Target>
-                        <Menu.Dropdown style={{ maxHeight: 320, overflowY: "auto" }}>
-                          {!dateRangeMode ? (
-                            <>
-                              <Menu.Label>{t`Relative`}</Menu.Label>
-                              {[
-                                { label: t`Today`, value: "today" },
-                                { label: t`Yesterday`, value: "yesterday" },
-                                { label: t`Last 7 days`, value: "last 7 days" },
-                                { label: t`Last 14 days`, value: "last 14 days" },
-                                { label: t`Last 30 days`, value: "last 30 days" },
-                                { label: t`Last 90 days`, value: "last 90 days" },
-                                { label: t`This week`, value: "this week" },
-                                { label: t`Last week`, value: "last week" },
-                                { label: t`This month`, value: "this month" },
-                                { label: t`Last month`, value: "last month" },
-                                { label: t`This quarter`, value: "this quarter" },
-                                { label: t`Last quarter`, value: "last quarter" },
-                                { label: t`This year`, value: "this year" },
-                                { label: t`Last year`, value: "last year" },
-                              ].map(opt => (
-                                <Menu.Item
-                                  key={opt.value}
-                                  onClick={() => {
-                                    composerRef.current?.replaceTemplatePlaceholder(activePlaceholder.id, opt.label);
-                                    setActivePlaceholder(null);
-                                  }}
-                                >
-                                  <Text size="xs">{opt.label}</Text>
-                                </Menu.Item>
-                              ))}
-                              <Menu.Divider />
-                              <Menu.Label>{t`Custom`}</Menu.Label>
-                              <Menu.Item onClick={() => { setDateRangeMode(true); setDateFrom(""); setDateTo(""); }}>
-                                <Text size="xs">{t`Date range…`}</Text>
-                              </Menu.Item>
-                            </>
-                          ) : (
-                            <Box p="sm">
-                              <Flex align="center" gap={4} mb="sm">
-                                <ActionIcon variant="subtle" size="xs" onClick={() => setDateRangeMode(false)}>
-                                  <Icon name="chevronleft" size={14} />
-                                </ActionIcon>
-                                <Text size="xs" fw={600}>{t`Date range`}</Text>
-                              </Flex>
-                              <Flex direction="column" gap="xs">
-                                <DateInput
-                                  size="xs"
-                                  label={t`From`}
-                                  placeholder={t`Start date`}
-                                  value={dateFrom ? new Date(dateFrom) : null}
-                                  onChange={(d: Date | null) => setDateFrom(d ? d.toISOString().slice(0, 10) : "")}
-                                  clearable
-                                />
-                                <DateInput
-                                  size="xs"
-                                  label={t`To`}
-                                  placeholder={t`End date`}
-                                  value={dateTo ? new Date(dateTo) : null}
-                                  onChange={(d: Date | null) => setDateTo(d ? d.toISOString().slice(0, 10) : "")}
-                                  clearable
-                                />
-                                <Button
-                                  size="xs"
-                                  fullWidth
-                                  disabled={!dateFrom || !dateTo}
-                                  onClick={() => {
-                                    composerRef.current?.replaceTemplatePlaceholder(activePlaceholder.id, `${dateFrom} — ${dateTo}`);
-                                    setActivePlaceholder(null);
-                                    setDateRangeMode(false);
-                                  }}
-                                >
-                                  {t`Apply`}
-                                </Button>
-                              </Flex>
-                            </Box>
-                          )}
-                        </Menu.Dropdown>
-                      </Menu>
+                      <Box
+                        style={{
+                          position: "fixed",
+                          bottom: `calc(100vh - ${activePlaceholder?.rect?.top ?? 0}px + 4px)`,
+                          left: activePlaceholder?.rect?.left ?? 0,
+                          zIndex: 300,
+                          background: "var(--mb-color-background)",
+                          border: "1px solid var(--mb-color-border)",
+                          borderRadius: "var(--mantine-radius-md)",
+                          boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <DateAllOptionsWidget
+                          value={null}
+                          submitButtonLabel={t`Apply`}
+                          onChange={(value: string) => {
+                            composerRef.current?.replaceTemplatePlaceholder(activePlaceholder.id, value);
+                            setActivePlaceholder(null);
+                          }}
+                        />
+                      </Box>
                     )}
                     {/* Template placeholder picker — text input */}
                     {activePlaceholder?.type === "input" && (
