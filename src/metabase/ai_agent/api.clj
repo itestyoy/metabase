@@ -1099,12 +1099,17 @@
   "Approve or deny pending MCP tool calls. Called by the frontend when the user
    makes a decision on an `mcp_approval_request` SSE event.
    Body: {:response_id \"…\" :decisions [{:id \"…\" :approve true/false}]}"
-  [:as {body :body}]
+  [_route-params
+   _query-params
+   {response-id :response_id
+    decisions   :decisions} :- [:map
+                                 [:response_id ms/NonBlankString]
+                                 [:decisions [:sequential [:map
+                                                           [:id ms/NonBlankString]
+                                                           [:approve :boolean]]]]]]
   (api/check-403 (ai.settings/ai-agent-enabled))
   (api/check-403 (current-user-in-ai-group?))
-  (let [response-id (get body :response_id)
-        decisions   (get body :decisions)
-        p           (get @pending-approvals response-id)]
+  (let [p (get @pending-approvals response-id)]
     (if p
       (do (deliver p decisions)
           {:success true})

@@ -108,7 +108,13 @@ export function AgentModal({ onClose }: AgentModalProps) {
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState("");
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
-  const [lang, setLang] = useState("en");
+  const [lang, setLangState] = useState(() => {
+    try { return sessionStorage.getItem("bi-agent-lang") ?? "en"; } catch { return "en"; }
+  });
+  const setLang = useCallback((code: string) => {
+    setLangState(code);
+    try { sessionStorage.setItem("bi-agent-lang", code); } catch {}
+  }, []);
   const [tipsData, setTipsData] = useState<{
     languages?: { code: string; label: string }[];
     defaultLanguage?: string;
@@ -122,7 +128,9 @@ export function AgentModal({ onClose }: AgentModalProps) {
       .then(r => r.json())
       .then((data) => {
         setTipsData(data);
-        if (data?.defaultLanguage) {
+        // Apply defaultLanguage only if user hasn't chosen a language yet
+        const saved = sessionStorage.getItem("bi-agent-lang");
+        if (!saved && data?.defaultLanguage) {
           setLang(data.defaultLanguage);
         }
       })

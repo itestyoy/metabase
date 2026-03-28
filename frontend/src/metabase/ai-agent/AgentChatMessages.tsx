@@ -402,7 +402,7 @@ function ContentBlockRenderer({
 }) {
   switch (block.type) {
     case "text":
-      return <MetricAwareText content={block.content} />;
+      return <EntityAwareText content={block.content} />;
     case "card_link":
       return <CardLinkBlock block={block} />;
     case "card_preview":
@@ -675,33 +675,67 @@ function CopyMessageButton({ message }: { message: ChatMessage }) {
 
 // Matches all forms:
 // ["metric", 42] /* Name */
-// ["metric", 42]
-// `["metric", 42]` (in backticks)
-const METRIC_ALL_PATTERN = /`?\["metric",\s*(\d+)\]`?(?:\s*\/\*\s*(.+?)\s*\*\/)?/g;
+// Matches ["type", id] /* optional name */ for all entity types
+// Supported types: metric, model, question, table, dashboard, document, collection, database
+const ENTITY_REF_PATTERN = /`?\["(metric|model|question|table|dashboard|document|collection|database)",\s*(\d+)\]`?(?:\s*\/\*\s*(.+?)\s*\*\/)?/g;
 
-// Cache for metric names fetched by ID
-const metricNameCache = new Map<number, string>();
+const ENTITY_ROUTES: Record<string, string> = {
+  metric: "/metric",
+  model: "/model",
+  question: "/question",
+  table: "/question#", // tables don't have direct routes, link to question
+  dashboard: "/dashboard",
+  document: "/document",
+  collection: "/collection",
+  database: "/question#", // databases don't have direct routes
+};
 
-function MetricLink({ id, name }: { id: number; name?: string | null }) {
+const ENTITY_ICONS: Record<string, string> = {
+  metric: "metric",
+  model: "model",
+  question: "question",
+  table: "database",
+  dashboard: "dashboard",
+  document: "document",
+  collection: "folder",
+  database: "database",
+};
+
+// Cache for entity names fetched by ID
+const entityNameCache = new Map<string, string>();
+
+function EntityLink({ type, id, name }: { type: string; id: number; name?: string | null }) {
+  const cacheKey = `${type}:${id}`;
   const [resolvedName, setResolvedName] = useState<string | null>(
-    () => name || metricNameCache.get(id) || null,
+    () => name || entityNameCache.get(cacheKey) || null,
   );
 
   useEffect(() => {
     if (resolvedName) return;
-    fetch(`/api/card/${id}`, { headers: { "Content-Type": "application/json" } })
+    // Resolve name via appropriate API based on type
+    const apiPath = (type === "metric" || type === "model" || type === "question")
+      ? `/api/card/${id}`
+      : type === "dashboard" ? `/api/dashboard/${id}`
+      : type === "collection" ? `/api/collection/${id}`
+      : type === "document" ? `/api/card/${id}`
+      : type === "table" ? `/api/table/${id}`
+      : null;
+    if (!apiPath) { setResolvedName(`${type} #${id}`); return; }
+    fetch(apiPath, { headers: { "Content-Type": "application/json" } })
       .then(r => r.json())
-      .then(card => {
-        const n = (card?.name as string) || `Metric #${id}`;
-        metricNameCache.set(id, n);
+      .then(data => {
+        const n = (data?.name as string) || (data?.display_name as string) || `${type} #${id}`;
+        entityNameCache.set(cacheKey, n);
         setResolvedName(n);
       })
-      .catch(() => setResolvedName(`Metric #${id}`));
-  }, [id, resolvedName]);
+      .catch(() => setResolvedName(`${type} #${id}`));
+  }, [id, type, cacheKey, resolvedName]);
+
+  const route = ENTITY_ROUTES[type] ?? "/question";
 
   return (
     <Link
-      to={`/question/${id}`}
+      to={`${route}/${id}`}
       style={{
         color: "var(--mb-color-brand)",
         textDecoration: "none",
@@ -714,31 +748,32 @@ function MetricLink({ id, name }: { id: number; name?: string | null }) {
   );
 }
 
-// Replace metric references with markdown-style inline links
-function MetricAwareText({ content, className }: { content: string; className?: string }) {
-  if (!content.includes("metric")) {
+// Replace entity references like ["metric", 42] /* Name */ with clickable links
+function EntityAwareText({ content, className }: { content: string; className?: string }) {
+  // Quick check: does content have any entity reference pattern?
+  if (!/\["(?:metric|model|question|table|dashboard|document|collection|database)"/.test(content)) {
     return <Markdown className={className}>{content}</Markdown>;
   }
 
-  const metrics: { id: number; name: string | null }[] = [];
-  const cleaned = content.replace(new RegExp(METRIC_ALL_PATTERN), (_m, id, name) => {
-    const i = metrics.length;
-    metrics.push({ id: parseInt(id, 10), name: name || null });
-    return `\u200B__M${i}__\u200B`;
+  const refs: { type: string; id: number; name: string | null }[] = [];
+  const cleaned = content.replace(new RegExp(ENTITY_REF_PATTERN), (_m, type, id, name) => {
+    const i = refs.length;
+    refs.push({ type, id: parseInt(id, 10), name: name || null });
+    return `\u200B__E${i}__\u200B`;
   });
 
-  if (metrics.length === 0) {
+  if (refs.length === 0) {
     return <Markdown className={className}>{content}</Markdown>;
   }
 
-  const segments = cleaned.split(/\u200B__M(\d+)__\u200B/);
+  const segments = cleaned.split(/\u200B__E(\d+)__\u200B/);
   const parts: ReactNode[] = [];
   for (let i = 0; i < segments.length; i++) {
     if (i % 2 === 0) {
       if (segments[i]) parts.push(<Markdown key={`t${i}`} className={className}>{segments[i]}</Markdown>);
     } else {
-      const m = metrics[parseInt(segments[i], 10)];
-      if (m) parts.push(<MetricLink key={`m${i}`} id={m.id} name={m.name} />);
+      const r = refs[parseInt(segments[i], 10)];
+      if (r) parts.push(<EntityLink key={`e${i}`} type={r.type} id={r.id} name={r.name} />);
     }
   }
   return <div className={className}>{parts}</div>;
@@ -778,7 +813,7 @@ function MessageBubble({
               </Text>
             </Flex>
           )}
-          {message.content && <MetricAwareText content={message.content} className={S.userMarkdown} />}
+          {message.content && <EntityAwareText content={message.content} className={S.userMarkdown} />}
         </Paper>
         <MessageTimestamp timestamp={message.timestamp} />
       </Flex>

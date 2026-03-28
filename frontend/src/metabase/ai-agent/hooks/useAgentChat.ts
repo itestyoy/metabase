@@ -256,7 +256,7 @@ export function useAgentChat() {
       const userMsg: ChatMessage = {
         id: makeId(),
         role: "user",
-        content: userText.replace(/\n\[Respond in (?:Russian|English)\]$/, ""),
+        content: userText.replace(/\n\[Respond in [^\]]+\]$/, ""),
         timestamp: new Date().toISOString(),
         ...(attachedFile ? { attachedFile: { name: attachedFile.name, mimeType: attachedFile.mimeType } } : {}),
       };
